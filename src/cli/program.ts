@@ -1,4 +1,5 @@
 import { Command } from '@commander-js/extra-typings';
+
 import { pushToPenpot, retrieveFromFigma } from '@figpot/src/features/document';
 
 export const program = new Command();

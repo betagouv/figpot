@@ -22,6 +22,7 @@
     "cli:unsecure": "tsx src/cli/index.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "format:fix": "prettier --write .",
     "lint": "npm run lint:es && npm run lint:ts",
     "lint:es": "TIMING=1 eslint --ext .js,.jsx,.ts,.tsx,.mdx .",
     "lint:ts": "tsc --noEmit --incremental false",

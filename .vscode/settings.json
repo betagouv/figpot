@@ -1,0 +1,26 @@
+{
+  "editor.formatOnSave": true,
+  "eslint.packageManager": "npm",
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "jest.jestCommandLine": "npm run test:unit --",
+  "jest.autoRun": {
+    "watch": true,
+    "onStartup": []
+  },
+  "prettier.requireConfig": true,
+  "typescript.tsdk": "./node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}

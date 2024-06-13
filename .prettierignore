@@ -1,0 +1,6 @@
+/.cache/
+/data/
+/dist/
+**/.dockerignore
+/package-lock.json
+/tsconfig.json

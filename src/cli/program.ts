@@ -1,4 +1,5 @@
 import { Command } from '@commander-js/extra-typings';
+import { pushToPenpot, retrieveFromFigma } from '@figpot/src/features/document';
 
 export const program = new Command();
 
@@ -11,4 +12,7 @@ document
   .description('save Figma documents locally')
   .action(async () => {
     console.log('hello');
+
+    await retrieveFromFigma();
+    await pushToPenpot();
   });

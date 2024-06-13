@@ -15,10 +15,11 @@ export async function gracefulExit(error?: Error) {
   gracefulExitRequested = true;
 
   if (error) {
+    console.log('Exiting the application gracefully after having encountered an error...');
     console.error(error);
+  } else {
+    console.log('Exiting the application gracefully...');
   }
-
-  console.log('Exiting the application gracefully...');
 
   // Perform any necessary cleanup or finalization tasks here
   try {

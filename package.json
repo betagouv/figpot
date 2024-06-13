@@ -15,7 +15,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "postinstall": "patch-package",
-    "setup": "npm run client:schema:download && npm run client:generate",
+    "setup": "npm run client:figma:generate && npm run client:penpot:generate",
     "build": "tsup",
     "dev": "tsup --watch",
     "cli": "dotenv-run-script .env.test -- cli:unsecure",
@@ -27,8 +27,8 @@
     "lint:ts": "tsc --noEmit --incremental false",
     "test:unit": "npm run jest --- --ci --passWithNoTests",
     "test:unit:watch": "npm run jest --- --watch",
-    "client:schema:download": "npm run cli -- model download",
-    "client:generate": "npm run cli -- model generate",
+    "client:figma:generate": "openapi-ts -i https://raw.githubusercontent.com/figma/rest-api-spec/main/openapi/openapi.yaml -o src/clients/figma",
+    "client:penpot:generate": "openapi-ts -i https://design.penpot.app/api/openapi.json -o src/clients/penpot",
     "clean": "rm -rf dist && rm -rf node_modules",
     "cm": "cz",
     "jest": "NODE_OPTIONS=\"$NODE_OPTIONS --experimental-vm-modules\" jest",
@@ -47,6 +47,8 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@figma/rest-api-spec": "^0.15.0",
+    "@hey-api/openapi-ts": "^0.46.3",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/chalk": "^2.2.0",
     "@types/jest": "^29.4.0",

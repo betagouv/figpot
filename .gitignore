@@ -23,6 +23,10 @@ yarn-error.log*
 # data
 /data/
 
+# generated clients
+/src/clients/figma
+/src/clients/penpot
+
 # local env files
 .env.local
 .env.test.local

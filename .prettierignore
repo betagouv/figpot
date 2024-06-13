@@ -1,6 +1,8 @@
 /.cache/
 /data/
 /dist/
+/src/clients/figma
+/src/clients/penpot
 **/.dockerignore
 /package-lock.json
 /tsconfig.json

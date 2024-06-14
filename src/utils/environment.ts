@@ -1,5 +1,7 @@
 import { password } from '@inquirer/prompts';
 
+import { OpenAPI as FigmaClientSettings } from '@figpot/src/clients/figma';
+import { OpenAPI as PenpotClientSettings } from '@figpot/src/clients/penpot';
 import { ConfigSchema } from '@figpot/src/models/entities/environment';
 
 export const config = {
@@ -16,5 +18,16 @@ export async function ensureAccessTokens() {
 
     config.figmaAccessToken = figmaAccessToken;
     config.penpotAccessToken = penpotAccessToken;
+  } else {
+    config.figmaAccessToken = result.data.FIGMA_ACCESS_TOKEN;
+    config.penpotAccessToken = result.data.PENPOT_ACCESS_TOKEN;
   }
+
+  FigmaClientSettings.HEADERS = {
+    'X-Figma-Token': config.figmaAccessToken,
+  };
+
+  PenpotClientSettings.HEADERS = {
+    Authorization: `Token ${config.penpotAccessToken}`,
+  };
 }

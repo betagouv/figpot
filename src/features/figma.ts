@@ -1,12 +1,7 @@
 import { checkbox, input, select } from '@inquirer/prompts';
 import assert from 'assert';
 
-import { OpenAPI as FigmaClientSettings, getProjectFiles, getTeamProjects } from '@figpot/src/clients/figma';
-import { config } from '@figpot/src/utils/environment';
-
-FigmaClientSettings.HEADERS = {
-  'X-Figma-Token': config.figmaAccessToken,
-};
+import { getProjectFiles, getTeamProjects } from '@figpot/src/clients/figma';
 
 export async function retrieveDocumentsFromInput(): Promise<string[]> {
   // Teams cannot be gotten so expecting the user to precise it

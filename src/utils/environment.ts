@@ -4,6 +4,11 @@ import { OpenAPI as FigmaClientSettings } from '@figpot/src/clients/figma';
 import { OpenAPI as PenpotClientSettings } from '@figpot/src/clients/penpot';
 import { ConfigSchema } from '@figpot/src/models/entities/environment';
 
+if (typeof process.env.PENPOT_BASE_URL === 'string') {
+  // Can be used in case of a self-hosted instance
+  PenpotClientSettings.BASE = `${process.env.PENPOT_BASE_URL}/api/rpc`;
+}
+
 export const config = {
   figmaAccessToken: '',
   penpotAccessToken: '',

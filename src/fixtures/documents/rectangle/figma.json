@@ -1,0 +1,97 @@
+{
+  "document": {
+    "id": "0:0",
+    "name": "Document",
+    "type": "DOCUMENT",
+    "scrollBehavior": "SCROLLS",
+    "children": [
+      {
+        "id": "0:1",
+        "name": "Page 1",
+        "type": "CANVAS",
+        "scrollBehavior": "SCROLLS",
+        "children": [
+          {
+            "id": "1:2",
+            "name": "Rectangle 1",
+            "type": "RECTANGLE",
+            "scrollBehavior": "SCROLLS",
+            "blendMode": "PASS_THROUGH",
+            "absoluteBoundingBox": {
+              "x": -282,
+              "y": -153,
+              "width": 326,
+              "height": 200
+            },
+            "absoluteRenderBounds": {
+              "x": -282,
+              "y": -153,
+              "width": 326,
+              "height": 200
+            },
+            "constraints": {
+              "vertical": "TOP",
+              "horizontal": "LEFT"
+            },
+            "relativeTransform": [
+              [1, 0, -282],
+              [0, 1, -153]
+            ],
+            "size": {
+              "x": 326,
+              "y": 200
+            },
+            "fills": [
+              {
+                "blendMode": "NORMAL",
+                "type": "SOLID",
+                "color": {
+                  "r": 0,
+                  "g": 1,
+                  "b": 0.09999999403953552,
+                  "a": 1
+                }
+              }
+            ],
+            "fillGeometry": [
+              {
+                "path": "M0 0L326 0L326 200L0 200L0 0Z",
+                "windingRule": "NONZERO"
+              }
+            ],
+            "strokes": [],
+            "strokeWeight": 1,
+            "strokeAlign": "INSIDE",
+            "strokeGeometry": [],
+            "exportSettings": [],
+            "effects": []
+          }
+        ],
+        "backgroundColor": {
+          "r": 1,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "prototypeStartNodeID": null,
+        "flowStartingPoints": [],
+        "prototypeDevice": {
+          "type": "NONE",
+          "rotation": "NONE"
+        },
+        "exportSettings": []
+      }
+    ]
+  },
+  "components": {},
+  "componentSets": {},
+  "schemaVersion": 0,
+  "styles": {},
+  "name": "New File 1",
+  "lastModified": "2024-06-14T13:14:19Z",
+  "thumbnailUrl": "https://s3-alpha.figma.com/thumbnails/28771c83-5e7b-4388-8d7e-7482d3a706ce?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAQ4GOSFWCWBR5DTFU%2F20240613%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20240613T000000Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=be64beea336beaccd2233b61d028769d077a6713d472100047c96a9a2bdc7e32",
+  "version": "6002131182",
+  "role": "owner",
+  "editorType": "figma",
+  "linkAccess": "inherit"
+}

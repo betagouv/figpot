@@ -1,0 +1,195 @@
+{
+  "features": ["layout/grid", "styles/v2", "fdata/pointer-map", "fdata/objects-map", "components/v2", "fdata/shape-data-type"],
+  "permissions": {
+    "type": "membership",
+    "isOwner": true,
+    "isAdmin": true,
+    "canEdit": true,
+    "canRead": true,
+    "isLogged": true
+  },
+  "hasMediaTrimmed": false,
+  "commentThreadSeqn": 0,
+  "name": "New File 1",
+  "revn": 8,
+  "modifiedAt": "2024-06-18T18:01:49.251743Z",
+  "id": "4bf0e9f6-08c8-809c-8004-85445179c2a9",
+  "isShared": false,
+  "version": 49,
+  "projectId": "4bf0e9f6-08c8-809c-8004-854246e3c68c",
+  "createdAt": "2024-06-17T21:01:05.351863Z",
+  "data": {
+    "pages": ["4bf0e9f6-08c8-809c-8004-85445179c2aa"],
+    "pagesIndex": {
+      "4bf0e9f6_08c8_809c_8004_85445179c2aa": {
+        "options": {
+          "background": "#ff0000"
+        },
+        "objects": {
+          "00000000_0000_0000_0000_000000000000": {
+            "id": "00000000-0000-0000-0000-000000000000",
+            "name": "Root Frame",
+            "type": "frame",
+            "x": 0,
+            "y": 0,
+            "width": 0.01,
+            "height": 0.01,
+            "rotation": 0,
+            "selrect": {
+              "x": 0,
+              "y": 0,
+              "width": 0.01,
+              "height": 0.01,
+              "x1": 0,
+              "y1": 0,
+              "x2": 0.01,
+              "y2": 0.01
+            },
+            "points": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 0.01,
+                "y": 0
+              },
+              {
+                "x": 0.01,
+                "y": 0.01
+              },
+              {
+                "x": 0,
+                "y": 0.01
+              }
+            ],
+            "transform": {
+              "a": 1,
+              "b": 0,
+              "c": 0,
+              "d": 1,
+              "e": 0,
+              "f": 0
+            },
+            "transformInverse": {
+              "a": 1,
+              "b": 0,
+              "c": 0,
+              "d": 1,
+              "e": 0,
+              "f": 0
+            },
+            "parentId": "00000000-0000-0000-0000-000000000000",
+            "frameId": "00000000-0000-0000-0000-000000000000",
+            "flipX": null,
+            "flipY": null,
+            "hideFillOnExport": false,
+            "proportionLock": false,
+            "strokes": [],
+            "proportion": 1,
+            "fills": [
+              {
+                "fillColor": "#ff0000",
+                "fillOpacity": 1
+              }
+            ]
+          },
+          "ddfee392D246_80fc_8004_8664a46a5d1f": {
+            "id": "ddfee392-d246-80fc-8004-8664a46a5d1f",
+            "name": "Rectangle 1",
+            "type": "rect",
+            "x": -282,
+            "y": -153,
+            "width": 326,
+            "height": 200,
+            "rotation": 0,
+            "selrect": {
+              "x": -282,
+              "y": -153,
+              "width": 326,
+              "height": 200,
+              "x1": -282,
+              "y1": -153,
+              "x2": 44,
+              "y2": 47
+            },
+            "points": [
+              {
+                "x": -282,
+                "y": -153
+              },
+              {
+                "x": 44.000000000000014,
+                "y": -153
+              },
+              {
+                "x": 44.000000000000014,
+                "y": 47.00000000000001
+              },
+              {
+                "x": -282,
+                "y": 47.00000000000001
+              }
+            ],
+            "transform": {
+              "a": 1,
+              "b": 0,
+              "c": 0,
+              "d": 1,
+              "e": 0,
+              "f": 0
+            },
+            "transformInverse": {
+              "a": 1,
+              "b": 0,
+              "c": 0,
+              "d": 1,
+              "e": 0,
+              "f": 0
+            },
+            "parentId": "00000000-0000-0000-0000-000000000000",
+            "frameId": "00000000-0000-0000-0000-000000000000",
+            "flipX": null,
+            "flipY": null,
+            "rx": 0,
+            "growType": "fixed",
+            "hideInViewer": false,
+            "proportionLock": false,
+            "strokes": [],
+            "proportion": 1,
+            "fills": [
+              {
+                "fillColor": "#00ff19",
+                "fillOpacity": 1
+              }
+            ],
+            "ry": 0
+          }
+        },
+        "id": "4bf0e9f6-08c8-809c-8004-85445179c2aa",
+        "name": "Page 1"
+      }
+    },
+    "id": "4bf0e9f6-08c8-809c-8004-85445179c2a9",
+    "options": {
+      "componentsV2": true
+    },
+    "recentColors": [
+      {
+        "color": "#e8e9ea",
+        "opacity": 1
+      },
+      {
+        "color": "#ff0000",
+        "opacity": 1
+      },
+      {
+        "color": "#00ff19",
+        "opacity": 1,
+        "id": null,
+        "fileId": null,
+        "image": null
+      }
+    ]
+  }
+}

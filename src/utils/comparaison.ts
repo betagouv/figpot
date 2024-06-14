@@ -1,49 +1,109 @@
-import diff from 'microdiff';
+import diff, { Difference } from 'microdiff';
 
-export interface GetDiffResult<Model> {
-  added: Model[];
-  removed: Model[];
-  updated: Model[];
-  unchanged: Model[];
-}
+export type DiffState = 'added' | 'removed' | 'updated' | 'unchanged';
+
+export type GetDiffResult<Model> =
+  | {
+      state: Extract<DiffState, 'added'>;
+      after: Model;
+    }
+  | {
+      state: Extract<DiffState, 'removed'>;
+      before: Model;
+    }
+  | {
+      state: Extract<DiffState, 'updated'>;
+      before: Model;
+      after: Model;
+      differences: Difference[];
+    }
+  | {
+      state: Extract<DiffState, 'unchanged'>;
+      model: Model;
+    };
+
+export type GetDiffResults<ReferenceProperty, Model> = Map<ReferenceProperty, GetDiffResult<Model>>;
 
 export function getDiff<Model extends Record<ReferenceProperty, any>, ReferenceProperty extends string | number | symbol>(
   before: Map<ReferenceProperty, Model>,
   after: Map<ReferenceProperty, Model>
-): GetDiffResult<Model> {
-  const result: GetDiffResult<Model> = {
-    added: [],
-    removed: [],
-    unchanged: [],
-    updated: [],
-  };
+): GetDiffResults<ReferenceProperty, Model> {
+  const result: GetDiffResults<ReferenceProperty, Model> = new Map();
 
   for (const [afterModelReference, afterModel] of after) {
     const sameBeforeReferenceModel = before.get(afterModelReference);
 
+    let itemResult: GetDiffResult<Model>;
     if (sameBeforeReferenceModel) {
       const beforeAfterModelDiff = diff(sameBeforeReferenceModel, afterModel);
 
       // `microdiff` won't return if unchange, so we can rely on the diff length to detect any change
       if (beforeAfterModelDiff.length > 0) {
-        result.updated.push(afterModel);
+        itemResult = {
+          state: 'updated',
+          before: sameBeforeReferenceModel,
+          after: afterModel,
+          differences: beforeAfterModelDiff,
+        };
       } else {
-        result.unchanged.push(afterModel);
+        itemResult = {
+          state: 'unchanged',
+          model: afterModel,
+        };
       }
     } else {
-      result.added.push(afterModel);
+      itemResult = {
+        state: 'added',
+        after: afterModel,
+      };
     }
+
+    result.set(afterModelReference, itemResult);
   }
 
   for (const [beforeModelReference, beforeModel] of before) {
     if (!after.has(beforeModelReference)) {
-      result.removed.push(beforeModel);
+      result.set(beforeModelReference, {
+        state: 'removed',
+        before: beforeModel,
+      });
     }
   }
 
   return result;
 }
 
-export function formatDiffResultLog<Model>(result: GetDiffResult<Model>): string {
-  return `added: ${result.added.length} | removed: ${result.removed.length} | updated: ${result.updated.length} | unchanged: ${result.unchanged.length}`;
+export function getDiffCounts<ReferenceProperty, Model>(result: GetDiffResults<ReferenceProperty, Model>) {
+  const counts = {
+    added: 0,
+    removed: 0,
+    updated: 0,
+    unchanged: 0,
+  };
+
+  for (const [, item] of result) {
+    switch (item.state) {
+      case 'added':
+        counts.added += 1;
+        break;
+      case 'removed':
+        counts.removed += 1;
+        break;
+      case 'updated':
+        counts.updated += 1;
+        break;
+
+      case 'unchanged':
+        counts.unchanged += 1;
+        break;
+    }
+  }
+
+  return counts;
+}
+
+export function formatDiffResultLog<ReferenceProperty, Model>(result: GetDiffResults<ReferenceProperty, Model>) {
+  const counts = getDiffCounts(result);
+
+  return `added: ${counts.added} | removed: ${counts.removed} | updated: ${counts.updated} | unchanged: ${counts.unchanged}`;
 }

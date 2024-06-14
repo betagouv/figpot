@@ -6,7 +6,7 @@
     "target": "esnext",
     "module": "esnext",
     "strict": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "paths": {
       "@figpot/*": [
         "./*"

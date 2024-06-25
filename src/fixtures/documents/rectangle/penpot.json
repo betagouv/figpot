@@ -89,12 +89,12 @@
             "proportion": 1,
             "fills": [
               {
-                "fillColor": "#ff0000",
+                "fillColor": "#FFFFFF",
                 "fillOpacity": 1
               }
             ]
           },
-          "ddfee392D246_80fc_8004_8664a46a5d1f": {
+          "ddfee392_d246_80fc_8004_8664a46a5d1f": {
             "id": "ddfee392-d246-80fc-8004-8664a46a5d1f",
             "name": "Rectangle 1",
             "type": "rect",

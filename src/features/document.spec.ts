@@ -27,7 +27,7 @@ describe('document comparaison', () => {
 
       const differences = getDifferences(cleanHostedTree, transformedTree);
 
-      expect(differences.newDocumentName).toBeNull();
+      expect(differences.newDocumentName).toBeUndefined();
       expect(differences.newTreeOperations).toEqual([]);
     });
 
@@ -47,7 +47,7 @@ describe('document comparaison', () => {
 
       const differences = getDifferences(cleanHostedTree, transformedTree);
 
-      expect(differences.newDocumentName).not.toBeNull();
+      expect(differences.newDocumentName).not.toBeUndefined();
       expect(differences.newTreeOperations.length).toBe(3);
       expect(differences.newTreeOperations.map((op) => op.type)).toEqual(['add-page', 'mod-obj', 'del-page']);
     });
@@ -74,7 +74,7 @@ describe('document comparaison', () => {
 
       const differences = getDifferences(cleanHostedTree, transformedTree);
 
-      expect(differences.newDocumentName).toBeNull();
+      expect(differences.newDocumentName).toBeUndefined();
       expect(differences.newTreeOperations).toEqual([]);
     });
 
@@ -94,7 +94,7 @@ describe('document comparaison', () => {
 
       const differences = getDifferences(cleanHostedTree, transformedTree);
 
-      expect(differences.newDocumentName).not.toBeNull();
+      expect(differences.newDocumentName).not.toBeUndefined();
       expect(differences.newTreeOperations.length).toBe(6);
       expect(differences.newTreeOperations.map((op) => op.type)).toEqual(['add-page', 'add-obj', 'add-obj', 'del-page', 'del-obj', 'del-obj']);
     });

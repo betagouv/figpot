@@ -22,7 +22,9 @@
     "pages": ["4bf0e9f6-08c8-809c-8004-85445179c2aa"],
     "pagesIndex": {
       "4bf0e9f6_08c8_809c_8004_85445179c2aa": {
-        "options": {},
+        "options": {
+          "background": "#ff0000"
+        },
         "objects": {
           "00000000_0000_0000_0000_000000000000": {
             "id": "00000000-0000-0000-0000-000000000000",
@@ -87,7 +89,7 @@
             "proportion": 1,
             "fills": [
               {
-                "fillColor": "#ff0000",
+                "fillColor": "#FFFFFF",
                 "fillOpacity": 1
               }
             ]

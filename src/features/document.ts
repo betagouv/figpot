@@ -397,7 +397,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
               type: 'set-option',
               pageId: item.after.id,
               option: kebabCase(optionKey), // Since it's a value we make sure to respect backend keywords logic
-              value: propertiesObj.options[optionKey],
+              value: difference.type === 'REMOVE' ? null : propertiesObj.options[optionKey],
             });
           }
         }
@@ -407,11 +407,26 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
         assert(id);
 
         // No matter if the difference is a creation/change/removal, it's committed the same way
-        // Note: maybe a doubt about the "removal" of a property if undefined? Maybe we need to set that to `null`? Or to throw an error since it's a miss from the Figma mappers?
-        const changedFirstLevelProperties = item.differences
-          .filter((difference) => difference.path.length > 0)
-          .map((difference) => difference.path[0])
-          .filter((property) => typeof property === 'string' && propertiesObj.hasOwnProperty(property)) as (keyof typeof propertiesObj)[];
+        const changedFirstLevelProperties: (keyof typeof propertiesObj)[] = [];
+        for (const difference of item.differences) {
+          if (difference.path.length > 0) {
+            const propertyToSet = difference.path[0];
+
+            if (typeof propertyToSet === 'string') {
+              if (difference.type === 'REMOVE') {
+                // A value reset must be done by `null`, but it's `undefined` in our comparaison since the backend does not return this as values
+                // So forcing the reset value
+                (propertiesObj as any)[propertyToSet] = null;
+              }
+
+              if (propertiesObj.hasOwnProperty(propertyToSet)) {
+                // We exclude differences that have been deconstructed from the initial object
+                changedFirstLevelProperties.push(propertyToSet as keyof typeof propertiesObj);
+              }
+            }
+          }
+        }
+
         const uniqueProperties = [...new Set(changedFirstLevelProperties)];
 
         operations.push({

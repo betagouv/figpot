@@ -14,7 +14,7 @@ export function translateChildren(
   baseY: number = 0
 ) {
   for (const figmaChild of figmaChildren) {
-    const penpotNode = transformSceneNode(registeredPageNodes, figmaChild, baseX, baseY);
+    const penpotNode = transformSceneNode(registeredPageNodes, figmaChild, mapping, baseX, baseY);
     const penpotNodeId = translateId(figmaChild.id, mapping);
 
     penpotNode.id = penpotNodeId;

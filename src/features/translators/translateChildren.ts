@@ -9,12 +9,10 @@ export function translateChildren(
   figmaChildren: SubcanvasNode[],
   figmaParentId: string,
   closestFigmaFrameId: string,
-  mapping: MappingType,
-  baseX: number = 0,
-  baseY: number = 0
+  mapping: MappingType
 ) {
   for (const figmaChild of figmaChildren) {
-    const penpotNode = transformSceneNode(registeredPageNodes, figmaChild, mapping, baseX, baseY);
+    const penpotNode = transformSceneNode(registeredPageNodes, figmaChild, mapping);
     const penpotNodeId = translateId(figmaChild.id, mapping);
 
     penpotNode.id = penpotNodeId;

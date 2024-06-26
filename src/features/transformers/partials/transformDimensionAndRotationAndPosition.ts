@@ -28,16 +28,14 @@ export const neutralTransforMatrix: Matrix = {
 };
 
 export function transformDimensionAndRotationAndPosition(
-  node: HasLayoutTrait,
-  baseX: number,
-  baseY: number
+  node: HasLayoutTrait
 ): Pick<ShapeBaseAttributes, 'selrect' | 'points' | 'transform' | 'transformInverse' | 'rotation'> &
   Pick<ShapeGeomAttributes, 'x' | 'y' | 'width' | 'height'> {
   assert(node.absoluteBoundingBox);
   assert(node.size);
 
-  const x = node.absoluteBoundingBox.x + baseX;
-  const y = node.absoluteBoundingBox.y + baseY;
+  const x = node.absoluteBoundingBox.x;
+  const y = node.absoluteBoundingBox.y;
 
   const selrectWithNoRotation: Selrect = {
     x: x,

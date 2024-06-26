@@ -1,24 +1,21 @@
-import { RectangleNode, SubcanvasNode } from '@figpot/src/clients/figma';
+import { EllipseNode, SubcanvasNode } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
-import { transformCornerRadius } from '@figpot/src/features/transformers/partials/transformCornerRadius';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
-import { transformFlip } from '@figpot/src/features/transformers/partials/transformFlip';
 import { transformLayoutAttributes } from '@figpot/src/features/transformers/partials/transformLayout';
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
-import { RectShape } from '@figpot/src/models/entities/penpot/shapes/rect';
+import { CircleShape } from '@figpot/src/models/entities/penpot/shapes/circle';
 
-export function transformRectangleNode(node: RectangleNode & Pick<SubcanvasNode, 'id'>, mapping: MappingType): RectShape {
+export function transformEllipseNode(node: EllipseNode & Pick<SubcanvasNode, 'id'>, mapping: MappingType): CircleShape {
   return {
-    type: 'rect',
+    type: 'circle',
     name: node.name,
     ...transformFills(node),
-    ...transformFlip(node),
     ...transformEffects(node, mapping),
     ...transformStrokes(node),
     ...transformDimensionAndRotationAndPosition(node),
@@ -26,7 +23,6 @@ export function transformRectangleNode(node: RectangleNode & Pick<SubcanvasNode,
     ...transformBlend(node),
     ...transformProportion(node),
     ...transformLayoutAttributes(node),
-    ...transformCornerRadius(node),
     ...transformConstraints(node),
   };
 }

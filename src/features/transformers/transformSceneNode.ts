@@ -1,5 +1,6 @@
 import { SubcanvasNode } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
+import { transformEllipseNode } from '@figpot/src/features/transformers/transformEllipseNode';
 import { transformRectangleNode } from '@figpot/src/features/transformers/transformRectangleNode';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 
@@ -7,7 +8,6 @@ import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 // import {
 //   transformBooleanNode,
 //   transformComponentNode,
-//   transformEllipseNode,
 //   transformFrameNode,
 //   transformGroupNode,
 //   transformInstanceNode,
@@ -16,22 +16,16 @@ import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 //   transformVectorNode,
 // } from '.';
 
-export function transformSceneNode(
-  registeredPageNodes: PenpotNode[],
-  figmaNode: SubcanvasNode,
-  mapping: MappingType,
-  baseX: number = 0,
-  baseY: number = 0
-): PenpotNode {
+export function transformSceneNode(registeredPageNodes: PenpotNode[], figmaNode: SubcanvasNode, mapping: MappingType): PenpotNode {
   let penpotNode: PenpotNode | undefined;
 
   switch (figmaNode.type) {
     case 'RECTANGLE':
-      penpotNode = transformRectangleNode(figmaNode, mapping, baseX, baseY);
+      penpotNode = transformRectangleNode(figmaNode, mapping);
       break;
-    // case 'ELLIPSE':
-    //   penpotNode = transformEllipseNode(figmaNode, baseX, baseY);
-    //   break;
+    case 'ELLIPSE':
+      penpotNode = transformEllipseNode(figmaNode, mapping);
+      break;
     // case 'SECTION':
     // case 'FRAME':
     // case 'COMPONENT_SET':

@@ -1,20 +1,11 @@
 import { Uuid } from '@figpot/src/models/entities/penpot/traits/uuid';
 
-export const ITEM_MARGIN_SIMPLE_TYPE: unique symbol = Symbol.for('simple');
-export const ITEM_MARGIN_MULTIPLE_TYPE: unique symbol = Symbol.for('multiple');
-export const ITEM_HSIZING_FILL: unique symbol = Symbol.for('fill');
-export const ITEM_HSIZING_FIX: unique symbol = Symbol.for('fix');
-export const ITEM_HSIZING_AUTO: unique symbol = Symbol.for('auto');
-export const ITEM_VSIZING_FILL: unique symbol = Symbol.for('fill');
-export const ITEM_VSIZING_FIX: unique symbol = Symbol.for('fix');
-export const ITEM_VSIZING_AUTO: unique symbol = Symbol.for('auto');
-export const ITEM_ALIGN_SELF_START: unique symbol = Symbol.for('start');
-export const ITEM_ALIGN_SELF_END: unique symbol = Symbol.for('end');
-export const ITEM_ALIGN_SELF_CENTER: unique symbol = Symbol.for('center');
-export const ITEM_ALIGN_SELF_STRETCH: unique symbol = Symbol.for('stretch');
+export type LayoutSizing = 'fill' | 'fix' | 'auto';
+
+export type LayoutAlignSelf = 'start' | 'end' | 'center' | 'stretch';
 
 export type LayoutChildAttributes = {
-  layoutItemMarginType?: 'simple' | 'multiple' | typeof ITEM_MARGIN_SIMPLE_TYPE | typeof ITEM_MARGIN_MULTIPLE_TYPE;
+  layoutItemMarginType?: 'simple' | 'multiple';
   layoutItemMargin?: {
     m1?: number;
     m2?: number;
@@ -25,41 +16,41 @@ export type LayoutChildAttributes = {
   layoutItemMinH?: number;
   layoutItemMaxW?: number;
   layoutItemMinW?: number;
-  layoutItemHSizing?: 'fill' | 'fix' | 'auto' | typeof ITEM_HSIZING_FILL | typeof ITEM_HSIZING_FIX | typeof ITEM_HSIZING_AUTO;
-  layoutItemVSizing?: 'fill' | 'fix' | 'auto' | typeof ITEM_VSIZING_FILL | typeof ITEM_VSIZING_FIX | typeof ITEM_VSIZING_AUTO;
-  layoutItemAlignSelf?:
-    | 'start'
-    | 'end'
-    | 'center'
-    | 'stretch'
-    | typeof ITEM_ALIGN_SELF_START
-    | typeof ITEM_ALIGN_SELF_END
-    | typeof ITEM_ALIGN_SELF_CENTER
-    | typeof ITEM_ALIGN_SELF_STRETCH;
+  'layoutItemH-Sizing'?: LayoutSizing;
+  'layoutItemV-Sizing'?: LayoutSizing;
+  layoutItemAlignSelf?: LayoutAlignSelf;
   layoutItemAbsolute?: boolean;
   layoutItemZIndex?: number;
 };
 
-type JustifyAlignContent = 'start' | 'center' | 'end' | 'space-between' | 'space-around' | 'space-evenly' | 'stretch';
+export type JustifyAlignContent = 'start' | 'center' | 'end' | 'space-between' | 'space-around' | 'space-evenly' | 'stretch';
 
-type JustifyAlignItems = 'start' | 'end' | 'center' | 'stretch';
+export type JustifyAlignItems = 'start' | 'end' | 'center' | 'stretch';
+
+export type LayoutFlexDir = 'row' | 'reverse-row' | 'row-reverse' | 'column' | 'reverse-column' | 'column-reverse';
+
+export type LayoutGap = {
+  rowGap?: number;
+  columnGap?: number;
+};
+
+export type LayoutWrapType = 'wrap' | 'nowrap' | 'no-wrap';
+
+export type LayoutPadding = {
+  p1?: number;
+  p2?: number;
+  p3?: number;
+  p4?: number;
+};
 
 export type LayoutAttributes = {
   layout?: 'flex' | 'grid';
-  layoutFlexDir?: 'row' | 'reverse-row' | 'row-reverse' | 'column' | 'reverse-column' | 'column-reverse';
-  layoutGap?: {
-    rowGap?: number;
-    columnGap?: number;
-  };
+  layoutFlexDir?: LayoutFlexDir;
+  layoutGap?: LayoutGap;
   layoutGapType?: 'simple' | 'multiple';
-  layoutWrapType?: 'wrap' | 'nowrap' | 'no-wrap';
+  layoutWrapType?: LayoutWrapType;
   layoutPaddingType?: 'simple' | 'multiple';
-  layoutPadding?: {
-    p1?: number;
-    p2?: number;
-    p3?: number;
-    p4?: number;
-  };
+  layoutPadding?: LayoutPadding;
   layoutJustifyContent?: JustifyAlignContent;
   layoutJustifyItems?: JustifyAlignItems;
   layoutAlignContent?: JustifyAlignContent;

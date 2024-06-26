@@ -397,7 +397,9 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
               type: 'set-option',
               pageId: item.after.id,
               option: kebabCase(optionKey), // Since it's a value we make sure to respect backend keywords logic
-              value: difference.type === 'REMOVE' ? null : propertiesObj.options[optionKey],
+              value:
+                // Checking the property removal, also check the path length since an array item removal will produce a `REMOVE` too
+                difference.type === 'REMOVE' && difference.path.length === 1 ? null : propertiesObj.options[optionKey],
             });
           }
         }
@@ -412,9 +414,10 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
           if (difference.path.length > 0) {
             const propertyToSet = difference.path[0];
 
-            if (difference.type === 'REMOVE') {
-              // A value reset must be done by `null`, but it's `undefined` in our comparaison since the backend does not return this as values
-              // So forcing the reset value
+            // A value reset must be done by `null`
+            // Note: we have `undefined` in our comparaison since the backend does not return this as value, so forcing the reset value
+            if (difference.type === 'REMOVE' && difference.path.length === 1) {
+              // Checking the property removal, also check the path length since an array item removal will produce a `REMOVE` too
               (propertiesObj as any)[propertyToSet] = null;
             }
 

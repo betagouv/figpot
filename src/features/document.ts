@@ -412,17 +412,15 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
           if (difference.path.length > 0) {
             const propertyToSet = difference.path[0];
 
-            if (typeof propertyToSet === 'string') {
-              if (difference.type === 'REMOVE') {
-                // A value reset must be done by `null`, but it's `undefined` in our comparaison since the backend does not return this as values
-                // So forcing the reset value
-                (propertiesObj as any)[propertyToSet] = null;
-              }
+            if (difference.type === 'REMOVE') {
+              // A value reset must be done by `null`, but it's `undefined` in our comparaison since the backend does not return this as values
+              // So forcing the reset value
+              (propertiesObj as any)[propertyToSet] = null;
+            }
 
-              if (propertiesObj.hasOwnProperty(propertyToSet)) {
-                // We exclude differences that have been deconstructed from the initial object
-                changedFirstLevelProperties.push(propertyToSet as keyof typeof propertiesObj);
-              }
+            if (Object.hasOwn(propertiesObj, propertyToSet)) {
+              // We exclude differences that have been deconstructed from the initial object
+              changedFirstLevelProperties.push(propertyToSet as keyof typeof propertiesObj);
             }
           }
         }

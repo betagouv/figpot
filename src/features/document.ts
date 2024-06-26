@@ -375,7 +375,6 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
             parentId: isPageRootFrameFromId(item.after.parentId) ? rootFrameId : item.after.parentId,
             obj: {
               ...propertiesObj,
-              shapes: item.after.type === 'frame' ? [] : undefined, // This is required to create frames (we don't have this into the comparaison trees to only go from top to bottom with a simple logic)
             },
           });
         }

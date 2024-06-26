@@ -98,6 +98,7 @@ export function transformPageNode(figmaNode: CanvasNode, mapping: MappingType): 
             fillOpacity: 1,
           },
         ],
+        shapes: figmaNode.children.map((figmaChild) => translateId(figmaChild.id, mapping)),
       },
     },
   };

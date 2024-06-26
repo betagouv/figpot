@@ -31,10 +31,6 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
 
     // Then manage the rest of the logic
     for (const [, object] of Object.entries(page.objects)) {
-      if (object.type === 'bool' || object.type === 'frame' || object.type === 'group') {
-        delete object.shapes; // Since object is a reference it will act on the main object
-      }
-
       object.parentId = object.parentId === rootFrameId ? newRootFrameNodeId : object.parentId;
       object.frameId = object.frameId === rootFrameId ? newRootFrameNodeId : object.frameId;
     }

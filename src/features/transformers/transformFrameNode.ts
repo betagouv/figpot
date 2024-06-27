@@ -1,4 +1,4 @@
-import { ComponentSetNode, FrameNode, SectionNode, SubcanvasNode } from '@figpot/src/clients/figma';
+import { ComponentSetNode, FrameNode, SectionNode, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformChildren } from '@figpot/src/features/transformers/partials/transformChildren';
@@ -23,6 +23,7 @@ function isSectionNode(node: FrameNode | SectionNode | ComponentSetNode): node i
 export function transformFrameNode(
   registeredPageNodes: PenpotNode[],
   node: (FrameNode | SectionNode | ComponentSetNode) & Pick<SubcanvasNode, 'id'>,
+  figmaNodeTransform: Transform,
   mapping: MappingType
 ): FrameShape {
   let frameSpecificAttributes: Partial<FrameShape> = {};
@@ -44,7 +45,7 @@ export function transformFrameNode(
     };
   }
 
-  transformChildren(registeredPageNodes, node, node.id, mapping);
+  transformChildren(registeredPageNodes, node, node.id, figmaNodeTransform, mapping);
 
   return {
     type: 'frame',
@@ -53,7 +54,7 @@ export function transformFrameNode(
     showContent: isSectionNode(node) ? true : !node.clipsContent,
     ...transformFills(node),
     ...frameSpecificAttributes,
-    ...transformDimensionAndRotationAndPosition(node),
+    ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformSceneNode(node),
   };
 }

@@ -1,4 +1,4 @@
-import { RectangleNode, SubcanvasNode } from '@figpot/src/clients/figma';
+import { RectangleNode, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
@@ -13,7 +13,11 @@ import { transformSceneNode } from '@figpot/src/features/transformers/partials/t
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
 import { RectShape } from '@figpot/src/models/entities/penpot/shapes/rect';
 
-export function transformRectangleNode(node: RectangleNode & Pick<SubcanvasNode, 'id'>, mapping: MappingType): RectShape {
+export function transformRectangleNode(
+  node: RectangleNode & Pick<SubcanvasNode, 'id'>,
+  figmaNodeTransform: Transform,
+  mapping: MappingType
+): RectShape {
   return {
     type: 'rect',
     name: node.name,
@@ -21,7 +25,7 @@ export function transformRectangleNode(node: RectangleNode & Pick<SubcanvasNode,
     ...transformFlip(node),
     ...transformEffects(node, mapping),
     ...transformStrokes(node),
-    ...transformDimensionAndRotationAndPosition(node),
+    ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformSceneNode(node),
     ...transformBlend(node),
     ...transformProportion(node),

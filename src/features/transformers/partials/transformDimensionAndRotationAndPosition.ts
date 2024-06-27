@@ -28,50 +28,37 @@ export const neutralTransforMatrix: Matrix = {
 };
 
 export function transformDimensionAndRotationAndPosition(
-  node: HasLayoutTrait
+  node: HasLayoutTrait,
+  nodeTransform: Transform
 ): Pick<ShapeBaseAttributes, 'selrect' | 'points' | 'transform' | 'transformInverse' | 'rotation'> &
   Pick<ShapeGeomAttributes, 'x' | 'y' | 'width' | 'height'> {
   assert(node.absoluteBoundingBox);
   assert(node.size);
 
-  const x = node.absoluteBoundingBox.x;
-  const y = node.absoluteBoundingBox.y;
-
-  const selrectWithNoRotation: Selrect = {
-    x: x,
-    y: y,
-    width: node.size.x,
-    height: node.size.y,
-    x1: x,
-    y1: y,
-    x2: x + node.size.x,
-    y2: y + node.size.y,
-  };
-
-  const pointsWithNoRotation: Point[] = [
-    { x: selrectWithNoRotation.x1, y: selrectWithNoRotation.y1 },
-    { x: selrectWithNoRotation.x2, y: selrectWithNoRotation.y1 },
-    { x: selrectWithNoRotation.x2, y: selrectWithNoRotation.y2 },
-    { x: selrectWithNoRotation.x1, y: selrectWithNoRotation.y2 },
-  ];
-
-  if (!node.relativeTransform) {
-    return {
-      x,
-      y,
-      width: selrectWithNoRotation.width,
-      height: selrectWithNoRotation.height,
-      selrect: selrectWithNoRotation,
-      points: pointsWithNoRotation,
-      rotation: 0,
-      transform: neutralTransforMatrix,
-      transformInverse: neutralTransforMatrix,
-    };
-  }
-
-  const rotation = getRotationAngle(node.relativeTransform);
+  const rotation = getRotationAngle(nodeTransform);
 
   if (rotation === 0) {
+    const x = node.absoluteBoundingBox.x;
+    const y = node.absoluteBoundingBox.y;
+
+    const selrectWithNoRotation: Selrect = {
+      x: x,
+      y: y,
+      width: node.size.x,
+      height: node.size.y,
+      x1: x,
+      y1: y,
+      x2: x + node.size.x,
+      y2: y + node.size.y,
+    };
+
+    const pointsWithNoRotation: Point[] = [
+      { x: selrectWithNoRotation.x1, y: selrectWithNoRotation.y1 },
+      { x: selrectWithNoRotation.x2, y: selrectWithNoRotation.y1 },
+      { x: selrectWithNoRotation.x2, y: selrectWithNoRotation.y2 },
+      { x: selrectWithNoRotation.x1, y: selrectWithNoRotation.y2 },
+    ];
+
     return {
       x,
       y,
@@ -114,12 +101,10 @@ export function transformDimensionAndRotationAndPosition(
   };
 
   const transformedPoints = pointsOnZero.map((p) => {
-    assert(node.relativeTransform);
-
     // Transform
     const rotatedPoint: Point = {
-      x: p.x * node.relativeTransform[0][0] + p.y * node.relativeTransform[0][1],
-      y: p.x * node.relativeTransform[1][0] + p.y * node.relativeTransform[1][1],
+      x: p.x * nodeTransform[0][0] + p.y * nodeTransform[0][1],
+      y: p.x * nodeTransform[1][0] + p.y * nodeTransform[1][1],
     };
 
     // Center correctly
@@ -135,18 +120,18 @@ export function transformDimensionAndRotationAndPosition(
     selrect: selrect,
     rotation: -rotation < 0 ? -rotation + 360 : -rotation,
     transform: {
-      a: node.relativeTransform[0][0],
-      b: node.relativeTransform[1][0],
-      c: node.relativeTransform[0][1],
-      d: node.relativeTransform[1][1],
+      a: nodeTransform[0][0],
+      b: nodeTransform[1][0],
+      c: nodeTransform[0][1],
+      d: nodeTransform[1][1],
       e: 0,
       f: 0,
     },
     transformInverse: {
-      a: node.relativeTransform[0][0],
-      b: node.relativeTransform[0][1],
-      c: node.relativeTransform[1][0],
-      d: node.relativeTransform[1][1],
+      a: nodeTransform[0][0],
+      b: nodeTransform[0][1],
+      c: nodeTransform[1][0],
+      d: nodeTransform[1][1],
       e: 0,
       f: 0,
     },

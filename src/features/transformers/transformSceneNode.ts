@@ -1,4 +1,4 @@
-import { SubcanvasNode } from '@figpot/src/clients/figma';
+import { SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { transformEllipseNode } from '@figpot/src/features/transformers/transformEllipseNode';
 import { transformFrameNode } from '@figpot/src/features/transformers/transformFrameNode';
@@ -21,24 +21,25 @@ export function transformSceneNode(
   registeredPageNodes: PenpotNode[],
   figmaNode: SubcanvasNode,
   closestFigmaFrameId: string,
+  figmaNodeTransform: Transform,
   mapping: MappingType
 ): PenpotNode {
   let penpotNode: PenpotNode | undefined;
 
   switch (figmaNode.type) {
     case 'RECTANGLE':
-      penpotNode = transformRectangleNode(figmaNode, mapping);
+      penpotNode = transformRectangleNode(figmaNode, figmaNodeTransform, mapping);
       break;
     case 'ELLIPSE':
-      penpotNode = transformEllipseNode(figmaNode, mapping);
+      penpotNode = transformEllipseNode(figmaNode, figmaNodeTransform, mapping);
       break;
     case 'SECTION':
     case 'FRAME':
     case 'COMPONENT_SET':
-      penpotNode = transformFrameNode(registeredPageNodes, figmaNode, mapping);
+      penpotNode = transformFrameNode(registeredPageNodes, figmaNode, figmaNodeTransform, mapping);
       break;
     case 'GROUP':
-      penpotNode = transformGroupNode(registeredPageNodes, figmaNode, closestFigmaFrameId, mapping);
+      penpotNode = transformGroupNode(registeredPageNodes, figmaNode, closestFigmaFrameId, figmaNodeTransform, mapping);
       break;
     // case 'TEXT':
     //   penpotNode = transformTextNode(figmaNode, baseX, baseY);

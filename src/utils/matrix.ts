@@ -1,3 +1,22 @@
+import * as math from 'mathjs';
+
+import { HasLayoutTrait, Transform } from '@figpot/src/clients/figma';
+
+export const neutralTransform: Transform = [
+  [1, 0, 0],
+  [0, 1, 0],
+];
+
+export function isTransformedNode(node: HasLayoutTrait): boolean {
+  return node.relativeTransform !== undefined;
+}
+
+export function cumulateNodeTransforms(t1: Transform, t2: Transform): Transform {
+  const matrix = math.multiply(math.matrix([t1[0], t1[1], [0, 0, 0]]), math.matrix([t2[0], t2[1], [0, 0, 0]])).toArray() as any;
+
+  return [matrix[0], matrix[1]];
+}
+
 export function applyMatrixToPoint(matrix: number[][], point: number[]) {
   return [point[0] * matrix[0][0] + point[1] * matrix[0][1] + matrix[0][2], point[0] * matrix[1][0] + point[1] * matrix[1][1] + matrix[1][2]];
 }

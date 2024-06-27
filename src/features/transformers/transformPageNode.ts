@@ -7,6 +7,7 @@ import { formatPageRootFrameId, registerId, translateId, translateUuidAsObjectKe
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { rgbToHex } from '@figpot/src/utils/color';
+import { neutralTransform } from '@figpot/src/utils/matrix';
 
 export function transformPageNode(figmaNode: CanvasNode, mapping: MappingType): PenpotPage {
   //
@@ -105,7 +106,8 @@ export function transformPageNode(figmaNode: CanvasNode, mapping: MappingType): 
 
   const registeredPageNodes: PenpotNode[] = [];
 
-  translateChildren(registeredPageNodes, figmaNode.children, virtualFigmaRootFrameId, virtualFigmaRootFrameId, mapping);
+  // We provide a transform cumulative variable so rotation is based on parents too (a page cannot have a rotation so starting with neutral transform)
+  translateChildren(registeredPageNodes, figmaNode.children, virtualFigmaRootFrameId, virtualFigmaRootFrameId, neutralTransform, mapping);
 
   for (const penpotPageNode of registeredPageNodes) {
     assert(penpotPageNode.id); // It would mean we forget to translate it in a specific node type

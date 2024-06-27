@@ -1,4 +1,4 @@
-import { HasChildrenTrait, HasMaskTrait, SubcanvasNode } from '@figpot/src/clients/figma';
+import { HasChildrenTrait, HasMaskTrait, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { translateChildren, translateMaskChildren } from '@figpot/src/features/translators/translateChildren';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
@@ -11,6 +11,7 @@ export function transformChildren(
   registeredPageNodes: PenpotNode[],
   node: HasChildrenTrait & Pick<SubcanvasNode, 'id'>,
   closestFigmaFrameId: string,
+  parentCumulativeTransform: Transform,
   mapping: MappingType
 ) {
   const maskIndex = node.children.findIndex((childNode) => {
@@ -23,8 +24,8 @@ export function transformChildren(
   const containsMask = maskIndex !== -1;
 
   if (containsMask) {
-    translateMaskChildren(registeredPageNodes, node.children, maskIndex, node.id, closestFigmaFrameId, mapping);
+    translateMaskChildren(registeredPageNodes, node.children, maskIndex, node.id, closestFigmaFrameId, parentCumulativeTransform, mapping);
   } else {
-    translateChildren(registeredPageNodes, node.children, node.id, closestFigmaFrameId, mapping);
+    translateChildren(registeredPageNodes, node.children, node.id, closestFigmaFrameId, parentCumulativeTransform, mapping);
   }
 }

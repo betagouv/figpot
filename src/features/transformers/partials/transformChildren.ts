@@ -7,7 +7,12 @@ function hasMaskTrait(node: SubcanvasNode): node is SubcanvasNode & HasMaskTrait
   return 'isMask' in node;
 }
 
-export function transformChildren(registeredPageNodes: PenpotNode[], node: HasChildrenTrait & Pick<SubcanvasNode, 'id'>, mapping: MappingType) {
+export function transformChildren(
+  registeredPageNodes: PenpotNode[],
+  node: HasChildrenTrait & Pick<SubcanvasNode, 'id'>,
+  closestFigmaFrameId: string,
+  mapping: MappingType
+) {
   const maskIndex = node.children.findIndex((childNode) => {
     if (hasMaskTrait(childNode)) {
       return childNode.isMask === true;
@@ -18,8 +23,8 @@ export function transformChildren(registeredPageNodes: PenpotNode[], node: HasCh
   const containsMask = maskIndex !== -1;
 
   if (containsMask) {
-    translateMaskChildren(registeredPageNodes, node.children, maskIndex, node.id, node.id, mapping);
+    translateMaskChildren(registeredPageNodes, node.children, maskIndex, node.id, closestFigmaFrameId, mapping);
   } else {
-    translateChildren(registeredPageNodes, node.children, node.id, node.id, mapping);
+    translateChildren(registeredPageNodes, node.children, node.id, closestFigmaFrameId, mapping);
   }
 }

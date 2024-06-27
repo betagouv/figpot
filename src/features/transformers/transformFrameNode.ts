@@ -44,7 +44,7 @@ export function transformFrameNode(
     };
   }
 
-  transformChildren(registeredPageNodes, node, mapping);
+  transformChildren(registeredPageNodes, node, node.id, mapping);
 
   return {
     type: 'frame',

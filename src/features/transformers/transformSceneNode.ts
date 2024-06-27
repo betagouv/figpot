@@ -2,6 +2,7 @@ import { SubcanvasNode } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { transformEllipseNode } from '@figpot/src/features/transformers/transformEllipseNode';
 import { transformFrameNode } from '@figpot/src/features/transformers/transformFrameNode';
+import { transformGroupNode } from '@figpot/src/features/transformers/transformGroupNode';
 import { transformRectangleNode } from '@figpot/src/features/transformers/transformRectangleNode';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 
@@ -10,14 +11,18 @@ import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 //   transformBooleanNode,
 //   transformComponentNode,
 //   transformFrameNode,
-//   transformGroupNode,
 //   transformInstanceNode,
 //   transformPathNode,
 //   transformTextNode,
 //   transformVectorNode,
 // } from '.';
 
-export function transformSceneNode(registeredPageNodes: PenpotNode[], figmaNode: SubcanvasNode, mapping: MappingType): PenpotNode {
+export function transformSceneNode(
+  registeredPageNodes: PenpotNode[],
+  figmaNode: SubcanvasNode,
+  closestFigmaFrameId: string,
+  mapping: MappingType
+): PenpotNode {
   let penpotNode: PenpotNode | undefined;
 
   switch (figmaNode.type) {
@@ -32,9 +37,9 @@ export function transformSceneNode(registeredPageNodes: PenpotNode[], figmaNode:
     case 'COMPONENT_SET':
       penpotNode = transformFrameNode(registeredPageNodes, figmaNode, mapping);
       break;
-    // case 'GROUP':
-    //   penpotNode = await transformGroupNode(figmaNode, baseX, baseY);
-    //   break;
+    case 'GROUP':
+      penpotNode = transformGroupNode(registeredPageNodes, figmaNode, closestFigmaFrameId, mapping);
+      break;
     // case 'TEXT':
     //   penpotNode = transformTextNode(figmaNode, baseX, baseY);
     //   break;

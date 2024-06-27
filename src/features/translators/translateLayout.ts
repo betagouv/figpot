@@ -52,13 +52,15 @@ export const translateLayoutWrapType = (wrap: FigmaWrap): LayoutWrapType => {
   }
 };
 
-export const translateLayoutPadding = (node: HasFramePropertiesTrait): LayoutPadding => {
-  return {
-    p1: node.paddingTop,
-    p2: node.paddingRight,
-    p3: node.paddingBottom,
-    p4: node.paddingLeft,
-  };
+export const translateLayoutPadding = (node: HasFramePropertiesTrait): LayoutPadding | undefined => {
+  return node.paddingTop !== undefined || node.paddingRight !== undefined || node.paddingBottom !== undefined || node.paddingLeft !== undefined
+    ? {
+        p1: node.paddingTop ?? 0,
+        p2: node.paddingRight ?? 0,
+        p3: node.paddingBottom ?? 0,
+        p4: node.paddingLeft ?? 0,
+      }
+    : undefined;
 };
 
 export const translateLayoutPaddingType = (node: HasFramePropertiesTrait): 'simple' | 'multiple' => {
@@ -130,7 +132,7 @@ export const translateLayoutSizing = (sizing: FigmaLayoutSizing, isFrame: boolea
     case 'HUG':
       return 'auto';
     case 'FILL':
-      return isFrame ? 'fix' : 'fill'; // @TODO: Penpot does not handle fill in frames as figma does
+      return 'fill';
   }
 };
 

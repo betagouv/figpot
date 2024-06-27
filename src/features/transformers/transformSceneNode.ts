@@ -1,6 +1,7 @@
 import { SubcanvasNode } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { transformEllipseNode } from '@figpot/src/features/transformers/transformEllipseNode';
+import { transformFrameNode } from '@figpot/src/features/transformers/transformFrameNode';
 import { transformRectangleNode } from '@figpot/src/features/transformers/transformRectangleNode';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 
@@ -26,11 +27,11 @@ export function transformSceneNode(registeredPageNodes: PenpotNode[], figmaNode:
     case 'ELLIPSE':
       penpotNode = transformEllipseNode(figmaNode, mapping);
       break;
-    // case 'SECTION':
-    // case 'FRAME':
-    // case 'COMPONENT_SET':
-    //   penpotNode = await transformFrameNode(figmaNode, baseX, baseY);
-    //   break;
+    case 'SECTION':
+    case 'FRAME':
+    case 'COMPONENT_SET':
+      penpotNode = transformFrameNode(registeredPageNodes, figmaNode, mapping);
+      break;
     // case 'GROUP':
     //   penpotNode = await transformGroupNode(figmaNode, baseX, baseY);
     //   break;

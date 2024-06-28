@@ -23,26 +23,31 @@ export type TextNode = {
   key?: string;
 } & TextStyle;
 
-export type TextStyle = FontId & {
-  fontFamily?: string;
-  fontSize?: string;
-  fontStyle?: TextFontStyle;
-  fontWeight?: string;
-  textDecoration?: string;
-  textTransform?: string;
-  direction?: string;
-  typographyRefId?: string;
-  typographyRefFile?: string;
-  lineHeight?: number;
-  letterSpacing?: number;
-  textAlign?: TextHorizontalAlign;
-  textDirection?: 'ltr' | 'rtl' | 'auto';
-  fills?: Fill[];
-};
-
 export type FontId = {
   fontId?: string;
   fontVariantId?: string;
+};
+
+export type TextTypography = FontId & {
+  fontFamily?: string;
+  fontSize?: string;
+  fontWeight?: string;
+  fontStyle?: TextFontStyle;
+  lineHeight?: string;
+  letterSpacing?: string;
+  textTransform?: string;
+};
+
+export type TextStyle = TextTypography & {
+  textDecoration?: string;
+  direction?: string;
+  typographyRefId?: string | null;
+  typographyRefFile?: string | null;
+  textAlign?: TextHorizontalAlign;
+  textDirection?: 'ltr' | 'rtl' | 'auto';
+  fills?: Fill[];
+  fillStyleId?: string; // @TODO: move to any other place
+  textStyleId?: string; // @TODO: move to any other place
 };
 
 export type TextContent = {
@@ -55,6 +60,7 @@ export type TextContent = {
 export type TextAttributes = {
   type?: 'text';
   content?: TextContent;
+  positionData?: unknown[];
 };
 
 export type TextShape = ShapeBaseAttributes & ShapeGeomAttributes & ShapeAttributes & TextAttributes & LayoutChildAttributes;

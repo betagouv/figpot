@@ -4,16 +4,15 @@ import { transformEllipseNode } from '@figpot/src/features/transformers/transfor
 import { transformFrameNode } from '@figpot/src/features/transformers/transformFrameNode';
 import { transformGroupNode } from '@figpot/src/features/transformers/transformGroupNode';
 import { transformRectangleNode } from '@figpot/src/features/transformers/transformRectangleNode';
+import { transformTextNode } from '@figpot/src/features/transformers/transformTextNode';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 
 // TODO:
 // import {
 //   transformBooleanNode,
 //   transformComponentNode,
-//   transformFrameNode,
 //   transformInstanceNode,
 //   transformPathNode,
-//   transformTextNode,
 //   transformVectorNode,
 // } from '.';
 
@@ -41,9 +40,9 @@ export function transformSceneNode(
     case 'GROUP':
       penpotNode = transformGroupNode(registeredPageNodes, figmaNode, closestFigmaFrameId, figmaNodeTransform, mapping);
       break;
-    // case 'TEXT':
-    //   penpotNode = transformTextNode(figmaNode, baseX, baseY);
-    //   break;
+    case 'TEXT':
+      penpotNode = transformTextNode(figmaNode, figmaNodeTransform, mapping);
+      break;
     // case 'VECTOR':
     //   penpotNode = transformVectorNode(figmaNode, baseX, baseY);
     //   break;

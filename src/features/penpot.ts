@@ -33,6 +33,19 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
     for (const [, object] of Object.entries(page.objects)) {
       object.parentId = object.parentId === rootFrameId ? newRootFrameNodeId : object.parentId;
       object.frameId = object.frameId === rootFrameId ? newRootFrameNodeId : object.frameId;
+
+      if (object.type === 'text') {
+        // From the UI this is passed with all position for each texts, it would be really difficult to calculate it
+        // on our own. Hopefully they are not required for the text to be correctly created, so ignoring it :)
+        delete object.positionData;
+
+        if (object.content?.children) {
+          for (const textChild of object.content.children) {
+            // Remove a random ID no provided at creation but present when fetching paragraph children (seems not important)
+            delete textChild.key;
+          }
+        }
+      }
     }
   }
 

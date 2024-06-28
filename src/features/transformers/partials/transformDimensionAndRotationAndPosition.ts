@@ -66,7 +66,7 @@ export function transformDimensionAndRotationAndPosition(
       height: selrectWithNoRotation.height,
       selrect: selrectWithNoRotation,
       points: pointsWithNoRotation,
-      rotation,
+      rotation: 0,
       transform: neutralTransforMatrix,
       transformInverse: neutralTransforMatrix,
     };

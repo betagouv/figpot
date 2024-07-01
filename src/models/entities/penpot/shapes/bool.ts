@@ -1,6 +1,6 @@
 import { LayoutChildAttributes } from '@figpot/src/models/entities/penpot/layout';
 import { ShapeAttributes, ShapeBaseAttributes } from '@figpot/src/models/entities/penpot/shape';
-import { PathContent } from '@figpot/src/models/entities/penpot/shapes/path';
+import { Segment } from '@figpot/src/models/entities/penpot/shapes/path';
 import { Point } from '@figpot/src/models/entities/penpot/traits/point';
 import { Uuid } from '@figpot/src/models/entities/penpot/traits/uuid';
 
@@ -21,14 +21,14 @@ export type BoolOperations =
 
 export type BoolShape = ShapeBaseAttributes & ShapeAttributes & BoolAttributes & LayoutChildAttributes;
 
-type BoolAttributes = {
+export type BoolAttributes = {
   type?: 'bool';
   shapes?: Uuid[];
   boolType: BoolOperations;
   boolContent?: BoolContent[];
 };
 
-type BoolContent = {
+export type BoolContent = {
   relative?: boolean;
   prevPos?: Point;
-} & PathContent;
+} & Segment;

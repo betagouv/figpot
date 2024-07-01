@@ -1,5 +1,6 @@
 import { SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
+import { transformBooleanNode } from '@figpot/src/features/transformers/transformBooleanNode';
 import { transformEllipseNode } from '@figpot/src/features/transformers/transformEllipseNode';
 import { transformFrameNode } from '@figpot/src/features/transformers/transformFrameNode';
 import { transformGroupNode } from '@figpot/src/features/transformers/transformGroupNode';
@@ -12,7 +13,6 @@ import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 
 // TODO:
 // import {
-//   transformBooleanNode,
 //   transformComponentNode,
 //   transformInstanceNode,
 // } from '.';
@@ -54,9 +54,9 @@ export function transformSceneNode(
     case 'REGULAR_POLYGON':
       penpotNode = transformPathNode(figmaNode, figmaNodeTransform, mapping);
       break;
-    // case 'BOOLEAN_OPERATION':
-    //   penpotNode = await transformBooleanNode(figmaNode, baseX, baseY);
-    //   break;
+    case 'BOOLEAN_OPERATION':
+      penpotNode = transformBooleanNode(registeredPageNodes, figmaNode, closestFigmaFrameId, figmaNodeTransform, mapping);
+      break;
     // case 'CONNECTOR':
     //   // TODO: implement it?
     //   penpotNode = await transformConnectorNode(figmaNode, baseX, baseY);

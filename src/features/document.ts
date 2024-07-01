@@ -2,15 +2,18 @@ import { confirm } from '@inquirer/prompts';
 import assert from 'assert';
 import { kebabCase } from 'change-case';
 import { camelCase } from 'change-case/keys';
-import fsSync from 'fs';
+import fsSync, { openAsBlob } from 'fs';
 import fs from 'fs/promises';
+import { glob } from 'glob';
 import graphlib, { Graph } from 'graphlib';
+import { mimeData } from 'human-filetypes';
 import path from 'path';
 import { Digraph, toDot } from 'ts-graphviz';
 import { toFile } from 'ts-graphviz/adapter';
 import { z } from 'zod';
 
-import { GetFileResponse } from '@figpot/src/clients/figma';
+import { GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
+import { OpenAPI as PenpotClientSettings } from '@figpot/src/clients/penpot';
 import {
   PostCommandGetFileResponse,
   appCommonFilesChanges$change,
@@ -25,6 +28,7 @@ import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { formatDiffResultLog, getDiff } from '@figpot/src/utils/comparaison';
+import { downloadFile } from '@figpot/src/utils/file';
 import { gracefulExit } from '@figpot/src/utils/system';
 
 import { cleanHostedDocument } from './penpot';
@@ -102,6 +106,10 @@ export function getTransformedFigmaTreePath(figmaDocumentId: string, penpotDocum
   return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'transformed-tree.json');
 }
 
+export function getFigmaMediaPath(mediaId: string) {
+  return path.resolve(mediasFolderPath, mediaId);
+}
+
 export async function readFigmaTreeFile(documentId: string): Promise<GetFileResponse> {
   const figmaTreePath = getFigmaDocumentTreePath(documentId);
 
@@ -148,6 +156,28 @@ export async function retrieve(options: RetrieveOptionsType) {
 
     const treePath = path.resolve(documentFolderPath, 'tree.json');
     await fs.writeFile(treePath, JSON.stringify(documentTree, null, 2));
+
+    // Save images
+    const imagesList = await getImageFills({
+      fileKey: document.figmaDocument,
+    });
+
+    await fs.mkdir(mediasFolderPath, { recursive: true });
+
+    for (const [figmaImageId, temporaryFileUrl] of Object.entries(imagesList.meta.images)) {
+      const filePath = getFigmaMediaPath(figmaImageId);
+
+      // It should always be the same extension so simplifying with the wildcard pattern
+      // (the extension is retrieved from HTTP headers when downloading)
+      const potentielExistingFilesPaths = await glob(`${filePath}.*`);
+
+      // We assume uploaded images are immutable, so if locally existing, skip
+      if (potentielExistingFilesPaths.length === 0) {
+        console.log(`downloading the image ${figmaImageId} from Figma`);
+
+        await downloadFile(temporaryFileUrl, filePath);
+      }
+    }
   }
 }
 
@@ -253,10 +283,12 @@ export async function transform(options: TransformOptionsType) {
 export interface Differences {
   newDocumentName?: string;
   newTreeOperations: appCommonFilesChanges$change[];
+  newMedias: string[];
 }
 
 export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocument): Differences {
   const newDocumentName = currentTree.name !== newTree.name ? newTree.name : undefined;
+  const newMediasToUpload: string[] = [];
 
   // Flatten for comparaison (easier to get the differences of add/delete/modify/idle on the entire document)
   const flattenCurrentGlobalTree = new Map<string, NodeLabel>();
@@ -377,6 +409,15 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
               ...propertiesObj,
             },
           });
+
+          // Detect new images
+          if (propertiesObj.fills) {
+            for (const fill of propertiesObj.fills) {
+              if (fill.fillImage?.id) {
+                newMediasToUpload.push(fill.fillImage.id);
+              }
+            }
+          }
         }
       }
     } else if (item.state === 'updated') {
@@ -424,6 +465,16 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
             if (Object.hasOwn(propertiesObj, propertyToSet)) {
               // We exclude differences that have been deconstructed from the initial object
               changedFirstLevelProperties.push(propertyToSet as keyof typeof propertiesObj);
+            }
+
+            // Detect new images by looking at the expected path that should be concerned
+            if (
+              difference.path.length >= 2 &&
+              (difference.type === 'CREATE' || difference.type === 'CHANGE') &&
+              difference.path[difference.path.length - 2] === 'imageFill' &&
+              difference.path[difference.path.length - 1] === 'id'
+            ) {
+              newMediasToUpload.push(difference.value as string);
             }
           }
         }
@@ -483,6 +534,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
   return {
     newDocumentName: newDocumentName,
     newTreeOperations: operations,
+    newMedias: newMediasToUpload,
   };
 }
 
@@ -530,7 +582,7 @@ export async function compare(options: CompareOptionsType) {
   }
 }
 
-export async function processDifferences(penpotDocumentId: string, differences: Differences) {
+export async function processDifferences(figmaDocumentId: string, penpotDocumentId: string, differences: Differences) {
   if (differences.newDocumentName) {
     await postCommandRenameFile({
       requestBody: {
@@ -538,6 +590,95 @@ export async function processDifferences(penpotDocumentId: string, differences: 
         name: differences.newDocumentName,
       },
     });
+  }
+
+  // We first upload files because they are used by nodes
+  if (differences.newMedias.length > 0) {
+    // Retrieve the original Figma IDs to upload files
+    const mappingPath = getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId);
+    const mappingString = await fs.readFile(mappingPath, 'utf-8');
+    const mappingJson = JSON.parse(mappingString);
+
+    const mapping = Mapping.parse({
+      ...mappingJson,
+      fonts: new Map(Object.entries(mappingJson.fonts)),
+      assets: new Map(Object.entries(mappingJson.assets)),
+      nodes: new Map(Object.entries(mappingJson.nodes)),
+      documents: new Map(Object.entries(mappingJson.documents)),
+    });
+
+    for (const penpotMediaId of differences.newMedias) {
+      // We check all files we need to use have been retrieved locally before
+      let figmaMediaId: string | null = null;
+
+      for (const [itemFigmaMediaId, itemPenpotMediaId] of mapping.assets.entries()) {
+        if (itemPenpotMediaId === penpotMediaId) {
+          figmaMediaId = itemFigmaMediaId;
+
+          break;
+        }
+      }
+
+      if (!figmaMediaId) {
+        throw new Error(`the Penpot file ${penpotMediaId} must have been mapped previously to be uploaded`);
+      }
+
+      const filePath = getFigmaMediaPath(figmaMediaId);
+      const potentielExistingFilesPaths = await glob(`${filePath}.*`);
+
+      if (!potentielExistingFilesPaths.length) {
+        throw new Error(`the Figma file ${figmaMediaId} cannot be uploaded to Penpot since missing locally`);
+      }
+
+      const fileToUploadPath = potentielExistingFilesPaths[0];
+      const filename = path.basename(fileToUploadPath);
+      const fileExtension = `.${filename.split('.')[1] ?? ''}`;
+
+      let fileMimeType: string | null = null;
+      for (const [mimeType, mimeTypeMetadata] of Object.entries(mimeData)) {
+        if (mimeTypeMetadata.extensions && mimeTypeMetadata.extensions.findIndex((ext) => ext === fileExtension) !== -1) {
+          fileMimeType = mimeType;
+
+          break;
+        }
+      }
+
+      assert(fileMimeType);
+
+      const blob = await openAsBlob(fileToUploadPath, {
+        // For whatever reason it returns an empty MIME type, so patching it manually
+        // Ref: https://github.com/nodejs/node/issues/49843
+        type: fileMimeType,
+      });
+
+      const formData = new FormData();
+      formData.append('id', penpotMediaId);
+      formData.append('file-id', penpotDocumentId);
+      formData.append('name', 'unknown'); // We cannot retrieve the original filename from Figma so forcing a random one
+      formData.append('is-local', 'false');
+      formData.append('content', blob);
+
+      console.log(`uploading the media ${penpotMediaId} to Penpot`);
+
+      const response = await fetch(`${PenpotClientSettings.BASE}/command/upload-file-media-object`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          Accept: 'application/json',
+          Authorization: (PenpotClientSettings.HEADERS as any)?.Authorization,
+        },
+      });
+
+      if (response.status !== 200) {
+        throw new Error(`the media ${penpotMediaId} seems to not be uploaded correctly`);
+      }
+
+      const data = (await response.json()) as any;
+
+      if (!data.createdAt) {
+        throw new Error(`the media ${penpotMediaId} seems to not be uploaded correctly`);
+      }
+    }
   }
 
   if (differences.newTreeOperations.length > 0) {
@@ -565,7 +706,7 @@ export async function set(options: SetOptionsType) {
 
     const diff = await readFigmaToPenpotDiffFile(document.figmaDocument, document.penpotDocument);
 
-    await processDifferences(document.penpotDocument, diff);
+    await processDifferences(document.figmaDocument, document.penpotDocument, diff);
   }
 }
 

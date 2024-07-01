@@ -26,7 +26,7 @@ export function transformPathNode(node: StarNode | RegularPolygonNode, figmaNode
     type: 'path',
     name: node.name,
     content: translatePathNode(node, figmaNodeTransform),
-    ...transformFills(node),
+    ...transformFills(node, mapping),
     ...transformStrokes(node),
     ...transformEffects(node, mapping),
     ...transformSceneNode(node),

@@ -16,7 +16,7 @@ export function transformTextNode(node: TextNode, figmaNodeTransform: Transform,
   return {
     type: 'text',
     name: node.name,
-    ...transformText(node),
+    ...transformText(node, mapping),
     ...transformFlip(node),
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformEffects(node, mapping),

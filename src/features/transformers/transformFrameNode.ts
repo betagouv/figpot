@@ -52,7 +52,7 @@ export function transformFrameNode(
     name: node.name,
     shapes: node.children.map((figmaChild) => translateId(figmaChild.id, mapping)),
     showContent: isSectionNode(node) ? true : !node.clipsContent,
-    ...transformFills(node),
+    ...transformFills(node, mapping),
     ...frameSpecificAttributes,
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformSceneNode(node),

@@ -8,7 +8,7 @@ on:
 env:
   APP_NAME: figpot
   NODE_OPTIONS: --max_old_space_size=4096
-  NODE_VERSION: 18.19.0
+  NODE_VERSION: 20.15.0
 concurrency:
   # Prevent parallel builds of the same branch
   group: cicd-${{ github.ref }}

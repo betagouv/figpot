@@ -21,7 +21,7 @@ export function transformRectangleNode(
   return {
     type: 'rect',
     name: node.name,
-    ...transformFills(node),
+    ...transformFills(node, mapping),
     ...transformFlip(node),
     ...transformEffects(node, mapping),
     ...transformStrokes(node),

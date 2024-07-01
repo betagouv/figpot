@@ -19,7 +19,7 @@ export function transformEllipseNode(
   return {
     type: 'circle',
     name: node.name,
-    ...transformFills(node),
+    ...transformFills(node, mapping),
     ...transformEffects(node, mapping),
     ...transformStrokes(node),
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),

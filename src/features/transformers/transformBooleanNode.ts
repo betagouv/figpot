@@ -42,7 +42,7 @@ export function transformBooleanNode(
     shapes: node.children.map((figmaChild) => translateId(figmaChild.id, mapping)),
     boolContent: translatePathNode(node, figmaNodeTransform),
     boolType: translateBoolType(node.booleanOperation),
-    ...transformFills(node),
+    ...transformFills(node, mapping),
     ...transformEffects(node, mapping),
     ...transformStrokes(node),
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),

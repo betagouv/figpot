@@ -1,4 +1,5 @@
 import { TextNode, TypeStyle } from '@figpot/src/clients/figma';
+import { MappingType } from '@figpot/src/features/document';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
 import { TextSegment } from '@figpot/src/features/translators/text/paragraph/translateParagraphProperties';
 import { translateGrowType } from '@figpot/src/features/translators/text/properties/translateGrowType';
@@ -71,7 +72,7 @@ function extractTextSegments(node: TextNode): Paragraph[] {
   return paragraphs;
 }
 
-export function transformText(node: TextNode): TextAttributes & Pick<TextShape, 'growType'> {
+export function transformText(node: TextNode, mapping: MappingType): TextAttributes & Pick<TextShape, 'growType'> {
   const styledParagraphs = extractTextSegments(node);
 
   return {
@@ -86,9 +87,9 @@ export function transformText(node: TextNode): TextAttributes & Pick<TextShape, 
                 ? styledParagraphs.map((paragraph) => {
                     return {
                       type: 'paragraph',
-                      children: translateTextSegments(node, paragraph),
+                      children: translateTextSegments(node, paragraph, mapping),
                       ...transformTextStyle(node, paragraph[0]),
-                      ...transformFills(node),
+                      ...transformFills(node, mapping),
                     };
                   })
                 : [],

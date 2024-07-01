@@ -52,7 +52,7 @@ function transformVectorPath(
     },
     constraintsH: 'scale',
     constraintsV: 'scale',
-    ...transformVectorFills(node, vectorPath, shapeFills),
+    ...transformVectorFills(node, vectorPath, shapeFills, mapping),
     ...transformStrokesFromVector(node, normalizedPaths),
     ...transformEffects(node, mapping),
     ...transformSceneNode(node),

@@ -1,6 +1,7 @@
 import assert from 'assert';
 
 import { MinimalFillsTrait, TextNode } from '@figpot/src/clients/figma';
+import { MappingType } from '@figpot/src/features/document';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
 import { translateFontName } from '@figpot/src/features/translators/text/font/translateFontName';
 import { TextSegment } from '@figpot/src/features/translators/text/paragraph/translateParagraphProperties';
@@ -12,8 +13,8 @@ import { translateTextDecoration } from '@figpot/src/features/translators/text/p
 import { translateTextTransform } from '@figpot/src/features/translators/text/properties/translateTextTransform';
 import { TextNode as PenpotTextNode, TextStyle } from '@figpot/src/models/entities/penpot/shapes/text';
 
-export function translateTextSegments(node: TextNode, segments: TextSegment[]): PenpotTextNode[] {
-  return segments.map((segment) => translateStyleTextSegment(node, segment));
+export function translateTextSegments(node: TextNode, segments: TextSegment[], mapping: MappingType): PenpotTextNode[] {
+  return segments.map((segment) => translateStyleTextSegment(node, segment, mapping));
 }
 
 export function transformTextStyle(node: TextNode, segment: TextSegment): TextStyle {
@@ -48,13 +49,13 @@ function partialTransformTextStyle(node: TextNode, segment: TextSegment): TextSt
   };
 }
 
-function translateStyleTextSegment(node: TextNode, segment: TextSegment): PenpotTextNode {
+function translateStyleTextSegment(node: TextNode, segment: TextSegment, mapping: MappingType): PenpotTextNode {
   assert(segment.style.fills);
 
   return {
     text: segment.characters,
     ...transformTextStyle(node, segment),
-    ...transformFills(segment.style as MinimalFillsTrait), // TypeScript was not detecting the check made on `.fills`
+    ...transformFills(segment.style as MinimalFillsTrait, mapping), // TypeScript was not detecting the check made on `.fills`
   };
 }
 

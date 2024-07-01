@@ -3,6 +3,8 @@ import { MappingType } from '@figpot/src/features/document';
 import { transformEllipseNode } from '@figpot/src/features/transformers/transformEllipseNode';
 import { transformFrameNode } from '@figpot/src/features/transformers/transformFrameNode';
 import { transformGroupNode } from '@figpot/src/features/transformers/transformGroupNode';
+import { transformLineNode } from '@figpot/src/features/transformers/transformLineNode';
+import { transformPathNode } from '@figpot/src/features/transformers/transformPathNode';
 import { transformRectangleNode } from '@figpot/src/features/transformers/transformRectangleNode';
 import { transformTextNode } from '@figpot/src/features/transformers/transformTextNode';
 import { transformVectorNode } from '@figpot/src/features/transformers/transformVectorNode';
@@ -13,7 +15,6 @@ import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 //   transformBooleanNode,
 //   transformComponentNode,
 //   transformInstanceNode,
-//   transformPathNode,
 // } from '.';
 
 export function transformSceneNode(
@@ -46,12 +47,13 @@ export function transformSceneNode(
     case 'VECTOR':
       penpotNode = transformVectorNode(registeredPageNodes, figmaNode, closestFigmaFrameId, figmaNodeTransform, mapping);
       break;
-    // case 'STAR':
-    // // case 'POLYGON':
-    // case 'REGULAR_POLYGON':
-    // case 'LINE':
-    //   penpotNode = transformPathNode(figmaNode, baseX, baseY);
-    //   break;
+    case 'LINE':
+      penpotNode = transformLineNode(figmaNode, figmaNodeTransform, mapping);
+      break;
+    case 'STAR':
+    case 'REGULAR_POLYGON':
+      penpotNode = transformPathNode(figmaNode, figmaNodeTransform, mapping);
+      break;
     // case 'BOOLEAN_OPERATION':
     //   penpotNode = await transformBooleanNode(figmaNode, baseX, baseY);
     //   break;

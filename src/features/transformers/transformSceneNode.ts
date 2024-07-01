@@ -5,6 +5,7 @@ import { transformFrameNode } from '@figpot/src/features/transformers/transformF
 import { transformGroupNode } from '@figpot/src/features/transformers/transformGroupNode';
 import { transformRectangleNode } from '@figpot/src/features/transformers/transformRectangleNode';
 import { transformTextNode } from '@figpot/src/features/transformers/transformTextNode';
+import { transformVectorNode } from '@figpot/src/features/transformers/transformVectorNode';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 
 // TODO:
@@ -13,7 +14,6 @@ import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 //   transformComponentNode,
 //   transformInstanceNode,
 //   transformPathNode,
-//   transformVectorNode,
 // } from '.';
 
 export function transformSceneNode(
@@ -43,9 +43,9 @@ export function transformSceneNode(
     case 'TEXT':
       penpotNode = transformTextNode(figmaNode, figmaNodeTransform, mapping);
       break;
-    // case 'VECTOR':
-    //   penpotNode = transformVectorNode(figmaNode, baseX, baseY);
-    //   break;
+    case 'VECTOR':
+      penpotNode = transformVectorNode(registeredPageNodes, figmaNode, closestFigmaFrameId, figmaNodeTransform, mapping);
+      break;
     // case 'STAR':
     // // case 'POLYGON':
     // case 'REGULAR_POLYGON':

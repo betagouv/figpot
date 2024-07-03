@@ -2,7 +2,6 @@ import assert from 'assert';
 import { parseSVG } from 'svg-path-parser';
 
 import { Paint, PaintOverride, Path, Transform, VectorNode } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformVectorFills } from '@figpot/src/features/transformers/partials/transformFills';
@@ -13,6 +12,7 @@ import { transformStrokesFromVector } from '@figpot/src/features/transformers/pa
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { translateWindingRule } from '@figpot/src/features/translators/vectors/translateWindingRule';
 import { PathShape } from '@figpot/src/models/entities/penpot/shapes/path';
+import { PageRegistry } from '@figpot/src/models/entities/registry';
 
 function normalizePath(path: string): string {
   // Round to 2 decimal places all numbers
@@ -33,11 +33,11 @@ function getMergedFill(node: VectorNode, vectorPath: Path): Paint[] | null {
 }
 
 function transformVectorPath(
+  registry: PageRegistry,
   node: VectorNode,
   figmaNodeTransform: Transform,
   vectorPath: Path,
-  shapeFills: Paint[] | null,
-  mapping: MappingType
+  shapeFills: Paint[] | null
 ): PathShape {
   // TODO: this returns a line from Figma as a rectangle, which is too complicated to move into Penpot (we should use stroke weight and stroke align to try simplifying the path)
   // Ref: https://github.com/penpot/penpot-exporter-figma-plugin/issues/210
@@ -52,9 +52,9 @@ function transformVectorPath(
     },
     constraintsH: 'scale',
     constraintsV: 'scale',
-    ...transformVectorFills(node, vectorPath, shapeFills, mapping),
-    ...transformStrokesFromVector(node, normalizedPaths, mapping),
-    ...transformEffects(node, mapping),
+    ...transformVectorFills(registry, node, vectorPath, shapeFills),
+    ...transformStrokesFromVector(registry, node, normalizedPaths),
+    ...transformEffects(registry, node),
     ...transformSceneNode(node),
     ...transformBlend(node),
     ...transformProportion(node),
@@ -62,7 +62,7 @@ function transformVectorPath(
   };
 }
 
-export function transformVectorPaths(node: VectorNode, figmaNodeTransform: Transform, mapping: MappingType): PathShape[] {
+export function transformVectorPaths(registry: PageRegistry, node: VectorNode, figmaNodeTransform: Transform): PathShape[] {
   assert(node.strokeGeometry);
   assert(node.fillGeometry);
 
@@ -70,7 +70,7 @@ export function transformVectorPaths(node: VectorNode, figmaNodeTransform: Trans
   for (const path of node.strokeGeometry) {
     const shapeFills = getMergedFill(node, path);
 
-    pathShapes.push(transformVectorPath(node, figmaNodeTransform, path, shapeFills, mapping));
+    pathShapes.push(transformVectorPath(registry, node, figmaNodeTransform, path, shapeFills));
   }
 
   // TODO: not sure it's necessary except if the fill is not working, commenting for now
@@ -81,7 +81,7 @@ export function transformVectorPaths(node: VectorNode, figmaNodeTransform: Trans
     .map((geometry) => {
       const shapeFills = getMergedFill(node, geometry);
 
-      return transformVectorPath(node, figmaNodeTransform, geometry, shapeFills, mapping);
+      return transformVectorPath(registry, node, figmaNodeTransform, geometry, shapeFills);
     });
 
   return [...geometryShapes, ...pathShapes];

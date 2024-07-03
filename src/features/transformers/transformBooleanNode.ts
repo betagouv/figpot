@@ -2,7 +2,6 @@ import assert from 'assert';
 import { parseSVG } from 'svg-path-parser';
 
 import { BooleanOperationNode, Transform } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformChildren } from '@figpot/src/features/transformers/partials/transformChildren';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
@@ -15,9 +14,8 @@ import { transformStrokes } from '@figpot/src/features/transformers/partials/tra
 import { translateBoolType } from '@figpot/src/features/translators/translateBoolType';
 import { translateId } from '@figpot/src/features/translators/translateId';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
-import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
-import { BoolShape } from '@figpot/src/models/entities/penpot/shapes/bool';
-import { BoolContent } from '@figpot/src/models/entities/penpot/shapes/bool';
+import { BoolContent, BoolShape } from '@figpot/src/models/entities/penpot/shapes/bool';
+import { PageRegistry } from '@figpot/src/models/entities/registry';
 
 function translatePathNode(node: BooleanOperationNode, figmaNodeTransform: Transform): BoolContent[] {
   assert(node.fillGeometry);
@@ -28,23 +26,22 @@ function translatePathNode(node: BooleanOperationNode, figmaNodeTransform: Trans
 }
 
 export function transformBooleanNode(
-  registeredPageNodes: PenpotNode[],
+  registry: PageRegistry,
   node: BooleanOperationNode,
   closestFigmaFrameId: string,
-  figmaNodeTransform: Transform,
-  mapping: MappingType
+  figmaNodeTransform: Transform
 ): BoolShape {
-  transformChildren(registeredPageNodes, node, closestFigmaFrameId, figmaNodeTransform, mapping);
+  transformChildren(registry, node, closestFigmaFrameId, figmaNodeTransform);
 
   return {
     type: 'bool',
     name: node.name,
-    shapes: node.children.map((figmaChild) => translateId(figmaChild.id, mapping)),
+    shapes: node.children.map((figmaChild) => translateId(figmaChild.id, registry.getMapping())),
     boolContent: translatePathNode(node, figmaNodeTransform),
     boolType: translateBoolType(node.booleanOperation),
-    ...transformFills(node, mapping),
-    ...transformEffects(node, mapping),
-    ...transformStrokes(node, mapping),
+    ...transformFills(registry, node),
+    ...transformEffects(registry, node),
+    ...transformStrokes(registry, node),
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformSceneNode(node),
     ...transformBlend(node),

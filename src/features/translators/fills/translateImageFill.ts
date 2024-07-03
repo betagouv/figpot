@@ -3,12 +3,13 @@ import { globSync } from 'glob';
 import sizeOf from 'image-size';
 
 import { ImagePaint } from '@figpot/src/clients/figma';
-import { MappingType, getFigmaMediaPath } from '@figpot/src/features/document';
+import { getFigmaMediaPath } from '@figpot/src/features/document';
 import { translateOpacityWithVisibility } from '@figpot/src/features/translators/fills/translateOpacity';
 import { translateMediaId } from '@figpot/src/features/translators/translateId';
 import { Fill } from '@figpot/src/models/entities/penpot/traits/fill';
+import { PageRegistry } from '@figpot/src/models/entities/registry';
 
-export function translateImageFill(fill: ImagePaint, mapping: MappingType): Fill | undefined {
+export function translateImageFill(registry: PageRegistry, fill: ImagePaint): Fill | undefined {
   // TODO: Figma supports multiple scale mode (see `scaleMode` type)
   // For now we don't process this since Penpot matches the node rectangle to the image size (except if changing the image after, which is rare)
   // Examples: when this one is `STRETCH` an image transform is provided, if `TILE` a scaling factor is provided
@@ -28,7 +29,7 @@ export function translateImageFill(fill: ImagePaint, mapping: MappingType): Fill
   return {
     fillOpacity: translateOpacityWithVisibility(fill),
     fillImage: {
-      id: translateMediaId(fill.imageRef, mapping),
+      id: translateMediaId(fill.imageRef, registry.getMapping()),
       width: dimensions.width,
       height: dimensions.height,
       keepAspectRatio: true,

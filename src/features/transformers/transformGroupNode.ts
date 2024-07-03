@@ -1,27 +1,20 @@
 import { GroupNode, HasLayoutTrait, IsLayerTrait, Transform } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformChildren } from '@figpot/src/features/transformers/partials/transformChildren';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { translateId } from '@figpot/src/features/translators/translateId';
-import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { GroupShape } from '@figpot/src/models/entities/penpot/shapes/group';
+import { PageRegistry } from '@figpot/src/models/entities/registry';
 
-export function transformGroupNode(
-  registeredPageNodes: PenpotNode[],
-  node: GroupNode,
-  closestFigmaFrameId: string,
-  figmaNodeTransform: Transform,
-  mapping: MappingType
-): GroupShape {
-  transformChildren(registeredPageNodes, node, closestFigmaFrameId, figmaNodeTransform, mapping);
+export function transformGroupNode(registry: PageRegistry, node: GroupNode, closestFigmaFrameId: string, figmaNodeTransform: Transform): GroupShape {
+  transformChildren(registry, node, closestFigmaFrameId, figmaNodeTransform);
 
   return {
-    shapes: node.children.map((figmaChild) => translateId(figmaChild.id, mapping)),
+    shapes: node.children.map((figmaChild) => translateId(figmaChild.id, registry.getMapping())),
     ...transformGroupNodeLike(node, figmaNodeTransform),
-    ...transformEffects(node, mapping),
+    ...transformEffects(registry, node),
     ...transformBlend(node),
   };
 }

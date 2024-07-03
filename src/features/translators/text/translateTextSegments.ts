@@ -1,7 +1,6 @@
 import assert from 'assert';
 
 import { MinimalFillsTrait, TextNode } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
 import { translateFontName } from '@figpot/src/features/translators/text/font/translateFontName';
 import { TextSegment } from '@figpot/src/features/translators/text/paragraph/translateParagraphProperties';
@@ -12,12 +11,13 @@ import { translateLineHeight } from '@figpot/src/features/translators/text/prope
 import { translateTextDecoration } from '@figpot/src/features/translators/text/properties/translateTextDecoration';
 import { translateTextTransform } from '@figpot/src/features/translators/text/properties/translateTextTransform';
 import { TextNode as PenpotTextNode, TextStyle } from '@figpot/src/models/entities/penpot/shapes/text';
+import { PageRegistry } from '@figpot/src/models/entities/registry';
 
-export function translateTextSegments(node: TextNode, segments: TextSegment[], mapping: MappingType): PenpotTextNode[] {
-  return segments.map((segment) => translateStyleTextSegment(node, segment, mapping));
+export function translateTextSegments(registry: PageRegistry, node: TextNode, segments: TextSegment[]): PenpotTextNode[] {
+  return segments.map((segment) => translateStyleTextSegment(registry, node, segment));
 }
 
-export function transformTextStyle(node: TextNode, segment: TextSegment, mapping: MappingType): TextStyle {
+export function transformTextStyle(registry: PageRegistry, node: TextNode, segment: TextSegment): TextStyle {
   assert(segment.style.fontSize);
 
   // TODO: verify how the Figma REST API returns style keys
@@ -29,7 +29,7 @@ export function transformTextStyle(node: TextNode, segment: TextSegment, mapping
   // }
 
   return {
-    ...partialTransformTextStyle(node, segment, mapping),
+    ...partialTransformTextStyle(registry, node, segment),
     fontFamily: segment.style.fontFamily,
     fontSize: segment.style.fontSize.toString(),
     fontStyle: translateFontStyle(segment.style),
@@ -42,20 +42,20 @@ export function transformTextStyle(node: TextNode, segment: TextSegment, mapping
   };
 }
 
-function partialTransformTextStyle(node: TextNode, segment: TextSegment, mapping: MappingType): TextStyle {
+function partialTransformTextStyle(registry: PageRegistry, node: TextNode, segment: TextSegment): TextStyle {
   return {
-    ...translateFontName(segment.style, mapping),
+    ...translateFontName(registry, segment.style),
     textAlign: translateHorizontalAlign(node.style.textAlignHorizontal),
   };
 }
 
-function translateStyleTextSegment(node: TextNode, segment: TextSegment, mapping: MappingType): PenpotTextNode {
+function translateStyleTextSegment(registry: PageRegistry, node: TextNode, segment: TextSegment): PenpotTextNode {
   assert(segment.style.fills);
 
   return {
     text: segment.characters,
-    ...transformTextStyle(node, segment, mapping),
-    ...transformFills(segment.style as MinimalFillsTrait, mapping), // TypeScript was not detecting the check made on `.fills`
+    ...transformTextStyle(registry, node, segment),
+    ...transformFills(registry, segment.style as MinimalFillsTrait), // TypeScript was not detecting the check made on `.fills`
   };
 }
 

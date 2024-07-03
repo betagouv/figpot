@@ -10,6 +10,7 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
   // Remove fields not meaningful and specific to Penpot and those that are dynamic (so it can be compared to the conversion from Figma)
 
   const pagesIndex = (hostedTree.data as PenpotDocument['data']).pagesIndex;
+  const colors = (hostedTree.data as PenpotDocument['data']).colors;
 
   for (const [, page] of Object.entries(pagesIndex)) {
     // To avoid collission about Penpot fixed root frame IDs for each page we adjust
@@ -49,10 +50,16 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
     }
   }
 
+  for (const [, color] of Object.entries(colors)) {
+    // Cannot guess this when transforming
+    delete color.modifiedAt;
+  }
+
   return {
     name: hostedTree.name,
     data: {
       pagesIndex: pagesIndex,
+      colors: colors,
     },
   };
 }

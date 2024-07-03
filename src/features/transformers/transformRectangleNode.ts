@@ -1,5 +1,4 @@
 import { RectangleNode, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
 import { transformCornerRadius } from '@figpot/src/features/transformers/partials/transformCornerRadius';
@@ -12,19 +11,20 @@ import { transformProportion } from '@figpot/src/features/transformers/partials/
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
 import { RectShape } from '@figpot/src/models/entities/penpot/shapes/rect';
+import { PageRegistry } from '@figpot/src/models/entities/registry';
 
 export function transformRectangleNode(
+  registry: PageRegistry,
   node: RectangleNode & Pick<SubcanvasNode, 'id'>,
-  figmaNodeTransform: Transform,
-  mapping: MappingType
+  figmaNodeTransform: Transform
 ): RectShape {
   return {
     type: 'rect',
     name: node.name,
-    ...transformFills(node, mapping),
+    ...transformFills(registry, node),
     ...transformFlip(node),
-    ...transformEffects(node, mapping),
-    ...transformStrokes(node, mapping),
+    ...transformEffects(registry, node),
+    ...transformStrokes(registry, node),
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformSceneNode(node),
     ...transformBlend(node),

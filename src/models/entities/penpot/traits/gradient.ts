@@ -5,6 +5,8 @@ type GradientStop = {
   color: string;
   opacity?: number;
   offset: number;
+  id?: string;
+  fileId?: string;
 };
 
 export type Gradient = {

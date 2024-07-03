@@ -1,18 +1,17 @@
 import { HasLayoutTrait, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
 import { transformGroupNodeLike } from '@figpot/src/features/transformers/transformGroupNode';
 import { transformSceneNode } from '@figpot/src/features/transformers/transformSceneNode';
 import { translateId } from '@figpot/src/features/translators/translateId';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
+import { PageRegistry } from '@figpot/src/models/entities/registry';
 import { cumulateNodeTransforms, isTransformedNode } from '@figpot/src/utils/matrix';
 
 export function translateChildren(
-  registeredPageNodes: PenpotNode[],
+  registry: PageRegistry,
   figmaChildren: SubcanvasNode[],
   figmaParentId: string,
   closestFigmaFrameId: string,
-  parentCumulativeTransform: Transform,
-  mapping: MappingType
+  parentCumulativeTransform: Transform
 ) {
   for (const figmaChild of figmaChildren) {
     // Cumulate the parent transform with the child one (we do this here to not polluting each subcall)
@@ -20,14 +19,14 @@ export function translateChildren(
       ? cumulateNodeTransforms(parentCumulativeTransform, (figmaChild as HasLayoutTrait).relativeTransform as Transform)
       : parentCumulativeTransform;
 
-    const penpotNode = transformSceneNode(registeredPageNodes, figmaChild, closestFigmaFrameId, childNodeTransform, mapping);
-    const penpotNodeId = translateId(figmaChild.id, mapping);
+    const penpotNode = transformSceneNode(registry, figmaChild, closestFigmaFrameId, childNodeTransform);
+    const penpotNodeId = translateId(figmaChild.id, registry.getMapping());
 
     penpotNode.id = penpotNodeId;
-    penpotNode.parentId = translateId(figmaParentId, mapping);
-    penpotNode.frameId = translateId(closestFigmaFrameId, mapping);
+    penpotNode.parentId = translateId(figmaParentId, registry.getMapping());
+    penpotNode.frameId = translateId(closestFigmaFrameId, registry.getMapping());
 
-    registeredPageNodes.push(penpotNode);
+    registry.addNode(penpotNode);
   }
 }
 
@@ -41,13 +40,12 @@ export function translateChildren(
  * @maskIndex The index of the mask node in the children array
  */
 export function translateMaskChildren(
-  registeredPageNodes: PenpotNode[],
+  registry: PageRegistry,
   figmaChildren: SubcanvasNode[],
   maskIndex: number,
   figmaParentId: string,
   closestFigmaFrameId: string,
-  parentCumulativeTransform: Transform,
-  mapping: MappingType
+  parentCumulativeTransform: Transform
 ): PenpotNode[] {
   const maskChild = figmaChildren[maskIndex];
 
@@ -56,20 +54,18 @@ export function translateMaskChildren(
   // TODO: mask not implemented yet
 
   // const unmaskedChildren = translateChildren(
-  //   registeredPageNodes,
+  //   registry,
   //   figmaChildren.slice(0, maskIndex),
   //   figmaParentId,
   //   closestFigmaFrameId,
   //   parentCumulativeTransform,
-  //   mapping
   // );
   // const maskedChildren = translateChildren(
-  //   registeredPageNodes,
+  //   registry,
   //   figmaChildren.slice(maskIndex),
   //   figmaParentId,
   //   closestFigmaFrameId,
   //   parentCumulativeTransform,
-  //   mapping
   // );
 
   // if (

@@ -12,6 +12,7 @@ module.exports = {
   rules: {
     'interface-name': 'off',
     'no-console': 'off',
+    'no-constant-condition': 'off',
     'no-implicit-dependencies': 'off',
     'no-submodule-imports': 'off',
     'no-trailing-spaces': 'error',

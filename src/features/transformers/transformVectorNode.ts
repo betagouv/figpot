@@ -1,23 +1,21 @@
 import { Transform, VectorNode } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
 import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformVectorPaths } from '@figpot/src/features/transformers/partials/transformVectorPaths';
 import { transformGroupNodeLike } from '@figpot/src/features/transformers/transformGroupNode';
 import { translateId } from '@figpot/src/features/translators/translateId';
-import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { GroupShape } from '@figpot/src/models/entities/penpot/shapes/group';
 import { PathShape } from '@figpot/src/models/entities/penpot/shapes/path';
+import { PageRegistry } from '@figpot/src/models/entities/registry';
 
 export function transformVectorNode(
-  registeredPageNodes: PenpotNode[],
+  registry: PageRegistry,
   node: VectorNode,
   closestFigmaFrameId: string,
-  figmaNodeTransform: Transform,
-  mapping: MappingType
+  figmaNodeTransform: Transform
 ): GroupShape | PathShape {
   const dimensionRotationPosition = transformDimensionAndRotationAndPosition(node, figmaNodeTransform);
-  const children = transformVectorPaths(node, figmaNodeTransform, mapping);
+  const children = transformVectorPaths(registry, node, figmaNodeTransform);
 
   if (children.length === 1) {
     return {
@@ -33,14 +31,14 @@ export function transformVectorNode(
   for (const [penpotChildIndex, penpotChild] of Object.entries(children)) {
     penpotChild.name = `Shape ${parseInt(penpotChildIndex, 10) + 1}`;
 
-    penpotChild.id = translateId(`${node.id}_path_${penpotChildIndex}`, mapping); // We use the index since we have no other indentifiable metadata
-    penpotChild.parentId = translateId(node.id, mapping);
-    penpotChild.frameId = translateId(closestFigmaFrameId, mapping);
+    penpotChild.id = translateId(`${node.id}_path_${penpotChildIndex}`, registry.getMapping()); // We use the index since we have no other indentifiable metadata
+    penpotChild.parentId = translateId(node.id, registry.getMapping());
+    penpotChild.frameId = translateId(closestFigmaFrameId, registry.getMapping());
 
     // To keep things simple, we reuse the position of the unique shape of Figma (otherwise we should analyze each part whereas here is just a workaround to have strokes and fills linked)
     const penpotChildInSpace = { ...penpotChild, ...dimensionRotationPosition };
 
-    registeredPageNodes.push(penpotChildInSpace);
+    registry.addNode(penpotChildInSpace);
   }
 
   return {

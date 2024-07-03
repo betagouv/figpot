@@ -55,6 +55,33 @@ export function registerFontId(simulatedFigmaFontVariantId: string, penpotFontId
   mapping.fonts.set(simulatedFigmaFontVariantId, penpotFontId);
 }
 
+export function translateDocumentId(figmaDocumentId: string, mapping: MappingType): string {
+  const penpotDocumentId = mapping.documents.get(figmaDocumentId);
+  if (!penpotDocumentId) {
+    throw new Error(`the document mapping must be registered`);
+  }
+
+  return penpotDocumentId;
+}
+
+export function registerDocumentId(figmaDocumentId: string, penpotDocumentId: string, mapping: MappingType) {
+  mapping.fonts.set(figmaDocumentId, penpotDocumentId);
+}
+
+export function translateColorId(figmaColorId: string, mapping: MappingType): string {
+  const penpotMappedColorId = mapping.colors.get(figmaColorId);
+  if (penpotMappedColorId) {
+    return penpotMappedColorId;
+  }
+
+  // Otherwise we create a new one, adding it to the mapping object
+  // Note: we use UUID v7 because Penpot seems to have one with timestamp at the beginning (even if they call if "v8", but this is to be free-form apparently)
+  const penpotColorId = uuidv7();
+  mapping.colors.set(figmaColorId, penpotColorId);
+
+  return penpotColorId;
+}
+
 export function translateUuidAsObjectKey(uuid: string): string {
   return uuid.replaceAll('-', '_');
 }

@@ -21,13 +21,14 @@ import {
   postCommandRenameFile,
   postCommandUpdateFile,
 } from '@figpot/src/clients/penpot';
-import { retrieveDocument } from '@figpot/src/features/figma';
+import { FigmaDefinedColor, retrieveColors, retrieveDocument } from '@figpot/src/features/figma';
 import { cleanHostedDocument } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
 import { isPageRootFrame, isPageRootFrameFromId, registerFontId, rootFrameId } from '@figpot/src/features/translators/translateId';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
+import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { formatDiffResultLog, getDiff } from '@figpot/src/utils/comparaison';
 import { downloadFile } from '@figpot/src/utils/file';
 import { gracefulExit } from '@figpot/src/utils/system';
@@ -47,7 +48,10 @@ export type LiteNode = PenpotNode & {
   _realPageParentId: string | null; // Needed since main frame inside a page has as parent itself (which complicates things for our graph usage)
   _pageId: string; // Somes endpoints require the `pageId` to be specified so adding it for the ease when doing updates on nodes
 };
-export type NodeLabel = LitePageNode | LiteNode;
+export type LiteColor = Color & {
+  _apiType: 'color';
+};
+export type NodeLabel = LitePageNode | LiteNode | LiteColor;
 
 export const Mapping = z.object({
   lastExport: z.date().nullable(),
@@ -55,6 +59,7 @@ export const Mapping = z.object({
   assets: FigmaToPenpotMapping,
   nodes: FigmaToPenpotMapping,
   documents: FigmaToPenpotMapping,
+  colors: FigmaToPenpotMapping,
 });
 export type MappingType = z.infer<typeof Mapping>;
 
@@ -83,6 +88,10 @@ export function getFigmaDocumentPath(documentId: string) {
 
 export function getFigmaDocumentTreePath(documentId: string) {
   return path.resolve(getFigmaDocumentPath(documentId), 'tree.json');
+}
+
+export function getFigmaDocumentColorsPath(documentId: string) {
+  return path.resolve(getFigmaDocumentPath(documentId), 'colors.json');
 }
 
 export function getPenpotDocumentPath(figmaDocumentId: string, penpotDocumentId: string) {
@@ -119,6 +128,18 @@ export async function readFigmaTreeFile(documentId: string): Promise<GetFileResp
   const figmaTreeString = await fs.readFile(figmaTreePath, 'utf-8');
 
   return JSON.parse(figmaTreeString) as GetFileResponse; // We did not implement a zod schema, hoping they keep the structure stable enough
+}
+
+export async function readFigmaColorsFile(documentId: string): Promise<FigmaDefinedColor[]> {
+  const figmaColorsPath = getFigmaDocumentColorsPath(documentId);
+
+  if (!fsSync.existsSync(figmaColorsPath)) {
+    throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
+  }
+
+  const figmaColorsString = await fs.readFile(figmaColorsPath, 'utf-8');
+
+  return JSON.parse(figmaColorsString) as FigmaDefinedColor[];
 }
 
 export async function readTransformedFigmaTreeFile(figmaDocumentId: string, penpotDocumentId: string): Promise<PenpotDocument> {
@@ -170,6 +191,7 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
       assets: new Map(Object.entries(mappingJson.assets)),
       nodes: new Map(Object.entries(mappingJson.nodes)),
       documents: new Map(Object.entries(mappingJson.documents)),
+      colors: new Map(Object.entries(mappingJson.colors)),
     });
   }
 
@@ -183,7 +205,13 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
       assets: new Map(),
       nodes: new Map(),
       documents: new Map(),
+      colors: new Map(),
     };
+  }
+
+  if (mapping.documents.size === 0) {
+    mapping.documents.set('current', penpotDocumentId);
+    mapping.documents.set(figmaDocumentId, penpotDocumentId);
   }
 
   return mapping;
@@ -199,6 +227,7 @@ export async function saveMapping(figmaDocumentId: string, penpotDocumentId: str
         assets: Object.fromEntries(mapping.assets),
         nodes: Object.fromEntries(mapping.nodes),
         documents: Object.fromEntries(mapping.documents),
+        colors: Object.fromEntries(mapping.colors),
       },
       null,
       2
@@ -209,6 +238,11 @@ export async function saveMapping(figmaDocumentId: string, penpotDocumentId: str
 export async function retrieve(options: RetrieveOptionsType) {
   for (const document of options.documents) {
     assert(document.penpotDocument);
+
+    // Get all predefined colors from Figma
+    // We do not use `getPublishedVariables()` because it contains only a part of the local ones, and without values
+    // Note: other variable kinds are not retrieved because Penpot cannot manage them (so using their raw value)
+    const figmaColors = await retrieveColors(document.figmaDocument);
 
     const customPenpotFontsVariants = (await postCommandGetFontVariants({
       requestBody: {
@@ -233,8 +267,8 @@ export async function retrieve(options: RetrieveOptionsType) {
     const documentFolderPath = getFigmaDocumentPath(document.figmaDocument);
     await fs.mkdir(documentFolderPath, { recursive: true });
 
-    const treePath = path.resolve(documentFolderPath, 'tree.json');
-    await fs.writeFile(treePath, JSON.stringify(documentTree, null, 2));
+    await fs.writeFile(getFigmaDocumentTreePath(document.figmaDocument), JSON.stringify(documentTree, null, 2));
+    await fs.writeFile(getFigmaDocumentColorsPath(document.figmaDocument), JSON.stringify(figmaColors, null, 2));
 
     // Save images
     const imagesList = await getImageFills({
@@ -269,9 +303,9 @@ export async function sortDocuments(documents: DocumentOptionsType[]): Promise<D
   return documents;
 }
 
-export function transformDocument(documentTree: GetFileResponse, mapping: MappingType) {
+export function transformDocument(documentTree: GetFileResponse, colors: FigmaDefinedColor[], mapping: MappingType) {
   // Go from the Figma format to the Penpot one
-  const penpotTree = transformDocumentNode(documentTree, mapping);
+  const penpotTree = transformDocumentNode(documentTree, colors, mapping);
 
   return penpotTree;
 }
@@ -287,12 +321,13 @@ export async function transform(options: TransformOptionsType) {
   // Go from the Figma format to the Penpot one
   for (const document of options.documents) {
     const figmaTree = await readFigmaTreeFile(document.figmaDocument);
+    const figmaColors = await readFigmaColorsFile(document.figmaDocument);
 
     assert(document.penpotDocument);
 
     const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument);
 
-    const penpotTree = transformDocument(figmaTree, mapping);
+    const penpotTree = transformDocument(figmaTree, figmaColors, mapping);
 
     // Save mapping for later usage
     await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
@@ -339,6 +374,15 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
     }
   }
 
+  for (const currentColor of Object.values(currentTree.data.colors)) {
+    assert(currentColor.id);
+
+    flattenCurrentGlobalTree.set(currentColor.id, {
+      _apiType: 'color',
+      ...currentColor,
+    } as LiteColor);
+  }
+
   for (const newPageNode of Object.values(newTree.data.pagesIndex)) {
     const litePageNode: LitePageNode = {
       _apiType: 'page',
@@ -370,11 +414,43 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
     }
   }
 
+  for (const newColor of Object.values(newTree.data.colors)) {
+    assert(newColor.id);
+
+    flattenNewGlobalTree.set(newColor.id, {
+      _apiType: 'color',
+      ...newColor,
+    } as LiteColor);
+  }
+
   const diffResult = getDiff(flattenCurrentGlobalTree, flattenNewGlobalTree);
 
   console.log(formatDiffResultLog(diffResult));
 
   const operations: appCommonFilesChanges$change[] = [];
+
+  // Colors must be added/modified before the rest because they are primitives
+  for (const [, item] of diffResult) {
+    if (item.state === 'added' && item.after._apiType === 'color') {
+      const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
+
+      operations.push({
+        type: 'add-color',
+        color: {
+          ...propertiesObj,
+        },
+      });
+    } else if (item.state === 'updated' && item.after._apiType === 'color') {
+      const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
+
+      operations.push({
+        type: 'mod-color',
+        color: {
+          ...propertiesObj,
+        },
+      });
+    }
+  }
 
   const browse = (graphNodeId: string) => {
     const item = diffResult.get(graphNodeId);
@@ -547,6 +623,11 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
           type: 'del-obj',
           id: isPageRootFrame(item.before) ? rootFrameId : item.before.id,
           pageId: item.before._pageId,
+        });
+      } else if (item.before._apiType === 'color') {
+        operations.push({
+          type: 'del-color',
+          id: item.before.id,
         });
       }
     }

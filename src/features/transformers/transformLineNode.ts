@@ -1,7 +1,6 @@
 import assert from 'assert';
 
 import { LineNode, Transform } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
@@ -12,6 +11,7 @@ import { transformSceneNode } from '@figpot/src/features/transformers/partials/t
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { PathShape, Segment } from '@figpot/src/models/entities/penpot/shapes/path';
+import { PageRegistry } from '@figpot/src/models/entities/registry';
 
 function translateLineNode(node: LineNode, figmaNodeTransform: Transform): Segment[] {
   assert(node.size);
@@ -38,13 +38,13 @@ function translateLineNode(node: LineNode, figmaNodeTransform: Transform): Segme
  *
  * To represent the line rotated we do take into account the rotation of the line, but only in its content.
  */
-export function transformLineNode(node: LineNode, figmaNodeTransform: Transform, mapping: MappingType): PathShape {
+export function transformLineNode(registry: PageRegistry, node: LineNode, figmaNodeTransform: Transform): PathShape {
   return {
     type: 'path',
     name: node.name,
     content: translateLineNode(node, figmaNodeTransform),
-    ...transformStrokes(node, mapping),
-    ...transformEffects(node, mapping),
+    ...transformStrokes(registry, node),
+    ...transformEffects(registry, node),
     ...transformSceneNode(node),
     ...transformBlend(node),
     ...transformProportion(node),

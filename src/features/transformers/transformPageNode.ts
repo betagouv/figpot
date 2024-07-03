@@ -1,21 +1,15 @@
 import assert from 'assert';
 
 import { CanvasNode } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
 import { translateChildren } from '@figpot/src/features/translators/translateChildren';
 import { formatPageRootFrameId, registerId, translateId, translateUuidAsObjectKey } from '@figpot/src/features/translators/translateId';
-import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
+import { PageRegistry } from '@figpot/src/models/entities/registry';
 import { rgbToHex } from '@figpot/src/utils/color';
 import { neutralTransform } from '@figpot/src/utils/matrix';
 
-export function transformPageNode(figmaNode: CanvasNode, mapping: MappingType): PenpotPage {
-  //
-  // TODO: we should strip properties of Penpot features like `proportionLock`
-  // to be sure it does not trigger a useless update
-  //
-
-  const penpotPageId = translateId(figmaNode.id, mapping);
+export function transformPageNode(registry: PageRegistry, figmaNode: CanvasNode): PenpotPage {
+  const penpotPageId = translateId(figmaNode.id, registry.getMapping());
 
   // When a page is created into Penpot a "root frame" is also created to wrap all child nodes. This one is immutable and has the ID `00000000-0000-0000-0000-000000000000`.
   // It implies this ID will occur X times if X pages, and it would break our graph since keyed by the node ID. So we add a temporary prefix to remove
@@ -23,7 +17,7 @@ export function transformPageNode(figmaNode: CanvasNode, mapping: MappingType): 
   const penpotRootFrameId = formatPageRootFrameId(penpotPageId);
 
   // Force registration in case in a child the ID is used
-  registerId(virtualFigmaRootFrameId, penpotRootFrameId, mapping);
+  registerId(virtualFigmaRootFrameId, penpotRootFrameId, registry.getMapping());
 
   const page: PenpotPage = {
     id: penpotPageId,
@@ -99,17 +93,15 @@ export function transformPageNode(figmaNode: CanvasNode, mapping: MappingType): 
             fillOpacity: 1,
           },
         ],
-        shapes: figmaNode.children.map((figmaChild) => translateId(figmaChild.id, mapping)),
+        shapes: figmaNode.children.map((figmaChild) => translateId(figmaChild.id, registry.getMapping())),
       },
     },
   };
 
-  const registeredPageNodes: PenpotNode[] = [];
-
   // We provide a transform cumulative variable so rotation is based on parents too (a page cannot have a rotation so starting with neutral transform)
-  translateChildren(registeredPageNodes, figmaNode.children, virtualFigmaRootFrameId, virtualFigmaRootFrameId, neutralTransform, mapping);
+  translateChildren(registry, figmaNode.children, virtualFigmaRootFrameId, virtualFigmaRootFrameId, neutralTransform);
 
-  for (const penpotPageNode of registeredPageNodes) {
+  for (const [_, penpotPageNode] of registry.getNodes()) {
     assert(penpotPageNode.id); // It would mean we forget to translate it in a specific node type
 
     page.objects[translateUuidAsObjectKey(penpotPageNode.id)] = penpotPageNode;

@@ -2,7 +2,6 @@ import assert from 'assert';
 import { parseSVG } from 'svg-path-parser';
 
 import { RegularPolygonNode, StarNode, Transform } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
@@ -14,6 +13,7 @@ import { transformSceneNode } from '@figpot/src/features/transformers/partials/t
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { PathShape, Segment } from '@figpot/src/models/entities/penpot/shapes/path';
+import { PageRegistry } from '@figpot/src/models/entities/registry';
 
 function translatePathNode(node: StarNode | RegularPolygonNode, figmaNodeTransform: Transform): Segment[] {
   assert(node.fillGeometry);
@@ -21,14 +21,14 @@ function translatePathNode(node: StarNode | RegularPolygonNode, figmaNodeTransfo
   return translateCommands(node, figmaNodeTransform, parseSVG(node.fillGeometry[0].path));
 }
 
-export function transformPathNode(node: StarNode | RegularPolygonNode, figmaNodeTransform: Transform, mapping: MappingType): PathShape {
+export function transformPathNode(registry: PageRegistry, node: StarNode | RegularPolygonNode, figmaNodeTransform: Transform): PathShape {
   return {
     type: 'path',
     name: node.name,
     content: translatePathNode(node, figmaNodeTransform),
-    ...transformFills(node, mapping),
-    ...transformStrokes(node, mapping),
-    ...transformEffects(node, mapping),
+    ...transformFills(registry, node),
+    ...transformStrokes(registry, node),
+    ...transformEffects(registry, node),
     ...transformSceneNode(node),
     ...transformBlend(node),
     ...transformProportion(node),

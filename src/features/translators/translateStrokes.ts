@@ -1,12 +1,12 @@
 import { HasGeometryTrait, IndividualStrokesTrait, Paint, strokeAlign as StrokeAlign } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
 import { translateFill } from '@figpot/src/features/translators/fills/translateFills';
 import { Stroke, StrokeAlignment, StrokeCaps } from '@figpot/src/models/entities/penpot/traits/stroke';
+import { PageRegistry } from '@figpot/src/models/entities/registry';
 
 export function translateStrokes(
+  registry: PageRegistry,
   node: HasGeometryTrait | (HasGeometryTrait & IndividualStrokesTrait),
-  strokeCaps: (stroke: Stroke) => Stroke = (stroke) => stroke,
-  mapping: MappingType
+  strokeCaps: (stroke: Stroke) => Stroke = (stroke) => stroke
 ): Stroke[] {
   if (node.strokes === undefined) {
     return [];
@@ -18,20 +18,23 @@ export function translateStrokes(
     strokeStyle: !!node.strokeDashes && node.strokeDashes.length > 0 ? 'dashed' : 'solid',
   };
 
-  return node.strokes.map((paint, index) => translateStroke(paint, sharedStrokeProperties, strokeCaps, index === 0, mapping));
+  return node.strokes.map((paint, index) => translateStroke(registry, paint, sharedStrokeProperties, strokeCaps, index === 0));
 }
 
 export function translateStroke(
+  registry: PageRegistry,
   paint: Paint,
   sharedStrokeProperties: Stroke,
   strokeCaps: (stroke: Stroke) => Stroke,
-  firstStroke: boolean,
-  mapping: MappingType
+  firstStroke: boolean
 ): Stroke {
-  const fill = translateFill(paint, mapping);
+  const fill = translateFill(registry, paint);
 
   let stroke: Stroke = {
     strokeColor: fill?.fillColor,
+    strokeColorRefId: fill?.fillColorRefId,
+    strokeColorRefFile: fill?.fillColorRefFile,
+    strokeColorGradient: fill?.fillColorGradient,
     strokeOpacity: fill?.fillOpacity,
     strokeImage: fill?.fillImage,
     ...sharedStrokeProperties,

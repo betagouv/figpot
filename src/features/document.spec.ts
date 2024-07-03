@@ -18,9 +18,10 @@ describe('document comparaison', () => {
           ['0:0', '00000000-0000-0000-0000-000000000000'],
           ['0:1', '4bf0e9f6-08c8-809c-8004-85445179c2aa'],
         ]),
+        colors: new Map(),
       };
 
-      const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, mapping);
+      const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], mapping);
       const cleanHostedTree = cleanHostedDocument(emptyPenpotTree);
 
       expect(transformedTree).toEqual(cleanHostedTree);
@@ -38,9 +39,10 @@ describe('document comparaison', () => {
         documents: new Map(),
         fonts: new Map(),
         nodes: new Map(),
+        colors: new Map(),
       };
 
-      const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, mapping);
+      const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], mapping);
       const cleanHostedTree = cleanHostedDocument(emptyPenpotTree);
 
       expect(transformedTree).not.toEqual(cleanHostedTree);
@@ -65,9 +67,10 @@ describe('document comparaison', () => {
           ['0:1', '4bf0e9f6-08c8-809c-8004-85445179c2aa'],
           ['1:2', 'ddfee392-d246-80fc-8004-8664a46a5d1f'],
         ]),
+        colors: new Map(),
       };
 
-      const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, mapping);
+      const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], mapping);
       const cleanHostedTree = cleanHostedDocument(withRectangePenpotTree);
 
       expect(transformedTree).toEqual(cleanHostedTree);
@@ -85,9 +88,10 @@ describe('document comparaison', () => {
         documents: new Map(),
         fonts: new Map(),
         nodes: new Map(),
+        colors: new Map(),
       };
 
-      const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, mapping);
+      const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], mapping);
       const cleanHostedTree = cleanHostedDocument(withRectangePenpotTree);
 
       expect(transformedTree).not.toEqual(cleanHostedTree);

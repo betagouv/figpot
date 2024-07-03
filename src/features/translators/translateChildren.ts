@@ -51,43 +51,45 @@ export function translateMaskChildren(
 ): PenpotNode[] {
   const maskChild = figmaChildren[maskIndex];
 
-  throw 'mask not implemented yet';
+  return [];
 
-  const unmaskedChildren = translateChildren(
-    registeredPageNodes,
-    figmaChildren.slice(0, maskIndex),
-    figmaParentId,
-    closestFigmaFrameId,
-    parentCumulativeTransform,
-    mapping
-  );
-  const maskedChildren = translateChildren(
-    registeredPageNodes,
-    figmaChildren.slice(maskIndex),
-    figmaParentId,
-    closestFigmaFrameId,
-    parentCumulativeTransform,
-    mapping
-  );
+  // TODO: mask not implemented yet
 
-  if (
-    maskChild.type === 'STICKY' ||
-    maskChild.type === 'CONNECTOR' ||
-    maskChild.type === 'WIDGET' ||
-    maskChild.type === 'EMBED' ||
-    maskChild.type === 'LINK_UNFURL' ||
-    maskChild.type === 'SECTION' ||
-    maskChild.type === 'TABLE' ||
-    maskChild.type === 'SHAPE_WITH_TEXT'
-  ) {
-    return [...unmaskedChildren, ...maskedChildren];
-  }
+  // const unmaskedChildren = translateChildren(
+  //   registeredPageNodes,
+  //   figmaChildren.slice(0, maskIndex),
+  //   figmaParentId,
+  //   closestFigmaFrameId,
+  //   parentCumulativeTransform,
+  //   mapping
+  // );
+  // const maskedChildren = translateChildren(
+  //   registeredPageNodes,
+  //   figmaChildren.slice(maskIndex),
+  //   figmaParentId,
+  //   closestFigmaFrameId,
+  //   parentCumulativeTransform,
+  //   mapping
+  // );
 
-  const maskGroup = {
-    ...transformGroupNodeLike(maskChild),
-    children: maskedChildren,
-    maskedGroup: true,
-  };
+  // if (
+  //   maskChild.type === 'STICKY' ||
+  //   maskChild.type === 'CONNECTOR' ||
+  //   maskChild.type === 'WIDGET' ||
+  //   maskChild.type === 'EMBED' ||
+  //   maskChild.type === 'LINK_UNFURL' ||
+  //   maskChild.type === 'SECTION' ||
+  //   maskChild.type === 'TABLE' ||
+  //   maskChild.type === 'SHAPE_WITH_TEXT'
+  // ) {
+  //   return [...unmaskedChildren, ...maskedChildren];
+  // }
 
-  return [...unmaskedChildren, maskGroup];
+  // const maskGroup = {
+  //   ...transformGroupNodeLike(maskChild),
+  //   children: maskedChildren,
+  //   maskedGroup: true,
+  // };
+
+  // return [...unmaskedChildren, maskGroup];
 }

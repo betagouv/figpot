@@ -88,7 +88,7 @@ export function transformText(node: TextNode, mapping: MappingType): TextAttribu
                     return {
                       type: 'paragraph',
                       children: translateTextSegments(node, paragraph, mapping),
-                      ...transformTextStyle(node, paragraph[0]),
+                      ...transformTextStyle(node, paragraph[0], mapping),
                       ...transformFills(node, mapping),
                     };
                   })

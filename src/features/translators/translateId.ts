@@ -1,5 +1,6 @@
 import { v7 as uuidv7 } from 'uuid';
 
+import { TypeStyle } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 
@@ -36,6 +37,22 @@ export function translateMediaId(figmaMediaId: string, mapping: MappingType): st
   mapping.assets.set(figmaMediaId, penpotMediaId);
 
   return penpotMediaId;
+}
+
+export function translateFontId(simulatedFigmaFontVariantId: string, fontName: TypeStyle, mapping: MappingType): string {
+  const penpotFontId = mapping.fonts.get(simulatedFigmaFontVariantId);
+  if (!penpotFontId) {
+    throw new Error(
+      `the font variant "${fontName.fontPostScriptName || fontName.fontFamily}" is missing onto the Penpot instance for your team. Please go to your dashboard and add the font manually. We advise you to upload all variants of the font for the ease. Also, note we were not able to automate this because it cannot be scoped to a file and there would be a risk of duplication due to Penpot current validation`
+    );
+  }
+
+  // Note: the font ID is the same no matter the variant used (light, bold...)
+  return `custom-${penpotFontId}`;
+}
+
+export function registerFontId(simulatedFigmaFontVariantId: string, penpotFontId: string, mapping: MappingType) {
+  mapping.fonts.set(simulatedFigmaFontVariantId, penpotFontId);
 }
 
 export function translateUuidAsObjectKey(uuid: string): string {

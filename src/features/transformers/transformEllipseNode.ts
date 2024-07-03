@@ -21,7 +21,7 @@ export function transformEllipseNode(
     name: node.name,
     ...transformFills(node, mapping),
     ...transformEffects(node, mapping),
-    ...transformStrokes(node),
+    ...transformStrokes(node, mapping),
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformSceneNode(node),
     ...transformBlend(node),

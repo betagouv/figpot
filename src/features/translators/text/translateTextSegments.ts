@@ -17,7 +17,7 @@ export function translateTextSegments(node: TextNode, segments: TextSegment[], m
   return segments.map((segment) => translateStyleTextSegment(node, segment, mapping));
 }
 
-export function transformTextStyle(node: TextNode, segment: TextSegment): TextStyle {
+export function transformTextStyle(node: TextNode, segment: TextSegment, mapping: MappingType): TextStyle {
   assert(segment.style.fontSize);
 
   // TODO: verify how the Figma REST API returns style keys
@@ -29,7 +29,7 @@ export function transformTextStyle(node: TextNode, segment: TextSegment): TextSt
   // }
 
   return {
-    ...partialTransformTextStyle(node, segment),
+    ...partialTransformTextStyle(node, segment, mapping),
     fontFamily: segment.style.fontFamily,
     fontSize: segment.style.fontSize.toString(),
     fontStyle: translateFontStyle(segment.style),
@@ -42,9 +42,9 @@ export function transformTextStyle(node: TextNode, segment: TextSegment): TextSt
   };
 }
 
-function partialTransformTextStyle(node: TextNode, segment: TextSegment): TextStyle {
+function partialTransformTextStyle(node: TextNode, segment: TextSegment, mapping: MappingType): TextStyle {
   return {
-    ...translateFontName(segment.style),
+    ...translateFontName(segment.style, mapping),
     textAlign: translateHorizontalAlign(node.style.textAlignHorizontal),
   };
 }
@@ -54,7 +54,7 @@ function translateStyleTextSegment(node: TextNode, segment: TextSegment, mapping
 
   return {
     text: segment.characters,
-    ...transformTextStyle(node, segment),
+    ...transformTextStyle(node, segment, mapping),
     ...transformFills(segment.style as MinimalFillsTrait, mapping), // TypeScript was not detecting the check made on `.fills`
   };
 }

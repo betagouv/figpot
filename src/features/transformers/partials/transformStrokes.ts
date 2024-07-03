@@ -1,6 +1,7 @@
 import { Command } from 'svg-path-parser';
 
 import { HasGeometryTrait, IndividualStrokesTrait, VectorNode } from '@figpot/src/clients/figma';
+import { MappingType } from '@figpot/src/features/document';
 import { translateStrokeCap, translateStrokes } from '@figpot/src/features/translators/translateStrokes';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { Stroke } from '@figpot/src/models/entities/penpot/traits/stroke';
@@ -9,7 +10,10 @@ function hasFillGeometry(node: HasGeometryTrait): boolean {
   return !!node.fillGeometry && node.fillGeometry.length > 0;
 }
 
-export function transformStrokes(node: HasGeometryTrait | (HasGeometryTrait & IndividualStrokesTrait)): Pick<ShapeAttributes, 'strokes'> {
+export function transformStrokes(
+  node: HasGeometryTrait | (HasGeometryTrait & IndividualStrokesTrait),
+  mapping: MappingType
+): Pick<ShapeAttributes, 'strokes'> {
   const vectorNetwork = node.strokeGeometry;
 
   const strokeCaps = (stroke: Stroke) => {
@@ -23,7 +27,7 @@ export function transformStrokes(node: HasGeometryTrait | (HasGeometryTrait & In
   };
 
   return {
-    strokes: translateStrokes(node, strokeCaps),
+    strokes: translateStrokes(node, strokeCaps, mapping),
   };
 }
 
@@ -35,7 +39,7 @@ export function transformStrokes(node: HasGeometryTrait | (HasGeometryTrait & In
 //   return vertexs.find((vertex) => vertex.x === command.x && vertex.y === command.y);
 // }
 
-export function transformStrokesFromVector(node: VectorNode, vector: Command[]): Pick<ShapeAttributes, 'strokes'> {
+export function transformStrokesFromVector(node: VectorNode, vector: Command[], mapping: MappingType): Pick<ShapeAttributes, 'strokes'> {
   const strokeCaps = (stroke: Stroke) => {
     // if (vectorRegion !== undefined) {
     //   return stroke;
@@ -55,6 +59,6 @@ export function transformStrokesFromVector(node: VectorNode, vector: Command[]):
   };
 
   return {
-    strokes: translateStrokes(node, strokeCaps),
+    strokes: translateStrokes(node, strokeCaps, mapping),
   };
 }

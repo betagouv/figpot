@@ -24,7 +24,7 @@ export function transformRectangleNode(
     ...transformFills(node, mapping),
     ...transformFlip(node),
     ...transformEffects(node, mapping),
-    ...transformStrokes(node),
+    ...transformStrokes(node, mapping),
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformSceneNode(node),
     ...transformBlend(node),

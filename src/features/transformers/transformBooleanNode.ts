@@ -44,7 +44,7 @@ export function transformBooleanNode(
     boolType: translateBoolType(node.booleanOperation),
     ...transformFills(node, mapping),
     ...transformEffects(node, mapping),
-    ...transformStrokes(node),
+    ...transformStrokes(node, mapping),
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformSceneNode(node),
     ...transformBlend(node),

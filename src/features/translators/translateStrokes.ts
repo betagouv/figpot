@@ -1,11 +1,12 @@
 import { HasGeometryTrait, IndividualStrokesTrait, Paint, strokeAlign as StrokeAlign } from '@figpot/src/clients/figma';
+import { MappingType } from '@figpot/src/features/document';
+import { translateFill } from '@figpot/src/features/translators/fills/translateFills';
 import { Stroke, StrokeAlignment, StrokeCaps } from '@figpot/src/models/entities/penpot/traits/stroke';
-
-import { translateFill } from './fills/translateFills';
 
 export function translateStrokes(
   node: HasGeometryTrait | (HasGeometryTrait & IndividualStrokesTrait),
-  strokeCaps: (stroke: Stroke) => Stroke = (stroke) => stroke
+  strokeCaps: (stroke: Stroke) => Stroke = (stroke) => stroke,
+  mapping: MappingType
 ): Stroke[] {
   if (node.strokes === undefined) {
     return [];
@@ -17,11 +18,17 @@ export function translateStrokes(
     strokeStyle: !!node.strokeDashes && node.strokeDashes.length > 0 ? 'dashed' : 'solid',
   };
 
-  return node.strokes.map((paint, index) => translateStroke(paint, sharedStrokeProperties, strokeCaps, index === 0));
+  return node.strokes.map((paint, index) => translateStroke(paint, sharedStrokeProperties, strokeCaps, index === 0, mapping));
 }
 
-export function translateStroke(paint: Paint, sharedStrokeProperties: Stroke, strokeCaps: (stroke: Stroke) => Stroke, firstStroke: boolean): Stroke {
-  const fill = translateFill(paint);
+export function translateStroke(
+  paint: Paint,
+  sharedStrokeProperties: Stroke,
+  strokeCaps: (stroke: Stroke) => Stroke,
+  firstStroke: boolean,
+  mapping: MappingType
+): Stroke {
+  const fill = translateFill(paint, mapping);
 
   let stroke: Stroke = {
     strokeColor: fill?.fillColor,

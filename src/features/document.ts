@@ -13,7 +13,7 @@ import { toFile } from 'ts-graphviz/adapter';
 import { z } from 'zod';
 
 import { GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
-import { OpenAPI as PenpotClientSettings } from '@figpot/src/clients/penpot';
+import { OpenAPI as PenpotClientSettings, postCommandGetFontVariants } from '@figpot/src/clients/penpot';
 import {
   PostCommandGetFileResponse,
   appCommonFilesChanges$change,
@@ -22,16 +22,15 @@ import {
   postCommandUpdateFile,
 } from '@figpot/src/clients/penpot';
 import { retrieveDocument } from '@figpot/src/features/figma';
+import { cleanHostedDocument } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
-import { isPageRootFrame, isPageRootFrameFromId, rootFrameId } from '@figpot/src/features/translators/translateId';
+import { isPageRootFrame, isPageRootFrameFromId, registerFontId, rootFrameId } from '@figpot/src/features/translators/translateId';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { formatDiffResultLog, getDiff } from '@figpot/src/utils/comparaison';
 import { downloadFile } from '@figpot/src/utils/file';
 import { gracefulExit } from '@figpot/src/utils/system';
-
-import { cleanHostedDocument } from './penpot';
 
 const __root_dirname = process.cwd();
 
@@ -146,8 +145,88 @@ export async function readFigmaToPenpotDiffFile(figmaDocumentId: string, penpotD
   return JSON.parse(diffString) as Differences; // We did not implement a zod schema, hoping they keep the structure stable enough
 }
 
+export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: string): Promise<MappingType> {
+  const mappingPath = getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId);
+  let mapping: MappingType | null = null;
+
+  if (!fsSync.existsSync(mappingPath)) {
+    // TODO: maybe add a warning if no node mapping?
+    const answer = await confirm({
+      message: `You target the Penpot document "${penpotDocumentId}" without having locally the mapping from previous synchronization. Are you sure to continue by overriding the target document?`,
+    });
+
+    if (!answer) {
+      console.warn('the transformation operation has been aborted');
+
+      return Promise.reject(gracefulExit);
+    }
+  } else {
+    const mappingString = await fs.readFile(mappingPath, 'utf-8');
+    const mappingJson = JSON.parse(mappingString);
+
+    mapping = Mapping.parse({
+      ...mappingJson,
+      fonts: new Map(Object.entries(mappingJson.fonts)),
+      assets: new Map(Object.entries(mappingJson.assets)),
+      nodes: new Map(Object.entries(mappingJson.nodes)),
+      documents: new Map(Object.entries(mappingJson.documents)),
+    });
+  }
+
+  // If none, create a new one to be used
+  if (!mapping) {
+    await fs.mkdir(path.dirname(mappingPath), { recursive: true });
+
+    mapping = {
+      lastExport: null,
+      fonts: new Map(),
+      assets: new Map(),
+      nodes: new Map(),
+      documents: new Map(),
+    };
+  }
+
+  return mapping;
+}
+
+export async function saveMapping(figmaDocumentId: string, penpotDocumentId: string, mapping: MappingType): Promise<void> {
+  await fs.writeFile(
+    getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId),
+    JSON.stringify(
+      {
+        ...mapping,
+        fonts: Object.fromEntries(mapping.fonts),
+        assets: Object.fromEntries(mapping.assets),
+        nodes: Object.fromEntries(mapping.nodes),
+        documents: Object.fromEntries(mapping.documents),
+      },
+      null,
+      2
+    )
+  );
+}
+
 export async function retrieve(options: RetrieveOptionsType) {
   for (const document of options.documents) {
+    assert(document.penpotDocument);
+
+    const customPenpotFontsVariants = (await postCommandGetFontVariants({
+      requestBody: {
+        fileId: document.penpotDocument,
+      },
+    })) as unknown as any[];
+
+    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument);
+
+    for (const customPenpotFontVariant of customPenpotFontsVariants) {
+      const simulatedFigmaFontVariantId = `${customPenpotFontVariant.fontFamily}-${customPenpotFontVariant.fontStyle}-${customPenpotFontVariant.fontWeight}`;
+      const penpotFontId = customPenpotFontVariant.fontId;
+
+      registerFontId(simulatedFigmaFontVariantId, penpotFontId, mapping);
+    }
+
+    await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
+
     // Save the document tree locally
     const documentTree = await retrieveDocument(document.figmaDocument);
 
@@ -208,75 +287,17 @@ export async function transform(options: TransformOptionsType) {
   // Go from the Figma format to the Penpot one
   for (const document of options.documents) {
     const figmaTree = await readFigmaTreeFile(document.figmaDocument);
-    const penpotDocumentId = document.penpotDocument;
 
-    let mappingPath: string;
-    let mapping: MappingType | null = null;
-    if (penpotDocumentId) {
-      mappingPath = getFigmaToPenpotMappingPath(document.figmaDocument, penpotDocumentId);
+    assert(document.penpotDocument);
 
-      if (!fsSync.existsSync(mappingPath)) {
-        const answer = await confirm({
-          message: `You target the Penpot document "${penpotDocumentId}" without having locally the mapping from previous synchronization. Are you sure to continue by overriding the target document?`,
-        });
-
-        if (!answer) {
-          console.warn('the transformation operation has been aborted');
-
-          return gracefulExit();
-        }
-      } else {
-        const mappingString = await fs.readFile(mappingPath, 'utf-8');
-        const mappingJson = JSON.parse(mappingString);
-
-        mapping = Mapping.parse({
-          ...mappingJson,
-          fonts: new Map(Object.entries(mappingJson.fonts)),
-          assets: new Map(Object.entries(mappingJson.assets)),
-          nodes: new Map(Object.entries(mappingJson.nodes)),
-          documents: new Map(Object.entries(mappingJson.documents)),
-        });
-      }
-    } else {
-      // TODO: to simplify the process we should create the document from here
-      throw new Error('transform operation requires a created penpot document for now');
-
-      // penpotDocumentId = ...
-      // mappingPath = getFigmaToPenpotMappingPath(document.figmaDocument, xxx);
-    }
-
-    // If none, create a new one to be used
-    if (!mapping) {
-      await fs.mkdir(path.dirname(mappingPath), { recursive: true });
-
-      mapping = {
-        lastExport: null,
-        fonts: new Map(),
-        assets: new Map(),
-        nodes: new Map(),
-        documents: new Map(),
-      };
-    }
+    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument);
 
     const penpotTree = transformDocument(figmaTree, mapping);
 
     // Save mapping for later usage
-    await fs.writeFile(
-      mappingPath,
-      JSON.stringify(
-        {
-          ...mapping,
-          fonts: Object.fromEntries(mapping.fonts),
-          assets: Object.fromEntries(mapping.assets),
-          nodes: Object.fromEntries(mapping.nodes),
-          documents: Object.fromEntries(mapping.documents),
-        },
-        null,
-        2
-      )
-    );
+    await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
 
-    await fs.writeFile(getTransformedFigmaTreePath(document.figmaDocument, penpotDocumentId), JSON.stringify(penpotTree, null, 2));
+    await fs.writeFile(getTransformedFigmaTreePath(document.figmaDocument, document.penpotDocument), JSON.stringify(penpotTree, null, 2));
   }
 }
 
@@ -595,17 +616,7 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
   // We first upload files because they are used by nodes
   if (differences.newMedias.length > 0) {
     // Retrieve the original Figma IDs to upload files
-    const mappingPath = getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId);
-    const mappingString = await fs.readFile(mappingPath, 'utf-8');
-    const mappingJson = JSON.parse(mappingString);
-
-    const mapping = Mapping.parse({
-      ...mappingJson,
-      fonts: new Map(Object.entries(mappingJson.fonts)),
-      assets: new Map(Object.entries(mappingJson.assets)),
-      nodes: new Map(Object.entries(mappingJson.nodes)),
-      documents: new Map(Object.entries(mappingJson.documents)),
-    });
+    const mapping = await restoreMapping(figmaDocumentId, penpotDocumentId);
 
     for (const penpotMediaId of differences.newMedias) {
       // We check all files we need to use have been retrieved locally before

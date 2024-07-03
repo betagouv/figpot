@@ -24,7 +24,7 @@ export function transformTextNode(node: TextNode, figmaNodeTransform: Transform,
     ...transformBlend(node),
     ...transformProportion(node),
     ...transformLayoutAttributes(node),
-    ...transformStrokes(node),
+    ...transformStrokes(node, mapping),
     ...transformConstraints(node),
   };
 }

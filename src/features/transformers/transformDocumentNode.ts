@@ -3,7 +3,7 @@ import { MappingType } from '@figpot/src/features/document';
 import { FigmaDefinedColor, FigmaDefinedTypography } from '@figpot/src/features/figma';
 import { transformPageNode } from '@figpot/src/features/transformers/transformPageNode';
 import { translateColor } from '@figpot/src/features/translators/translateColor';
-import { translateUuidAsObjectKey } from '@figpot/src/features/translators/translateId';
+import { translateId, translateUuidAsObjectKey } from '@figpot/src/features/translators/translateId';
 import { translateTypography } from '@figpot/src/features/translators/translateTypography';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { Registry } from '@figpot/src/models/entities/registry';
@@ -29,6 +29,7 @@ export function transformDocumentNode(
   return {
     name: figmaNode.name,
     data: {
+      pages: figmaNode.document.children.map((child) => translateId(child.id, registry.getMapping())),
       pagesIndex: Object.fromEntries(
         figmaNode.document.children.map((child) => {
           const pageRegistry = registry.newPage(child.id);

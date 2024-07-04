@@ -5,6 +5,7 @@ import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 export type PenpotDocument = {
   name: string;
   data: {
+    pages: string[];
     pagesIndex: Record<string, PenpotPage>;
     colors: Record<string, Color>;
     typographies: Record<string, LibraryTypography>;

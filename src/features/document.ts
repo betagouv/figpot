@@ -7,6 +7,7 @@ import fs from 'fs/promises';
 import { glob } from 'glob';
 import graphlib, { Graph } from 'graphlib';
 import { mimeData } from 'human-filetypes';
+import arrayDiff from 'microdiff';
 import path from 'path';
 import { Digraph, toDot } from 'ts-graphviz';
 import { toFile } from 'ts-graphviz/adapter';
@@ -496,7 +497,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
 
   const diffResult = getDiff(flattenCurrentGlobalTree, flattenNewGlobalTree);
 
-  console.log(formatDiffResultLog(diffResult));
+  console.log(`[nodes differences] ${formatDiffResultLog(diffResult)}`);
 
   const operations: appCommonFilesChanges$change[] = [];
 
@@ -742,6 +743,22 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
           id: item.before.id,
         });
       }
+    }
+  }
+
+  // Finally, we reorder the pages in case the order has changed
+  // Note: it's done outside page nodes since using a dedicated operation
+  const pagesOrderDifferences = arrayDiff(currentTree.data.pages, newTree.data.pages);
+  if (pagesOrderDifferences.length > 0) {
+    console.log(`[pages order] all pages need to be reordered`);
+
+    // Going through all since their internal index depends on others
+    for (let i = 0; i < newTree.data.pages.length; i++) {
+      operations.push({
+        type: 'mov-page',
+        id: newTree.data.pages[i],
+        index: i,
+      });
     }
   }
 

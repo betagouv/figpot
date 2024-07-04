@@ -1,6 +1,7 @@
 import { Command } from 'svg-path-parser';
 
 import { HasGeometryTrait, IndividualStrokesTrait, VectorNode } from '@figpot/src/clients/figma';
+import { translateColorId, translateDocumentId } from '@figpot/src/features/translators/translateId';
 import { translateStrokeCap, translateStrokes } from '@figpot/src/features/translators/translateStrokes';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { Stroke } from '@figpot/src/models/entities/penpot/traits/stroke';
@@ -15,6 +16,7 @@ export function transformStrokes(
   node: HasGeometryTrait | (HasGeometryTrait & IndividualStrokesTrait)
 ): Pick<ShapeAttributes, 'strokes'> {
   const vectorNetwork = node.strokeGeometry;
+  const strokeStyleId = getStrokeStyleId(node);
 
   const strokeCaps = (stroke: Stroke) => {
     // TODO: don't know what to do with that, there is no distinction from Figma except into "COMPONENT" nodes (leaving commented for now)
@@ -26,8 +28,20 @@ export function transformStrokes(
     return stroke;
   };
 
+  const strokes = translateStrokes(registry, node, strokeCaps);
+
   return {
-    strokes: translateStrokes(registry, node, strokeCaps),
+    strokes: strokeStyleId
+      ? strokes.map((stroke, i) => {
+          const uniqueColorId = strokes.length > 1 ? `${strokeStyleId}_${i}` : strokeStyleId;
+
+          return {
+            ...stroke,
+            strokeColorRefId: translateColorId(uniqueColorId, registry.getMapping()),
+            strokeColorRefFile: translateDocumentId('current', registry.getMapping()),
+          };
+        })
+      : strokes,
   };
 }
 
@@ -61,4 +75,8 @@ export function transformStrokesFromVector(registry: PageRegistry, node: VectorN
   return {
     strokes: translateStrokes(registry, node, strokeCaps),
   };
+}
+
+function getStrokeStyleId(node: HasGeometryTrait | (HasGeometryTrait & IndividualStrokesTrait)): string | null {
+  return node.styles !== undefined ? node.styles['stroke'] : null;
 }

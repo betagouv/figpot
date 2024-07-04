@@ -4,10 +4,10 @@ import { translateGradientRadialFill } from '@figpot/src/features/translators/fi
 import { translateImageFill } from '@figpot/src/features/translators/fills/translateImageFill';
 import { translateSolidFill } from '@figpot/src/features/translators/fills/translateSolidFill';
 import { Fill } from '@figpot/src/models/entities/penpot/traits/fill';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 import { rgbToHex } from '@figpot/src/utils/color';
 
-export function translateFill(registry: PageRegistry, fill: Paint): Fill | undefined {
+export function translateFill(registry: BoundVariableRegistry, fill: Paint): Fill | undefined {
   switch (fill.type) {
     case 'SOLID':
       return translateSolidFill(registry, fill);
@@ -22,7 +22,7 @@ export function translateFill(registry: PageRegistry, fill: Paint): Fill | undef
   console.error(`Unsupported fill type: ${fill.type}`);
 }
 
-export function translateFills(registry: PageRegistry, fills: readonly Paint[] | undefined): Fill[] {
+export function translateFills(registry: BoundVariableRegistry, fills: readonly Paint[] | undefined): Fill[] {
   if (fills === undefined) return [];
 
   const penpotFills: Fill[] = [];

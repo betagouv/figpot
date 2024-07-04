@@ -2,11 +2,11 @@ import { GradientPaint } from '@figpot/src/clients/figma';
 import { translateOpacityWithVisibility } from '@figpot/src/features/translators/fills/translateOpacity';
 import { translateBoundVariables } from '@figpot/src/features/translators/translateBoundVariables';
 import { Fill } from '@figpot/src/models/entities/penpot/traits/fill';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 import { rgbToHex } from '@figpot/src/utils/color';
 import { calculateLinearGradient } from '@figpot/src/utils/gradient';
 
-export function translateGradientLinearFill(registry: PageRegistry, fill: GradientPaint): Fill {
+export function translateGradientLinearFill(registry: BoundVariableRegistry, fill: GradientPaint): Fill {
   const points = calculateLinearGradient(fill.gradientHandlePositions);
 
   return {

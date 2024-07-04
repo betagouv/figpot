@@ -12,7 +12,7 @@ import { Digraph, toDot } from 'ts-graphviz';
 import { toFile } from 'ts-graphviz/adapter';
 import { z } from 'zod';
 
-import { GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
+import { GetFileResponse, getFileNodes, getImageFills } from '@figpot/src/clients/figma';
 import { OpenAPI as PenpotClientSettings, postCommandGetFontVariants } from '@figpot/src/clients/penpot';
 import {
   PostCommandGetFileResponse,
@@ -21,7 +21,7 @@ import {
   postCommandRenameFile,
   postCommandUpdateFile,
 } from '@figpot/src/clients/penpot';
-import { FigmaDefinedColor, retrieveColors, retrieveDocument } from '@figpot/src/features/figma';
+import { FigmaDefinedColor, mergeStylesColors, retrieveColors, retrieveDocument } from '@figpot/src/features/figma';
 import { cleanHostedDocument } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
 import { isPageRootFrame, isPageRootFrameFromId, registerFontId, rootFrameId } from '@figpot/src/features/translators/translateId';
@@ -263,6 +263,19 @@ export async function retrieve(options: RetrieveOptionsType) {
 
     // Save the document tree locally
     const documentTree = await retrieveDocument(document.figmaDocument);
+
+    // Process attached styles
+    const stylesIds: string[] = Object.keys(documentTree.styles);
+
+    // The Figma API does not expose styles easily, so we have to use an endpoint to get simulated applied styles to extract wanted values
+    // Ref: https://forum.figma.com/t/rest-api-get-color-and-text-styles/49216/4
+    const styles = await getFileNodes({
+      fileKey: document.figmaDocument,
+      ids: stylesIds.join(','),
+      depth: 1, // Should only return styles but just in case...
+    });
+
+    mergeStylesColors(figmaColors, documentTree, styles);
 
     const documentFolderPath = getFigmaDocumentPath(document.figmaDocument);
     await fs.mkdir(documentFolderPath, { recursive: true });

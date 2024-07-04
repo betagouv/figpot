@@ -1,11 +1,11 @@
 import { RGBA, VariableAlias } from '@figpot/src/clients/figma';
 import { translateColorId, translateDocumentId } from '@figpot/src/features/translators/translateId';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 import { rgbToHex } from '@figpot/src/utils/color';
 
 export function translateBoundVariables(
-  registry: PageRegistry,
+  registry: BoundVariableRegistry,
   initialColor: RGBA,
   boundVariables?: { color?: VariableAlias }
 ): Pick<Color, 'refId' | 'refFile'> {
@@ -24,7 +24,7 @@ export function translateBoundVariables(
         color: rgbToHex(initialColor),
         opacity: initialColor.a,
       });
-    } else {
+    } else if (!boundPenpotColor.color) {
       // If existing and since they are multiple possible mode inside Figma, we override the value to be sure using the right current mode
       // Note: it's hacky but we are fine until having a proper way of managing variable modes
       boundPenpotColor.color = rgbToHex(initialColor);

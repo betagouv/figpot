@@ -4,7 +4,12 @@ import { MappingType } from '@figpot/src/features/document';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 
-export class PageRegistry {
+export interface BoundVariableRegistry {
+  getColors(): Map<string, Color>;
+  getMapping(): MappingType;
+}
+
+export class PageRegistry implements BoundVariableRegistry {
   protected readonly nodes: Map<string, PenpotNode> = new Map();
   protected readonly globalRegistry: Registry;
 
@@ -22,10 +27,6 @@ export class PageRegistry {
     return this.nodes;
   }
 
-  public mergeColorFallback(color: Color) {
-    // Since Figma does not allow getting variables from
-  }
-
   public getMapping() {
     return this.globalRegistry.getMapping();
   }
@@ -35,7 +36,7 @@ export class PageRegistry {
   }
 }
 
-export class Registry {
+export class Registry implements BoundVariableRegistry {
   protected readonly pagesRegistries: Map<string, PageRegistry> = new Map();
   protected readonly colors: Map<string, Color> = new Map();
   protected readonly mapping: MappingType;

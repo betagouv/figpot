@@ -3,22 +3,31 @@ import assert from 'assert';
 
 import {
   ErrorResponsePayloadWithErrorBoolean,
+  GetFileNodesResponse,
+  GetFileResponse,
   LocalVariable,
+  Paint,
   RGBA,
+  VariableAlias,
   getFile,
   getLocalVariables,
   getProjectFiles,
   getTeamProjects,
 } from '@figpot/src/clients/figma';
 import { DocumentOptionsType, getFigmaDocumentPath } from '@figpot/src/features/document';
+import { rgbToHex } from '@figpot/src/utils/color';
 
 export type FigmaDefinedColor = {
   id: LocalVariable['id'];
   key: LocalVariable['key'];
   name: LocalVariable['name'];
   description: LocalVariable['description'];
-  value?: RGBA;
+  value?: Paint;
 };
+
+export function isColor(value: string | number | boolean | RGBA | VariableAlias): value is RGBA {
+  return typeof value === 'object' && 'r' in value;
+}
 
 export function processDocumentsParametersFromInput(parameters: string[]): DocumentOptionsType[] {
   return parameters.map((parameter) => {
@@ -38,15 +47,27 @@ export async function retrieveColors(documentId: string): Promise<FigmaDefinedCo
     const localVariablesResult = await getLocalVariables({ fileKey: documentId });
     for (const localVariable of Object.values(localVariablesResult.meta.variables)) {
       if (localVariable.resolvedType === 'COLOR') {
-        // TODO: we don't support reading values from their API since variables bounds can be nested
-        // but also because they use "collection modes" that could be switch.
-        // The easier for us is to set the value from the hardcoded values of nodes (may be a problem in some cases if multiple mode applied, but it's unlikely)
+        // TODO: variables can be nested, it should be taken into account to also make sure what happens if the nested variable is into another file
+        // We rely on a value if provided by using the default Figma mode, and when it's not available The easier for us is to set the value from the hardcoded values of nodes (may be a problem in some cases if multiple mode applied, but it's unlikely)
         // Ref: https://forum.figma.com/t/how-to-access-variable-alias-value-from-another-collection/53203/4
+        const collection = localVariablesResult.meta.variableCollections[localVariable.variableCollectionId];
+
         colors.push({
           id: localVariable.id,
           key: localVariable.key,
           name: localVariable.name,
           description: localVariable.description,
+          value:
+            !!collection &&
+            localVariable.valuesByMode[collection.defaultModeId] !== undefined &&
+            isColor(localVariable.valuesByMode[collection.defaultModeId])
+              ? {
+                  // Color variables can only manage a simple color so emulating to the appropriate Paint one
+                  type: 'SOLID',
+                  color: localVariable.valuesByMode[collection.defaultModeId] as RGBA,
+                  blendMode: 'NORMAL',
+                }
+              : undefined,
         });
       }
     }
@@ -63,6 +84,26 @@ export async function retrieveColors(documentId: string): Promise<FigmaDefinedCo
   }
 
   return colors;
+}
+
+export function mergeStylesColors(colors: FigmaDefinedColor[], documentTree: GetFileResponse, styles: GetFileNodesResponse) {
+  for (const [, styleNode] of Object.entries(styles.nodes)) {
+    if (documentTree.styles[styleNode.document.id]?.styleType === 'FILL' && styleNode.document.type === 'RECTANGLE') {
+      // A Figma style can contains multiple colors so we have to split them to fit with the Penpot logic of "1 style = 1 color"
+      for (let i = 0; i < styleNode.document.fills.length; i++) {
+        colors.push({
+          id: styleNode.document.fills.length > 1 ? `${styleNode.document.id}_${i}` : styleNode.document.id, // Add a suffix to differentiate them if needed
+          key: documentTree.styles[styleNode.document.id].key,
+          name:
+            styleNode.document.fills.length > 1
+              ? `${documentTree.styles[styleNode.document.id].name} ${i + 1}`
+              : documentTree.styles[styleNode.document.id].name,
+          description: documentTree.styles[styleNode.document.id].description,
+          value: styleNode.document.fills[i],
+        });
+      }
+    }
+  }
 }
 
 export async function retrieveDocument(documentId: string) {

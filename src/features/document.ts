@@ -554,16 +554,23 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
       assert(item.after.id);
 
       if (item.after._apiType === 'page') {
-        const { _apiType, id, name, ...propertiesObj } = item.after; // Instruction to omit some properties
+        const { _apiType, id, name, options } = item.after; // Instruction to omit some properties
 
         operations.push({
           type: 'add-page',
           id: id, // Penpot allows forcing the ID at creation
           name: name,
-          page: {
-            ...propertiesObj,
-          },
         });
+
+        // The API refuses to take the `page` property directly with `add-page`, so hacking a bit
+        for (const [optionKey, optionValue] of Object.entries(options)) {
+          operations.push({
+            type: 'set-option',
+            pageId: id,
+            option: kebabCase(optionKey), // Since it's a value we make sure to respect backend keywords logic
+            value: optionValue,
+          });
+        }
       } else if (item.after._apiType === 'node') {
         const { _apiType, _realPageParentId, _pageId, frameId, id, mainInstance, parentId, ...propertiesObj } = item.after; // Instruction to omit some properties
 

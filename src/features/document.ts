@@ -578,13 +578,20 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
             }
 
             // Detect new images by looking at the expected path that should be concerned
+            // Note: it's possible it has been already uploaded but doing it a new time will be rare with no consequence
             if (
               difference.path.length >= 2 &&
               (difference.type === 'CREATE' || difference.type === 'CHANGE') &&
-              difference.path[difference.path.length - 2] === 'imageFill' &&
+              difference.path[difference.path.length - 2] === 'fillImage' &&
               difference.path[difference.path.length - 1] === 'id'
             ) {
               newMediasToUpload.push(difference.value as string);
+            } else if (
+              difference.path.length >= 1 &&
+              (difference.type === 'CREATE' || difference.type === 'CHANGE') &&
+              difference.path[difference.path.length - 1] === 'fillImage'
+            ) {
+              newMediasToUpload.push(difference.value.id as string);
             }
           }
         }
@@ -649,7 +656,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
   return {
     newDocumentName: newDocumentName,
     newTreeOperations: operations,
-    newMedias: newMediasToUpload,
+    newMedias: [...new Set(newMediasToUpload)], // Remove duplicates
   };
 }
 

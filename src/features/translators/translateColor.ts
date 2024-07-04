@@ -24,5 +24,6 @@ export function translateColor(registry: Registry | PageRegistry, color: FigmaDe
     color: penpotFill.fillColor,
     opacity: penpotFill.fillOpacity,
     gradient: penpotFill.fillColorGradient,
+    image: penpotFill.fillImage,
   };
 }

@@ -17,17 +17,26 @@ import { OpenAPI as PenpotClientSettings, postCommandGetFontVariants } from '@fi
 import {
   PostCommandGetFileResponse,
   appCommonFilesChanges$change,
+  appCommonTypesTypography$typography,
   postCommandGetFile,
   postCommandRenameFile,
   postCommandUpdateFile,
 } from '@figpot/src/clients/penpot';
-import { FigmaDefinedColor, mergeStylesColors, retrieveColors, retrieveDocument } from '@figpot/src/features/figma';
+import {
+  FigmaDefinedColor,
+  FigmaDefinedTypography,
+  extractStylesTypographies,
+  mergeStylesColors,
+  retrieveColors,
+  retrieveDocument,
+} from '@figpot/src/features/figma';
 import { cleanHostedDocument } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
 import { isPageRootFrame, isPageRootFrameFromId, registerFontId, rootFrameId } from '@figpot/src/features/translators/translateId';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
+import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { formatDiffResultLog, getDiff } from '@figpot/src/utils/comparaison';
 import { downloadFile } from '@figpot/src/utils/file';
@@ -51,7 +60,10 @@ export type LiteNode = PenpotNode & {
 export type LiteColor = Color & {
   _apiType: 'color';
 };
-export type NodeLabel = LitePageNode | LiteNode | LiteColor;
+export type LiteTypography = LibraryTypography & {
+  _apiType: 'typography';
+};
+export type NodeLabel = LitePageNode | LiteNode | LiteColor | LiteTypography;
 
 export const Mapping = z.object({
   lastExport: z.date().nullable(),
@@ -60,6 +72,7 @@ export const Mapping = z.object({
   nodes: FigmaToPenpotMapping,
   documents: FigmaToPenpotMapping,
   colors: FigmaToPenpotMapping,
+  typographies: FigmaToPenpotMapping,
 });
 export type MappingType = z.infer<typeof Mapping>;
 
@@ -92,6 +105,10 @@ export function getFigmaDocumentTreePath(documentId: string) {
 
 export function getFigmaDocumentColorsPath(documentId: string) {
   return path.resolve(getFigmaDocumentPath(documentId), 'colors.json');
+}
+
+export function getFigmaDocumentTypographiesPath(documentId: string) {
+  return path.resolve(getFigmaDocumentPath(documentId), 'typographies.json');
 }
 
 export function getPenpotDocumentPath(figmaDocumentId: string, penpotDocumentId: string) {
@@ -140,6 +157,18 @@ export async function readFigmaColorsFile(documentId: string): Promise<FigmaDefi
   const figmaColorsString = await fs.readFile(figmaColorsPath, 'utf-8');
 
   return JSON.parse(figmaColorsString) as FigmaDefinedColor[];
+}
+
+export async function readFigmaTypographiesFile(documentId: string): Promise<FigmaDefinedTypography[]> {
+  const figmaTypographiesPath = getFigmaDocumentTypographiesPath(documentId);
+
+  if (!fsSync.existsSync(figmaTypographiesPath)) {
+    throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
+  }
+
+  const figmaTypographiesString = await fs.readFile(figmaTypographiesPath, 'utf-8');
+
+  return JSON.parse(figmaTypographiesString) as FigmaDefinedTypography[];
 }
 
 export async function readTransformedFigmaTreeFile(figmaDocumentId: string, penpotDocumentId: string): Promise<PenpotDocument> {
@@ -192,6 +221,7 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
       nodes: new Map(Object.entries(mappingJson.nodes)),
       documents: new Map(Object.entries(mappingJson.documents)),
       colors: new Map(Object.entries(mappingJson.colors)),
+      typographies: new Map(Object.entries(mappingJson.typographies)),
     });
   }
 
@@ -206,6 +236,7 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
       nodes: new Map(),
       documents: new Map(),
       colors: new Map(),
+      typographies: new Map(),
     };
   }
 
@@ -228,6 +259,7 @@ export async function saveMapping(figmaDocumentId: string, penpotDocumentId: str
         nodes: Object.fromEntries(mapping.nodes),
         documents: Object.fromEntries(mapping.documents),
         colors: Object.fromEntries(mapping.colors),
+        typographies: Object.fromEntries(mapping.typographies),
       },
       null,
       2
@@ -275,6 +307,7 @@ export async function retrieve(options: RetrieveOptionsType) {
       depth: 1, // Should only return styles but just in case...
     });
 
+    const figmaTypographies = extractStylesTypographies(documentTree, styles);
     mergeStylesColors(figmaColors, documentTree, styles);
 
     const documentFolderPath = getFigmaDocumentPath(document.figmaDocument);
@@ -282,6 +315,7 @@ export async function retrieve(options: RetrieveOptionsType) {
 
     await fs.writeFile(getFigmaDocumentTreePath(document.figmaDocument), JSON.stringify(documentTree, null, 2));
     await fs.writeFile(getFigmaDocumentColorsPath(document.figmaDocument), JSON.stringify(figmaColors, null, 2));
+    await fs.writeFile(getFigmaDocumentTypographiesPath(document.figmaDocument), JSON.stringify(figmaTypographies, null, 2));
 
     // Save images
     const imagesList = await getImageFills({
@@ -316,9 +350,14 @@ export async function sortDocuments(documents: DocumentOptionsType[]): Promise<D
   return documents;
 }
 
-export function transformDocument(documentTree: GetFileResponse, colors: FigmaDefinedColor[], mapping: MappingType) {
+export function transformDocument(
+  documentTree: GetFileResponse,
+  colors: FigmaDefinedColor[],
+  typographies: FigmaDefinedTypography[],
+  mapping: MappingType
+) {
   // Go from the Figma format to the Penpot one
-  const penpotTree = transformDocumentNode(documentTree, colors, mapping);
+  const penpotTree = transformDocumentNode(documentTree, colors, typographies, mapping);
 
   return penpotTree;
 }
@@ -335,12 +374,13 @@ export async function transform(options: TransformOptionsType) {
   for (const document of options.documents) {
     const figmaTree = await readFigmaTreeFile(document.figmaDocument);
     const figmaColors = await readFigmaColorsFile(document.figmaDocument);
+    const figmaTypographies = await readFigmaTypographiesFile(document.figmaDocument);
 
     assert(document.penpotDocument);
 
     const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument);
 
-    const penpotTree = transformDocument(figmaTree, figmaColors, mapping);
+    const penpotTree = transformDocument(figmaTree, figmaColors, figmaTypographies, mapping);
 
     // Save mapping for later usage
     await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
@@ -396,6 +436,15 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
     } as LiteColor);
   }
 
+  for (const currentTypography of Object.values(currentTree.data.typographies)) {
+    assert(currentTypography.id);
+
+    flattenCurrentGlobalTree.set(currentTypography.id, {
+      _apiType: 'typography',
+      ...currentTypography,
+    } as LiteTypography);
+  }
+
   for (const newPageNode of Object.values(newTree.data.pagesIndex)) {
     const litePageNode: LitePageNode = {
       _apiType: 'page',
@@ -436,6 +485,15 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
     } as LiteColor);
   }
 
+  for (const newTypography of Object.values(newTree.data.typographies)) {
+    assert(newTypography.id);
+
+    flattenNewGlobalTree.set(newTypography.id, {
+      _apiType: 'typography',
+      ...newTypography,
+    } as LiteTypography);
+  }
+
   const diffResult = getDiff(flattenCurrentGlobalTree, flattenNewGlobalTree);
 
   console.log(formatDiffResultLog(diffResult));
@@ -444,24 +502,46 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
 
   // Colors must be added/modified before the rest because they are primitives
   for (const [, item] of diffResult) {
-    if (item.state === 'added' && item.after._apiType === 'color') {
-      const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
+    if (item.state === 'added') {
+      if (item.after._apiType === 'color') {
+        const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
 
-      operations.push({
-        type: 'add-color',
-        color: {
-          ...propertiesObj,
-        },
-      });
-    } else if (item.state === 'updated' && item.after._apiType === 'color') {
-      const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
+        operations.push({
+          type: 'add-color',
+          color: {
+            ...propertiesObj,
+          },
+        });
+      } else if (item.after._apiType === 'typography') {
+        const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
 
-      operations.push({
-        type: 'mod-color',
-        color: {
-          ...propertiesObj,
-        },
-      });
+        operations.push({
+          type: 'add-typography',
+          typography: {
+            ...propertiesObj,
+          } as appCommonTypesTypography$typography, // Other types are unknown, we are fine here if the API triggers an error
+        });
+      }
+    } else if (item.state === 'updated') {
+      if (item.after._apiType === 'color') {
+        const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
+
+        operations.push({
+          type: 'mod-color',
+          color: {
+            ...propertiesObj,
+          },
+        });
+      } else if (item.after._apiType === 'typography') {
+        const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
+
+        operations.push({
+          type: 'mod-typography',
+          typography: {
+            ...propertiesObj,
+          } as appCommonTypesTypography$typography, // Other types are unknown, we are fine here if the API triggers an error
+        });
+      }
     }
   }
 
@@ -647,6 +727,11 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
       } else if (item.before._apiType === 'color') {
         operations.push({
           type: 'del-color',
+          id: item.before.id,
+        });
+      } else if (item.before._apiType === 'typography') {
+        operations.push({
+          type: 'del-typography',
           id: item.before.id,
         });
       }

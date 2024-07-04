@@ -1,6 +1,6 @@
 import assert from 'assert';
 
-import { MinimalFillsTrait, TextNode } from '@figpot/src/clients/figma';
+import { MinimalFillsTrait, TextNode, TypeStyle } from '@figpot/src/clients/figma';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
 import { translateFontName } from '@figpot/src/features/translators/text/font/translateFontName';
 import { TextSegment } from '@figpot/src/features/translators/text/paragraph/translateParagraphProperties';
@@ -10,46 +10,45 @@ import { translateLetterSpacing } from '@figpot/src/features/translators/text/pr
 import { translateLineHeight } from '@figpot/src/features/translators/text/properties/translateLineHeight';
 import { translateTextDecoration } from '@figpot/src/features/translators/text/properties/translateTextDecoration';
 import { translateTextTransform } from '@figpot/src/features/translators/text/properties/translateTextTransform';
+import { translateDocumentId, translateTypographyId } from '@figpot/src/features/translators/translateId';
 import { TextNode as PenpotTextNode, TextStyle } from '@figpot/src/models/entities/penpot/shapes/text';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 
-export function translateTextSegments(registry: PageRegistry, node: TextNode, segments: TextSegment[]): PenpotTextNode[] {
+export function translateTextSegments(registry: BoundVariableRegistry, node: TextNode, segments: TextSegment[]): PenpotTextNode[] {
   return segments.map((segment) => translateStyleTextSegment(registry, node, segment));
 }
 
-export function transformTextStyle(registry: PageRegistry, node: TextNode, segment: TextSegment): TextStyle {
+export function transformTextStyle(registry: BoundVariableRegistry, node: TextNode, segment: TextSegment): TextStyle {
   assert(segment.style.fontSize);
 
-  // TODO: verify how the Figma REST API returns style keys
-  // if (hasTextStyle(segment)) {
-  //   return {
-  //     ...partialTransformTextStyle(node, segment),
-  //     textStyleId: translateTextStyleId(segment.textStyleId),
-  //   };
-  // }
+  const typographyStyleId = getTypographyStyleId(node);
 
   return {
-    ...partialTransformTextStyle(registry, node, segment),
-    fontFamily: segment.style.fontFamily,
-    fontSize: segment.style.fontSize.toString(),
-    fontStyle: translateFontStyle(segment.style),
-    textDecoration: translateTextDecoration(segment.style),
-    letterSpacing: translateLetterSpacing(segment.style),
-    lineHeight: translateLineHeight(segment.style),
-    textTransform: translateTextTransform(segment.style),
-    typographyRefFile: null, // Here to match the backend format
-    typographyRefId: null, // Here to match the backend format
+    ...partialTransformTextStyle(registry, segment.style),
+    ...(typographyStyleId
+      ? {
+          typographyRefId: translateTypographyId(typographyStyleId, registry.getMapping()),
+          typographyRefFile: translateDocumentId('current', registry.getMapping()),
+        }
+      : {}),
   };
 }
 
-function partialTransformTextStyle(registry: PageRegistry, node: TextNode, segment: TextSegment): TextStyle {
+export function partialTransformTextStyle(registry: BoundVariableRegistry, fontName: TypeStyle): TextStyle {
   return {
-    ...translateFontName(registry, segment.style),
-    textAlign: translateHorizontalAlign(node.style.textAlignHorizontal),
+    ...translateFontName(registry, fontName),
+    fontFamily: fontName.fontFamily,
+    fontSize: fontName.fontSize?.toString(),
+    fontStyle: translateFontStyle(fontName),
+    textDecoration: translateTextDecoration(fontName),
+    letterSpacing: translateLetterSpacing(fontName),
+    lineHeight: translateLineHeight(fontName),
+    textTransform: translateTextTransform(fontName),
+    textAlign: translateHorizontalAlign(fontName.textAlignHorizontal),
   };
 }
 
-function translateStyleTextSegment(registry: PageRegistry, node: TextNode, segment: TextSegment): PenpotTextNode {
+function translateStyleTextSegment(registry: BoundVariableRegistry, node: TextNode, segment: TextSegment): PenpotTextNode {
   assert(segment.style.fills);
 
   return {
@@ -59,16 +58,6 @@ function translateStyleTextSegment(registry: PageRegistry, node: TextNode, segme
   };
 }
 
-// function hasTextStyle(segment: TextSegment): boolean {
-//   return segment.textStyleId !== undefined && segment.textStyleId.length > 0;
-// }
-
-// function translateTextStyleId(textStyleId: string | undefined): string | undefined {
-//   if (textStyleId === undefined) return;
-
-//   if (!textStyles.has(textStyleId)) {
-//     textStyles.set(textStyleId, undefined);
-//   }
-
-//   return textStyleId;
-// }
+function getTypographyStyleId(node: TextNode): string | null {
+  return node.styles !== undefined ? node.styles['text'] : null;
+}

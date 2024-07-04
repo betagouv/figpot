@@ -8,14 +8,22 @@ import {
   LocalVariable,
   Paint,
   RGBA,
+  TypeStyle,
   VariableAlias,
   getFile,
   getLocalVariables,
   getProjectFiles,
   getTeamProjects,
 } from '@figpot/src/clients/figma';
-import { DocumentOptionsType, getFigmaDocumentPath } from '@figpot/src/features/document';
-import { rgbToHex } from '@figpot/src/utils/color';
+import { DocumentOptionsType } from '@figpot/src/features/document';
+
+export type FigmaDefinedTypography = {
+  id: LocalVariable['id'];
+  key: LocalVariable['key'];
+  name: LocalVariable['name'];
+  description: LocalVariable['description'];
+  value: TypeStyle;
+};
 
 export type FigmaDefinedColor = {
   id: LocalVariable['id'];
@@ -41,6 +49,7 @@ export function processDocumentsParametersFromInput(parameters: string[]): Docum
 }
 
 export async function retrieveColors(documentId: string): Promise<FigmaDefinedColor[]> {
+  const typographies: FigmaDefinedTypography[] = [];
   const colors: FigmaDefinedColor[] = [];
 
   try {
@@ -104,6 +113,24 @@ export function mergeStylesColors(colors: FigmaDefinedColor[], documentTree: Get
       }
     }
   }
+}
+
+export function extractStylesTypographies(documentTree: GetFileResponse, styles: GetFileNodesResponse): FigmaDefinedTypography[] {
+  const typographies: FigmaDefinedTypography[] = [];
+
+  for (const [, styleNode] of Object.entries(styles.nodes)) {
+    if (documentTree.styles[styleNode.document.id]?.styleType === 'TEXT' && styleNode.document.type === 'TEXT') {
+      typographies.push({
+        id: styleNode.document.id,
+        key: documentTree.styles[styleNode.document.id].key,
+        name: documentTree.styles[styleNode.document.id].name,
+        description: documentTree.styles[styleNode.document.id].description,
+        value: styleNode.document.style,
+      });
+    }
+  }
+
+  return typographies;
 }
 
 export async function retrieveDocument(documentId: string) {

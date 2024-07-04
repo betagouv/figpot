@@ -2,9 +2,9 @@ import { MinimalFillsTrait, Paint, Path, VectorNode } from '@figpot/src/clients/
 import { translateFills } from '@figpot/src/features/translators/fills/translateFills';
 import { translateColorId, translateDocumentId } from '@figpot/src/features/translators/translateId';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 
-export function transformFills(registry: PageRegistry, node: MinimalFillsTrait): Pick<ShapeAttributes, 'fills'> {
+export function transformFills(registry: BoundVariableRegistry, node: MinimalFillsTrait): Pick<ShapeAttributes, 'fills'> {
   const fillStyleId = getFillStyleId(node);
 
   const fills = translateFills(registry, node.fills);
@@ -25,7 +25,7 @@ export function transformFills(registry: PageRegistry, node: MinimalFillsTrait):
 }
 
 export function transformVectorFills(
-  registry: PageRegistry,
+  registry: BoundVariableRegistry,
   node: VectorNode,
   vectorPath: Path,
   shapeFills: Paint[] | null

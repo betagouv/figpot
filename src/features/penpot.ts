@@ -11,6 +11,7 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
 
   const pagesIndex = (hostedTree.data as PenpotDocument['data']).pagesIndex;
   const colors = (hostedTree.data as PenpotDocument['data']).colors;
+  const typographies = (hostedTree.data as PenpotDocument['data']).typographies;
 
   for (const [, page] of Object.entries(pagesIndex)) {
     // To avoid collission about Penpot fixed root frame IDs for each page we adjust
@@ -55,11 +56,17 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
     delete color.modifiedAt;
   }
 
+  for (const [, typography] of Object.entries(typographies)) {
+    // Cannot guess this when transforming
+    delete typography.modifiedAt;
+  }
+
   return {
     name: hostedTree.name,
     data: {
       pagesIndex: pagesIndex,
       colors: colors,
+      typographies: typographies,
     },
   };
 }

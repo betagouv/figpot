@@ -4,10 +4,10 @@ import { translateGoogleFont } from '@figpot/src/features/translators/text/font/
 import { translateLocalFont } from '@figpot/src/features/translators/text/font/local/translateLocalFont';
 import { translateFontWeight } from '@figpot/src/features/translators/text/properties/translateFontWeight';
 import { TextTypography } from '@figpot/src/models/entities/penpot/shapes/text';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 
 export function translateFontName(
-  registry: PageRegistry,
+  registry: BoundVariableRegistry,
   fontName: TypeStyle
 ): Pick<TextTypography, 'fontId' | 'fontVariantId' | 'fontWeight'> | undefined {
   const fontWeight = translateFontWeight(fontName);

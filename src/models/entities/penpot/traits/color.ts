@@ -9,7 +9,7 @@ export type Color = {
   value?: string;
   color?: string; // hex color
   opacity?: number;
-  modifiedAt?: string; // TODO: check this attribute in penpot
+  modifiedAt?: string;
   refId?: Uuid;
   refFile?: Uuid;
   gradient?: Gradient;

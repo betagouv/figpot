@@ -48,6 +48,13 @@ export type TextStyle = TextTypography & {
   fills?: Fill[];
 };
 
+export type LibraryTypography = TextTypography & {
+  id: string;
+  path: string;
+  name?: string;
+  modifiedAt?: string;
+};
+
 export type TextContent = {
   type: 'root';
   key?: string;

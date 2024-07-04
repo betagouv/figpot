@@ -82,6 +82,20 @@ export function translateColorId(figmaColorId: string, mapping: MappingType): st
   return penpotColorId;
 }
 
+export function translateTypographyId(figmaTypographyId: string, mapping: MappingType): string {
+  const penpotMappedTypographyId = mapping.colors.get(figmaTypographyId);
+  if (penpotMappedTypographyId) {
+    return penpotMappedTypographyId;
+  }
+
+  // Otherwise we create a new one, adding it to the mapping object
+  // Note: we use UUID v7 because Penpot seems to have one with timestamp at the beginning (even if they call if "v8", but this is to be free-form apparently)
+  const penpotTypographyId = uuidv7();
+  mapping.colors.set(figmaTypographyId, penpotTypographyId);
+
+  return penpotTypographyId;
+}
+
 export function translateUuidAsObjectKey(uuid: string): string {
   return uuid.replaceAll('-', '_');
 }

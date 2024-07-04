@@ -21,6 +21,7 @@ describe('transformTextNode()', () => {
       fonts: new Map(),
       nodes: new Map([['49:30', '3bfca1c9-81bc-80ba-8004-91e26d0d0c48']]),
       colors: new Map(),
+      typographies: new Map(),
     };
 
     const registry = new Registry(mapping);

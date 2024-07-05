@@ -56,7 +56,12 @@ export function transformDocumentNode(
           const penpotComponentId = translateComponentId(`${componentId}_component`, mapping);
           const penpotComponentInstanceId = translateId(componentId, mapping);
 
-          const pathLevels = component.name.split('/').map((pathLevel) => pathLevel.trim());
+          // In case of a components group since there is no equivalent into Penpot, we prepend the group name so it's under a group
+          const componentName = component.componentSetId
+            ? `${figmaNode.componentSets[component.componentSetId].name} / ${component.name}`
+            : component.name;
+
+          const pathLevels = componentName.split('/').map((pathLevel) => pathLevel.trim());
           const name = pathLevels.pop();
 
           // The API requires to provide the page for the main instance from the normal tree, so browsing it

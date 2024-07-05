@@ -1,6 +1,7 @@
 import { SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { transformBooleanNode } from '@figpot/src/features/transformers/transformBooleanNode';
 import { transformComponentNode } from '@figpot/src/features/transformers/transformComponentNode';
+import { transformComponentSetNode } from '@figpot/src/features/transformers/transformComponentSetNode';
 import { transformEllipseNode } from '@figpot/src/features/transformers/transformEllipseNode';
 import { transformFrameNode } from '@figpot/src/features/transformers/transformFrameNode';
 import { transformGroupNode } from '@figpot/src/features/transformers/transformGroupNode';
@@ -30,7 +31,6 @@ export function transformSceneNode(
       break;
     case 'SECTION':
     case 'FRAME':
-    case 'COMPONENT_SET':
       penpotNode = transformFrameNode(registry, figmaNode, figmaNodeTransform);
       break;
     case 'GROUP':
@@ -51,6 +51,9 @@ export function transformSceneNode(
       break;
     case 'BOOLEAN_OPERATION':
       penpotNode = transformBooleanNode(registry, figmaNode, closestFigmaFrameId, figmaNodeTransform);
+      break;
+    case 'COMPONENT_SET':
+      penpotNode = transformComponentSetNode(registry, figmaNode, figmaNodeTransform);
       break;
     case 'COMPONENT':
       penpotNode = transformComponentNode(registry, figmaNode, figmaNodeTransform);

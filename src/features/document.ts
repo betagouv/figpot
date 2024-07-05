@@ -1043,7 +1043,7 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
     await postCommandUpdateFile({
       requestBody: {
         id: penpotDocumentId,
-        revn: 1, // Required but does no block to use a default one
+        revn: 0, // Required but does no block to use a default one
         sessionId: '00000000-0000-0000-0000-000000000000', // It has to be UUID format, no matter the value for us
         changes: differences.newTreeOperations,
       },

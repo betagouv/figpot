@@ -1,8 +1,10 @@
 import { SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { transformBooleanNode } from '@figpot/src/features/transformers/transformBooleanNode';
+import { transformComponentNode } from '@figpot/src/features/transformers/transformComponentNode';
 import { transformEllipseNode } from '@figpot/src/features/transformers/transformEllipseNode';
 import { transformFrameNode } from '@figpot/src/features/transformers/transformFrameNode';
 import { transformGroupNode } from '@figpot/src/features/transformers/transformGroupNode';
+// import { transformInstanceNode } from '@figpot/src/features/transformers/transformInstanceNode';
 import { transformLineNode } from '@figpot/src/features/transformers/transformLineNode';
 import { transformPathNode } from '@figpot/src/features/transformers/transformPathNode';
 import { transformRectangleNode } from '@figpot/src/features/transformers/transformRectangleNode';
@@ -10,12 +12,6 @@ import { transformTextNode } from '@figpot/src/features/transformers/transformTe
 import { transformVectorNode } from '@figpot/src/features/transformers/transformVectorNode';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PageRegistry } from '@figpot/src/models/entities/registry';
-
-// TODO:
-// import {
-//   transformComponentNode,
-//   transformInstanceNode,
-// } from '.';
 
 export function transformSceneNode(
   registry: PageRegistry,
@@ -56,15 +52,15 @@ export function transformSceneNode(
     case 'BOOLEAN_OPERATION':
       penpotNode = transformBooleanNode(registry, figmaNode, closestFigmaFrameId, figmaNodeTransform);
       break;
+    case 'COMPONENT':
+      penpotNode = transformComponentNode(registry, figmaNode, figmaNodeTransform);
+      break;
+    // case 'INSTANCE':
+    //   penpotNode = transformInstanceNode(registry, figmaNode, figmaNodeTransform);
+    //   break;
     // case 'CONNECTOR':
     //   // TODO: implement it?
     //   penpotNode = await transformConnectorNode(figmaNode, baseX, baseY);
-    //   break;
-    // case 'COMPONENT':
-    //   penpotNode = await transformComponentNode(figmaNode, baseX, baseY);
-    //   break;
-    // case 'INSTANCE':
-    //   penpotNode = await transformInstanceNode(figmaNode, baseX, baseY);
     //   break;
   }
 

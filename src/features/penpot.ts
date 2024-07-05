@@ -14,6 +14,7 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
   const pagesIndex = hostedData.pagesIndex;
   const colors = hostedData.colors;
   const typographies = hostedData.typographies;
+  const components = hostedData.components;
 
   for (const [, page] of Object.entries(pagesIndex)) {
     // To avoid collission about Penpot fixed root frame IDs for each page we adjust
@@ -53,14 +54,30 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
     }
   }
 
-  for (const [, color] of Object.entries(colors)) {
-    // Cannot guess this when transforming
-    delete color.modifiedAt;
+  if (colors) {
+    for (const [, color] of Object.entries(colors)) {
+      // Cannot guess this when transforming
+      delete color.modifiedAt;
+    }
   }
 
-  for (const [, typography] of Object.entries(typographies)) {
-    // Cannot guess this when transforming
-    delete typography.modifiedAt;
+  if (typographies) {
+    for (const [, typography] of Object.entries(typographies)) {
+      // Cannot guess this when transforming
+      delete typography.modifiedAt;
+    }
+  }
+
+  if (components) {
+    for (const [componentIndex, component] of Object.entries(components)) {
+      // Penpot performs a soft delete on components for some time, since they are returned by the API we have to ignore them
+      if (component.deleted) {
+        delete components[componentIndex];
+      } else {
+        // Cannot guess this when transforming
+        delete component.modifiedAt;
+      }
+    }
   }
 
   return {
@@ -70,6 +87,7 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
       pagesIndex: pagesIndex,
       colors: colors,
       typographies: typographies,
+      components: components,
     },
   };
 }

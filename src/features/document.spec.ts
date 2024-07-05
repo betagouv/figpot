@@ -20,6 +20,7 @@ describe('document comparaison', () => {
         ]),
         colors: new Map(),
         typographies: new Map(),
+        components: new Map(),
       };
 
       const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], [], mapping);
@@ -42,6 +43,7 @@ describe('document comparaison', () => {
         nodes: new Map(),
         colors: new Map(),
         typographies: new Map(),
+        components: new Map(),
       };
 
       const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], [], mapping);
@@ -71,6 +73,7 @@ describe('document comparaison', () => {
         ]),
         colors: new Map(),
         typographies: new Map(),
+        components: new Map(),
       };
 
       const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], [], mapping);
@@ -93,6 +96,7 @@ describe('document comparaison', () => {
         nodes: new Map(),
         colors: new Map(),
         typographies: new Map(),
+        components: new Map(),
       };
 
       const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], [], mapping);

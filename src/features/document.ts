@@ -34,6 +34,7 @@ import {
 import { cleanHostedDocument } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
 import { isPageRootFrame, isPageRootFrameFromId, registerFontId, rootFrameId } from '@figpot/src/features/translators/translateId';
+import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
@@ -64,7 +65,10 @@ export type LiteColor = Color & {
 export type LiteTypography = LibraryTypography & {
   _apiType: 'typography';
 };
-export type NodeLabel = LitePageNode | LiteNode | LiteColor | LiteTypography;
+export type LiteComponent = LibraryComponent & {
+  _apiType: 'component';
+};
+export type NodeLabel = LitePageNode | LiteNode | LiteColor | LiteTypography | LiteComponent;
 
 export const Mapping = z.object({
   lastExport: z.date().nullable(),
@@ -74,6 +78,7 @@ export const Mapping = z.object({
   documents: FigmaToPenpotMapping,
   colors: FigmaToPenpotMapping,
   typographies: FigmaToPenpotMapping,
+  components: FigmaToPenpotMapping,
 });
 export type MappingType = z.infer<typeof Mapping>;
 
@@ -223,6 +228,7 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
       documents: new Map(Object.entries(mappingJson.documents)),
       colors: new Map(Object.entries(mappingJson.colors)),
       typographies: new Map(Object.entries(mappingJson.typographies)),
+      components: new Map(Object.entries(mappingJson.components)),
     });
   }
 
@@ -238,6 +244,7 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
       documents: new Map(),
       colors: new Map(),
       typographies: new Map(),
+      components: new Map(),
     };
   }
 
@@ -261,6 +268,7 @@ export async function saveMapping(figmaDocumentId: string, penpotDocumentId: str
         documents: Object.fromEntries(mapping.documents),
         colors: Object.fromEntries(mapping.colors),
         typographies: Object.fromEntries(mapping.typographies),
+        components: Object.fromEntries(mapping.components),
       },
       null,
       2
@@ -401,6 +409,55 @@ export interface Differences {
   newMedias: string[];
 }
 
+export function pushOperationsWithOrderingLogic(
+  normalOperations: appCommonFilesChanges$change[],
+  delayedOperations: appCommonFilesChanges$change[],
+  operationToAddress: appCommonFilesChanges$change
+) {
+  if (operationToAddress.type === 'mod-obj') {
+    // A shapes modification may fail with `referential-integrity` error, it needs to be performed once the children are set up
+    // We have to deduplicate the logic by extracting this
+    const suboperationToSwitch = operationToAddress.operations.findIndex((suboperation) => {
+      return suboperation.type === 'set' && suboperation.attr === 'shapes' && (suboperation.val as string[]).length > 0;
+    });
+
+    if (suboperationToSwitch !== -1) {
+      delayedOperations.push({
+        type: operationToAddress.type,
+        id: operationToAddress.id,
+        pageId: operationToAddress.pageId,
+        operations: [operationToAddress.operations[suboperationToSwitch]],
+      });
+
+      operationToAddress.operations.splice(suboperationToSwitch, 1);
+    }
+
+    // If no more operation for the original one we can skip it because if `pageId` has changed it would be handled by the second one
+    if (operationToAddress.operations.length > 0) {
+      normalOperations.push(operationToAddress);
+    }
+  } else if (operationToAddress.type === 'add-obj' && (operationToAddress.obj as any).shapes && (operationToAddress.obj as any).shapes.length > 0) {
+    delayedOperations.push({
+      type: 'mod-obj',
+      id: operationToAddress.id,
+      pageId: operationToAddress.pageId,
+      operations: [
+        {
+          type: 'set',
+          attr: 'shapes',
+          val: (operationToAddress.obj as any).shapes,
+        },
+      ],
+    });
+
+    (operationToAddress.obj as any).shapes = []; // Set the initial one sinc erequired
+
+    normalOperations.push(operationToAddress);
+  } else {
+    normalOperations.push(operationToAddress);
+  }
+}
+
 export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocument): Differences {
   const newDocumentName = currentTree.name !== newTree.name ? newTree.name : undefined;
   const newMediasToUpload: string[] = [];
@@ -433,22 +490,37 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
     }
   }
 
-  for (const currentColor of Object.values(currentTree.data.colors)) {
-    assert(currentColor.id);
+  if (currentTree.data.colors) {
+    for (const currentColor of Object.values(currentTree.data.colors)) {
+      assert(currentColor.id);
 
-    flattenCurrentGlobalTree.set(currentColor.id, {
-      _apiType: 'color',
-      ...currentColor,
-    } as LiteColor);
+      flattenCurrentGlobalTree.set(currentColor.id, {
+        _apiType: 'color',
+        ...currentColor,
+      } as LiteColor);
+    }
   }
 
-  for (const currentTypography of Object.values(currentTree.data.typographies)) {
-    assert(currentTypography.id);
+  if (currentTree.data.typographies) {
+    for (const currentTypography of Object.values(currentTree.data.typographies)) {
+      assert(currentTypography.id);
 
-    flattenCurrentGlobalTree.set(currentTypography.id, {
-      _apiType: 'typography',
-      ...currentTypography,
-    } as LiteTypography);
+      flattenCurrentGlobalTree.set(currentTypography.id, {
+        _apiType: 'typography',
+        ...currentTypography,
+      } as LiteTypography);
+    }
+  }
+
+  if (currentTree.data.components) {
+    for (const currentComponent of Object.values(currentTree.data.components)) {
+      assert(currentComponent.id);
+
+      flattenCurrentGlobalTree.set(currentComponent.id, {
+        _apiType: 'component',
+        ...currentComponent,
+      } as LiteComponent);
+    }
   }
 
   for (const newPageNode of Object.values(newTree.data.pagesIndex)) {
@@ -482,22 +554,37 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
     }
   }
 
-  for (const newColor of Object.values(newTree.data.colors)) {
-    assert(newColor.id);
+  if (newTree.data.colors) {
+    for (const newColor of Object.values(newTree.data.colors)) {
+      assert(newColor.id);
 
-    flattenNewGlobalTree.set(newColor.id, {
-      _apiType: 'color',
-      ...newColor,
-    } as LiteColor);
+      flattenNewGlobalTree.set(newColor.id, {
+        _apiType: 'color',
+        ...newColor,
+      } as LiteColor);
+    }
   }
 
-  for (const newTypography of Object.values(newTree.data.typographies)) {
-    assert(newTypography.id);
+  if (newTree.data.typographies) {
+    for (const newTypography of Object.values(newTree.data.typographies)) {
+      assert(newTypography.id);
 
-    flattenNewGlobalTree.set(newTypography.id, {
-      _apiType: 'typography',
-      ...newTypography,
-    } as LiteTypography);
+      flattenNewGlobalTree.set(newTypography.id, {
+        _apiType: 'typography',
+        ...newTypography,
+      } as LiteTypography);
+    }
+  }
+
+  if (newTree.data.components) {
+    for (const newComponent of Object.values(newTree.data.components)) {
+      assert(newComponent.id);
+
+      flattenNewGlobalTree.set(newComponent.id, {
+        _apiType: 'component',
+        ...newComponent,
+      } as LiteComponent);
+    }
   }
 
   const diffResult = getDiff(flattenCurrentGlobalTree, flattenNewGlobalTree);
@@ -505,6 +592,21 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
   console.log(`[nodes differences] ${formatDiffResultLog(diffResult)}`);
 
   const operations: appCommonFilesChanges$change[] = [];
+
+  for (const [, item] of diffResult) {
+    if (item.state === 'removed') {
+      // Components must be deleted before we delete its nodes from the normal tree
+      // Otherwise it corrupts the global document and there is no way to fix it
+      // (trying to delete the node after results in an issue saying `objects` into the component must exist. This should be the saved definition nodes for soft deletion... cannot be patched)
+      if (item.before._apiType === 'component') {
+        operations.push({
+          type: 'del-component',
+          id: item.before.id,
+          skipUndelete: true, // Should prevent the soft delete but not working...
+        });
+      }
+    }
+  }
 
   // Colors must be added/modified before the rest because they are primitives
   for (const [, item] of diffResult) {
@@ -527,6 +629,13 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
             ...propertiesObj,
           } as appCommonTypesTypography$typography, // Other types are unknown, we are fine here if the API triggers an error
         });
+      } else if (item.after._apiType === 'component') {
+        const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
+
+        operations.push({
+          type: 'add-component',
+          ...(propertiesObj as any), // Types do not match due to OpenAPI schema, which is also missing `mainInstancePage/mainInstanceId`
+        });
       }
     } else if (item.state === 'updated') {
       if (item.after._apiType === 'color') {
@@ -547,6 +656,18 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
             ...propertiesObj,
           } as appCommonTypesTypography$typography, // Other types are unknown, we are fine here if the API triggers an error
         });
+      } else if (item.after._apiType === 'component') {
+        const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
+
+        operations.push({
+          type: 'mod-component',
+          id: item.after.id,
+          name: item.after.name,
+          ...{
+            // Needed due to missing type property
+            path: item.after.path,
+          },
+        });
       }
     }
   }
@@ -555,6 +676,8 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
     const item = diffResult.get(graphNodeId);
 
     assert(item);
+
+    const nodeOperationsAfterChildrenAreProcessed: appCommonFilesChanges$change[] = [];
 
     if (item.state === 'added') {
       assert(item.after.id);
@@ -578,12 +701,12 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
           });
         }
       } else if (item.after._apiType === 'node') {
-        const { _apiType, _realPageParentId, _pageId, frameId, id, mainInstance, parentId, ...propertiesObj } = item.after; // Instruction to omit some properties
+        const { _apiType, _realPageParentId, _pageId, frameId, id, parentId, ...propertiesObj } = item.after; // Instruction to omit some properties
 
         if (isPageRootFrame(item.after)) {
           // The root frame is automatically created with its wrapping page (the iteration before this one normally)
           // So we just need to apply modifications if needed
-          operations.push({
+          const operation: appCommonFilesChanges$change = {
             type: 'mod-obj',
             id: rootFrameId,
             pageId: _pageId,
@@ -597,12 +720,14 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
                   val: propertiesObj[property],
                 };
               }),
-          });
+          };
+
+          pushOperationsWithOrderingLogic(operations, nodeOperationsAfterChildrenAreProcessed, operation);
         } else {
           assert(item.after.parentId);
           assert(item.after.frameId);
 
-          operations.push({
+          const operation: appCommonFilesChanges$change = {
             type: 'add-obj',
             id: item.after.id, // Penpot allows forcing the ID at creation
             pageId: item.after._realPageParentId || _pageId,
@@ -611,7 +736,9 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
             obj: {
               ...propertiesObj,
             },
-          });
+          };
+
+          pushOperationsWithOrderingLogic(operations, nodeOperationsAfterChildrenAreProcessed, operation);
 
           // Detect new images
           if (propertiesObj.fills) {
@@ -648,7 +775,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
           }
         }
       } else if (item.after._apiType === 'node') {
-        const { _apiType, _realPageParentId, _pageId, id, mainInstance, ...propertiesObj } = item.after; // Instruction to omit some properties
+        const { _apiType, _realPageParentId, _pageId, id, ...propertiesObj } = item.after; // Instruction to omit some properties
 
         assert(id);
 
@@ -691,7 +818,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
 
         const uniqueProperties = [...new Set(changedFirstLevelProperties)];
 
-        operations.push({
+        const operation: appCommonFilesChanges$change = {
           type: 'mod-obj',
           id: isPageRootFrameFromId(id) ? rootFrameId : id,
           pageId: _pageId,
@@ -705,7 +832,9 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
                   : propertiesObj[property],
             };
           }),
-        });
+        };
+
+        pushOperationsWithOrderingLogic(operations, nodeOperationsAfterChildrenAreProcessed, operation);
       }
     }
 
@@ -716,6 +845,9 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
         browse(childId);
       }
     }
+
+    // The API expects a specific order of execution
+    operations.push(...nodeOperationsAfterChildrenAreProcessed);
   };
 
   const sourcesIds = newGraph.sources();

@@ -1,4 +1,4 @@
-import { ComponentSetNode, FrameNode, SectionNode, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
+import { ComponentNode, ComponentSetNode, FrameNode, SectionNode, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformChildren } from '@figpot/src/features/transformers/partials/transformChildren';
 import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
@@ -15,13 +15,13 @@ import { FrameShape } from '@figpot/src/models/entities/penpot/shapes/frame';
 import { Point } from '@figpot/src/models/entities/penpot/traits/point';
 import { PageRegistry } from '@figpot/src/models/entities/registry';
 
-function isSectionNode(node: FrameNode | SectionNode | ComponentSetNode): node is SectionNode {
+function isSectionNode(node: FrameNode | SectionNode | ComponentNode | ComponentSetNode): node is SectionNode {
   return node.type === 'SECTION';
 }
 
 export function transformFrameNode(
   registry: PageRegistry,
-  node: (FrameNode | SectionNode | ComponentSetNode) & Pick<SubcanvasNode, 'id'>,
+  node: (FrameNode | SectionNode | ComponentNode | ComponentSetNode) & Pick<SubcanvasNode, 'id'>,
   figmaNodeTransform: Transform
 ): FrameShape {
   let frameSpecificAttributes: Partial<FrameShape> = {};

@@ -96,6 +96,20 @@ export function translateTypographyId(figmaTypographyId: string, mapping: Mappin
   return penpotTypographyId;
 }
 
+export function translateComponentId(figmaComponentId: string, mapping: MappingType): string {
+  const penpotMappedComponentId = mapping.components.get(figmaComponentId);
+  if (penpotMappedComponentId) {
+    return penpotMappedComponentId;
+  }
+
+  // Otherwise we create a new one, adding it to the mapping object
+  // Note: we use UUID v7 because Penpot seems to have one with timestamp at the beginning (even if they call if "v8", but this is to be free-form apparently)
+  const penpotComponentId = uuidv7();
+  mapping.components.set(figmaComponentId, penpotComponentId);
+
+  return penpotComponentId;
+}
+
 export function translateUuidAsObjectKey(uuid: string): string {
   return uuid.replaceAll('-', '_');
 }

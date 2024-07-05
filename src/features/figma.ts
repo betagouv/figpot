@@ -49,7 +49,6 @@ export function processDocumentsParametersFromInput(parameters: string[]): Docum
 }
 
 export async function retrieveColors(documentId: string): Promise<FigmaDefinedColor[]> {
-  const typographies: FigmaDefinedTypography[] = [];
   const colors: FigmaDefinedColor[] = [];
 
   try {
@@ -95,8 +94,8 @@ export async function retrieveColors(documentId: string): Promise<FigmaDefinedCo
   return colors;
 }
 
-export function mergeStylesColors(colors: FigmaDefinedColor[], documentTree: GetFileResponse, styles: GetFileNodesResponse) {
-  for (const [, styleNode] of Object.entries(styles.nodes)) {
+export function mergeStylesColors(colors: FigmaDefinedColor[], documentTree: GetFileResponse, stylesNodes: GetFileNodesResponse['nodes']) {
+  for (const [, styleNode] of Object.entries(stylesNodes)) {
     if (documentTree.styles[styleNode.document.id]?.styleType === 'FILL' && styleNode.document.type === 'RECTANGLE') {
       // A Figma style can contains multiple colors so we have to split them to fit with the Penpot logic of "1 style = 1 color"
       for (let i = 0; i < styleNode.document.fills.length; i++) {
@@ -115,10 +114,10 @@ export function mergeStylesColors(colors: FigmaDefinedColor[], documentTree: Get
   }
 }
 
-export function extractStylesTypographies(documentTree: GetFileResponse, styles: GetFileNodesResponse): FigmaDefinedTypography[] {
+export function extractStylesTypographies(documentTree: GetFileResponse, stylesNodes: GetFileNodesResponse['nodes']): FigmaDefinedTypography[] {
   const typographies: FigmaDefinedTypography[] = [];
 
-  for (const [, styleNode] of Object.entries(styles.nodes)) {
+  for (const [, styleNode] of Object.entries(stylesNodes)) {
     if (documentTree.styles[styleNode.document.id]?.styleType === 'TEXT' && styleNode.document.type === 'TEXT') {
       typographies.push({
         id: styleNode.document.id,

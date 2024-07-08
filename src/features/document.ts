@@ -458,6 +458,42 @@ export function pushOperationsWithOrderingLogic(
   }
 }
 
+export function performBasicNodeCreation(
+  normalOperations: appCommonFilesChanges$change[],
+  delayedOperations: appCommonFilesChanges$change[],
+  newMediasToUpload: string[],
+  itemAfter: LiteNode,
+  previousNodeIdBeforeMove?: string
+) {
+  const { _apiType, _realPageParentId, _pageId, frameId, id, parentId, ...propertiesObj } = itemAfter; // Instruction to omit some properties
+
+  assert(itemAfter.parentId);
+  assert(itemAfter.frameId);
+
+  const operation: appCommonFilesChanges$change = {
+    type: 'add-obj',
+    id: itemAfter.id, // Penpot allows forcing the ID at creation
+    pageId: itemAfter._realPageParentId || _pageId,
+    frameId: isPageRootFrameFromId(itemAfter.frameId) ? rootFrameId : itemAfter.frameId,
+    parentId: isPageRootFrameFromId(itemAfter.parentId) ? rootFrameId : itemAfter.parentId,
+    obj: {
+      ...propertiesObj,
+      oldId: previousNodeIdBeforeMove, // Can be used by the Penpot internals, specific to operations when an object is moved across pages (with cut/paste)
+    },
+  };
+
+  pushOperationsWithOrderingLogic(normalOperations, delayedOperations, operation);
+
+  // Detect new images
+  if (propertiesObj.fills) {
+    for (const fill of propertiesObj.fills) {
+      if (fill.fillImage?.id) {
+        newMediasToUpload.push(fill.fillImage.id);
+      }
+    }
+  }
+}
+
 export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocument): Differences {
   const newDocumentName = currentTree.name !== newTree.name ? newTree.name : undefined;
   const newMediasToUpload: string[] = [];
@@ -701,9 +737,9 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
           });
         }
       } else if (item.after._apiType === 'node') {
-        const { _apiType, _realPageParentId, _pageId, frameId, id, parentId, ...propertiesObj } = item.after; // Instruction to omit some properties
-
         if (isPageRootFrame(item.after)) {
+          const { _apiType, _realPageParentId, _pageId, frameId, id, parentId, ...propertiesObj } = item.after; // Instruction to omit some properties
+
           // The root frame is automatically created with its wrapping page (the iteration before this one normally)
           // So we just need to apply modifications if needed
           const operation: appCommonFilesChanges$change = {
@@ -724,30 +760,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
 
           pushOperationsWithOrderingLogic(operations, nodeOperationsAfterChildrenAreProcessed, operation);
         } else {
-          assert(item.after.parentId);
-          assert(item.after.frameId);
-
-          const operation: appCommonFilesChanges$change = {
-            type: 'add-obj',
-            id: item.after.id, // Penpot allows forcing the ID at creation
-            pageId: item.after._realPageParentId || _pageId,
-            frameId: isPageRootFrameFromId(item.after.frameId) ? rootFrameId : item.after.frameId,
-            parentId: isPageRootFrameFromId(item.after.parentId) ? rootFrameId : item.after.parentId,
-            obj: {
-              ...propertiesObj,
-            },
-          };
-
-          pushOperationsWithOrderingLogic(operations, nodeOperationsAfterChildrenAreProcessed, operation);
-
-          // Detect new images
-          if (propertiesObj.fills) {
-            for (const fill of propertiesObj.fills) {
-              if (fill.fillImage?.id) {
-                newMediasToUpload.push(fill.fillImage.id);
-              }
-            }
-          }
+          performBasicNodeCreation(operations, nodeOperationsAfterChildrenAreProcessed, newMediasToUpload, item.after);
         }
       }
     } else if (item.state === 'updated') {
@@ -779,74 +792,87 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
 
         assert(id);
 
-        // No matter if the difference is a creation/change/removal, it's committed the same way
-        const changedFirstLevelProperties: (keyof typeof propertiesObj)[] = [];
-        for (const difference of item.differences) {
-          if (difference.path.length > 0) {
-            const propertyToSet = difference.path[0];
+        // Penpot does not handle moving objects across pages
+        // So to handle this we use a combination of a deletion and a creation
+        // Note: only objects can be moved, not the root frame so not handlind this complex logic
+        if (item.before._apiType === 'node' && item.before._pageId !== item.after._pageId) {
+          operations.push({
+            type: 'del-obj',
+            id: item.before.id,
+            pageId: item.before._pageId,
+          });
 
-            // A value reset must be done by `null`
-            // Note: we have `undefined` in our comparaison since the backend does not return this as value, so forcing the reset value
-            if (difference.type === 'REMOVE' && difference.path.length === 1) {
-              // Checking the property removal, also check the path length since an array item removal will produce a `REMOVE` too
-              (propertiesObj as any)[propertyToSet] = null;
-            }
+          performBasicNodeCreation(operations, nodeOperationsAfterChildrenAreProcessed, newMediasToUpload, item.after, item.before.id);
+        } else {
+          // No matter if the difference is a creation/change/removal, it's committed the same way
+          const changedFirstLevelProperties: (keyof typeof propertiesObj)[] = [];
+          for (const difference of item.differences) {
+            if (difference.path.length > 0) {
+              const propertyToSet = difference.path[0];
 
-            if (Object.hasOwn(propertiesObj, propertyToSet)) {
-              // We exclude differences that have been deconstructed from the initial object
-              changedFirstLevelProperties.push(propertyToSet as keyof typeof propertiesObj);
-            }
+              // A value reset must be done by `null`
+              // Note: we have `undefined` in our comparaison since the backend does not return this as value, so forcing the reset value
+              if (difference.type === 'REMOVE' && difference.path.length === 1) {
+                // Checking the property removal, also check the path length since an array item removal will produce a `REMOVE` too
+                (propertiesObj as any)[propertyToSet] = null;
+              }
 
-            // Detect new images by looking at the expected path that should be concerned
-            // Note: it's possible it has been already uploaded but doing it a new time will be rare with no consequence
-            if (
-              difference.path.length >= 2 &&
-              (difference.type === 'CREATE' || difference.type === 'CHANGE') &&
-              difference.path[difference.path.length - 2] === 'fillImage' &&
-              difference.path[difference.path.length - 1] === 'id'
-            ) {
-              newMediasToUpload.push(difference.value as string);
-            } else if (
-              difference.path.length >= 1 &&
-              (difference.type === 'CREATE' || difference.type === 'CHANGE') &&
-              difference.path[difference.path.length - 1] === 'fillImage'
-            ) {
-              newMediasToUpload.push(difference.value.id as string);
-            }
+              if (Object.hasOwn(propertiesObj, propertyToSet)) {
+                // We exclude differences that have been deconstructed from the initial object
+                changedFirstLevelProperties.push(propertyToSet as keyof typeof propertiesObj);
+              }
 
-            // A few cases objects makes impossible to modify the `parent-id` and `frame-id` (e.g. when having a variant inside it's component set, and we move the variant outside the group)
-            // The triggered error is `error on validating file referential integrity`
-            // The only workaround found is to prepare the move another way (maybe not perfect and a bit of duplicating work but it works)
-            if (difference.path.length === 1 && difference.type === 'CHANGE' && difference.path[0] === 'parentId') {
-              operations.push({
-                type: 'mov-objects',
-                shapes: [item.after.id], // Object needed to change its parent
-                pageId: item.after._realPageParentId || _pageId,
-                parentId: isPageRootFrameFromId(difference.value) ? rootFrameId : difference.value,
-              });
+              // Detect new images by looking at the expected path that should be concerned
+              // Note: it's possible it has been already uploaded but doing it a new time will be rare with no consequence
+              if (
+                difference.path.length >= 2 &&
+                (difference.type === 'CREATE' || difference.type === 'CHANGE') &&
+                difference.path[difference.path.length - 2] === 'fillImage' &&
+                difference.path[difference.path.length - 1] === 'id'
+              ) {
+                newMediasToUpload.push(difference.value as string);
+              } else if (
+                difference.path.length >= 1 &&
+                (difference.type === 'CREATE' || difference.type === 'CHANGE') &&
+                difference.path[difference.path.length - 1] === 'fillImage'
+              ) {
+                newMediasToUpload.push(difference.value.id as string);
+              }
+
+              // A few cases objects makes impossible to modify the `parent-id` and `frame-id` (e.g. when having a variant inside it's component set, and we move the variant outside the group)
+              // The triggered error is `error on validating file referential integrity`
+              // The only workaround found is to prepare the move another way (maybe not perfect and a bit of duplicating work but it works)
+              if (difference.path.length === 1 && difference.type === 'CHANGE' && difference.path[0] === 'parentId') {
+                operations.push({
+                  type: 'mov-objects',
+                  shapes: [item.after.id], // Object needed to change its parent
+                  pageId: item.after._realPageParentId || _pageId,
+                  parentId: isPageRootFrameFromId(difference.value) ? rootFrameId : difference.value,
+                });
+              }
             }
           }
+
+          const uniqueProperties = [...new Set(changedFirstLevelProperties)];
+
+          const operation: appCommonFilesChanges$change = {
+            type: 'mod-obj',
+            id: isPageRootFrameFromId(id) ? rootFrameId : id,
+            pageId: _pageId,
+            operations: uniqueProperties.map((property) => {
+              return {
+                type: 'set',
+                attr: kebabCase(property), // Since it's a value we make sure to respect backend keywords logic (otherwise we ended having 2 `transformInverse` (the initial one, and one from our update))
+                val:
+                  (property === 'parentId' || property === 'frameId') && isPageRootFrameFromId(propertiesObj[property] as string)
+                    ? rootFrameId
+                    : propertiesObj[property],
+              };
+            }),
+          };
+
+          pushOperationsWithOrderingLogic(operations, nodeOperationsAfterChildrenAreProcessed, operation);
         }
-
-        const uniqueProperties = [...new Set(changedFirstLevelProperties)];
-
-        const operation: appCommonFilesChanges$change = {
-          type: 'mod-obj',
-          id: isPageRootFrameFromId(id) ? rootFrameId : id,
-          pageId: _pageId,
-          operations: uniqueProperties.map((property) => {
-            return {
-              type: 'set',
-              attr: kebabCase(property), // Since it's a value we make sure to respect backend keywords logic (otherwise we ended having 2 `transformInverse` (the initial one, and one from our update))
-              val:
-                (property === 'parentId' || property === 'frameId') && isPageRootFrameFromId(propertiesObj[property] as string)
-                  ? rootFrameId
-                  : propertiesObj[property],
-            };
-          }),
-        };
-
-        pushOperationsWithOrderingLogic(operations, nodeOperationsAfterChildrenAreProcessed, operation);
       }
     }
 

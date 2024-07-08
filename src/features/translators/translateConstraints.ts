@@ -5,7 +5,7 @@ import { ConstraintH, ConstraintV } from '@figpot/src/models/entities/penpot/sha
 // On Figma, when expanding a group all shapes despites their constraints will by default expand (constraints `top` and `left`)
 // Whereas on Penpot they won't. It more about internal machinery and we cannot handle this properly (except removing constraints, which risky if originally set by the user)
 
-export const translateConstraintH = (constraint: LayoutConstraint['horizontal']): ConstraintH => {
+export function translateConstraintH(constraint: LayoutConstraint['horizontal']): ConstraintH {
   switch (constraint) {
     case 'RIGHT':
       return 'right';
@@ -20,9 +20,9 @@ export const translateConstraintH = (constraint: LayoutConstraint['horizontal'])
     default:
       throw new Error('constraint enum not taken into account');
   }
-};
+}
 
-export const translateConstraintV = (constraint: LayoutConstraint['vertical']): ConstraintV => {
+export function translateConstraintV(constraint: LayoutConstraint['vertical']): ConstraintV {
   switch (constraint) {
     case 'BOTTOM':
       return 'bottom';
@@ -37,4 +37,4 @@ export const translateConstraintV = (constraint: LayoutConstraint['vertical']): 
     default:
       throw new Error('constraint enum not taken into account');
   }
-};
+}

@@ -18,7 +18,7 @@ type FigmaLayoutSizing = 'FIXED' | 'HUG' | 'FILL';
 
 type FigmaLayoutAlign = 'MIN' | 'CENTER' | 'MAX' | 'STRETCH' | 'INHERIT';
 
-export const translateLayoutFlexDir = (layoutMode: FigmaLayoutMode): LayoutFlexDir | undefined => {
+export function translateLayoutFlexDir(layoutMode: FigmaLayoutMode): LayoutFlexDir | undefined {
   switch (layoutMode) {
     case 'HORIZONTAL':
       return 'row-reverse';
@@ -27,9 +27,9 @@ export const translateLayoutFlexDir = (layoutMode: FigmaLayoutMode): LayoutFlexD
     default:
       return;
   }
-};
+}
 
-export const translateLayoutGap = (layoutMode: FigmaLayoutMode, itemSpacing: number, auto: boolean = false): LayoutGap => {
+export function translateLayoutGap(layoutMode: FigmaLayoutMode, itemSpacing: number, auto: boolean = false): LayoutGap {
   if (auto) {
     return {
       rowGap: 0,
@@ -41,18 +41,18 @@ export const translateLayoutGap = (layoutMode: FigmaLayoutMode, itemSpacing: num
     rowGap: layoutMode === 'VERTICAL' ? itemSpacing : 0,
     columnGap: layoutMode === 'HORIZONTAL' ? itemSpacing : 0,
   };
-};
+}
 
-export const translateLayoutWrapType = (wrap: FigmaWrap): LayoutWrapType => {
+export function translateLayoutWrapType(wrap: FigmaWrap): LayoutWrapType {
   switch (wrap) {
     case 'NO_WRAP':
       return 'nowrap';
     case 'WRAP':
       return 'wrap';
   }
-};
+}
 
-export const translateLayoutPadding = (node: HasFramePropertiesTrait): LayoutPadding | undefined => {
+export function translateLayoutPadding(node: HasFramePropertiesTrait): LayoutPadding | undefined {
   return node.paddingTop !== undefined || node.paddingRight !== undefined || node.paddingBottom !== undefined || node.paddingLeft !== undefined
     ? {
         p1: node.paddingTop ?? 0,
@@ -61,17 +61,17 @@ export const translateLayoutPadding = (node: HasFramePropertiesTrait): LayoutPad
         p4: node.paddingLeft ?? 0,
       }
     : undefined;
-};
+}
 
-export const translateLayoutPaddingType = (node: HasFramePropertiesTrait): 'simple' | 'multiple' => {
+export function translateLayoutPaddingType(node: HasFramePropertiesTrait): 'simple' | 'multiple' {
   if (node.paddingTop === node.paddingBottom && node.paddingRight === node.paddingLeft) {
     return 'simple';
   }
 
   return 'multiple';
-};
+}
 
-export const translateLayoutJustifyContent = (node: HasFramePropertiesTrait): JustifyAlignContent => {
+export function translateLayoutJustifyContent(node: HasFramePropertiesTrait): JustifyAlignContent {
   switch (node.primaryAxisAlignItems) {
     case 'MIN':
       return 'start';
@@ -84,9 +84,9 @@ export const translateLayoutJustifyContent = (node: HasFramePropertiesTrait): Ju
     default:
       return 'stretch';
   }
-};
+}
 
-export const translateLayoutJustifyItems = (node: HasFramePropertiesTrait): JustifyAlignItems => {
+export function translateLayoutJustifyItems(node: HasFramePropertiesTrait): JustifyAlignItems {
   switch (node.primaryAxisAlignItems) {
     case 'MIN':
       return 'start';
@@ -97,9 +97,9 @@ export const translateLayoutJustifyItems = (node: HasFramePropertiesTrait): Just
     default:
       return 'stretch';
   }
-};
+}
 
-export const translateLayoutAlignContent = (node: HasFramePropertiesTrait): JustifyAlignContent => {
+export function translateLayoutAlignContent(node: HasFramePropertiesTrait): JustifyAlignContent {
   switch (node.counterAxisAlignItems) {
     case 'MIN':
       return 'start';
@@ -110,9 +110,9 @@ export const translateLayoutAlignContent = (node: HasFramePropertiesTrait): Just
     default:
       return 'stretch';
   }
-};
+}
 
-export const translateLayoutAlignItems = (node: HasFramePropertiesTrait): JustifyAlignItems => {
+export function translateLayoutAlignItems(node: HasFramePropertiesTrait): JustifyAlignItems {
   switch (node.counterAxisAlignItems) {
     case 'MIN':
       return 'start';
@@ -123,9 +123,9 @@ export const translateLayoutAlignItems = (node: HasFramePropertiesTrait): Justif
     default:
       return 'stretch';
   }
-};
+}
 
-export const translateLayoutSizing = (sizing: FigmaLayoutSizing, isFrame: boolean = false): LayoutSizing => {
+export function translateLayoutSizing(sizing: FigmaLayoutSizing, isFrame: boolean = false): LayoutSizing {
   switch (sizing) {
     case 'FIXED':
       return 'fix';
@@ -134,9 +134,9 @@ export const translateLayoutSizing = (sizing: FigmaLayoutSizing, isFrame: boolea
     case 'FILL':
       return 'fill';
   }
-};
+}
 
-export const translateLayoutItemAlignSelf = (align: FigmaLayoutAlign): LayoutAlignSelf => {
+export function translateLayoutItemAlignSelf(align: FigmaLayoutAlign): LayoutAlignSelf {
   switch (align) {
     case 'MIN':
       return 'start';
@@ -147,4 +147,4 @@ export const translateLayoutItemAlignSelf = (align: FigmaLayoutAlign): LayoutAli
     default:
       return 'stretch';
   }
-};
+}

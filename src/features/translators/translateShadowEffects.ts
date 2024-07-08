@@ -4,10 +4,10 @@ import { DropShadowEffect, Effect, InnerShadowEffect } from '@figpot/src/clients
 import { translateBoundVariables } from '@figpot/src/features/translators/translateBoundVariables';
 import { translateId } from '@figpot/src/features/translators/translateId';
 import { Shadow, ShadowStyle } from '@figpot/src/models/entities/penpot/traits/shadow';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 import { rgbToHex } from '@figpot/src/utils/color';
 
-export function translateShadowEffect(registry: PageRegistry, effect: Effect): Shadow | undefined {
+export function translateShadowEffect(registry: AbstractRegistry, effect: Effect): Shadow | undefined {
   if (effect.type !== 'DROP_SHADOW' && effect.type !== 'INNER_SHADOW') {
     return;
   }
@@ -27,7 +27,7 @@ export function translateShadowEffect(registry: PageRegistry, effect: Effect): S
   };
 }
 
-export function translateShadowEffects(registry: PageRegistry, effects: readonly Effect[], figmaNodeId: string): Shadow[] {
+export function translateShadowEffects(registry: AbstractRegistry, effects: readonly Effect[], figmaNodeId: string): Shadow[] {
   const shadows: Shadow[] = [];
 
   for (const [effectIndex, effect] of Object.entries(effects)) {

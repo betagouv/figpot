@@ -3,27 +3,34 @@ import { transformBlend } from '@figpot/src/features/transformers/partials/trans
 import { transformChildren } from '@figpot/src/features/transformers/partials/transformChildren';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
+import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { translateId } from '@figpot/src/features/translators/translateId';
 import { GroupShape } from '@figpot/src/models/entities/penpot/shapes/group';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
-export function transformGroupNode(registry: PageRegistry, node: GroupNode, closestFigmaFrameId: string, figmaNodeTransform: Transform): GroupShape {
+export function transformGroupNode(
+  registry: AbstractRegistry,
+  node: GroupNode,
+  closestFigmaFrameId: string,
+  figmaNodeTransform: Transform
+): GroupShape {
   transformChildren(registry, node, closestFigmaFrameId, figmaNodeTransform);
 
   return {
     shapes: node.children.map((figmaChild) => translateId(figmaChild.id, registry.getMapping())),
-    ...transformGroupNodeLike(node, figmaNodeTransform),
+    ...transformGroupNodeLike(registry, node, figmaNodeTransform),
     ...transformEffects(registry, node),
     ...transformBlend(node),
   };
 }
 
-export function transformGroupNodeLike(node: HasLayoutTrait & IsLayerTrait, figmaNodeTransform: Transform): GroupShape {
+export function transformGroupNodeLike(registry: AbstractRegistry, node: HasLayoutTrait & IsLayerTrait, figmaNodeTransform: Transform): GroupShape {
   return {
     type: 'group',
     name: node.name,
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformSceneNode(node),
+    ...transformInheritance(registry, node),
   };
 }

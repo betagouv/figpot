@@ -4,15 +4,16 @@ import { transformConstraints } from '@figpot/src/features/transformers/partials
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
+import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
 import { transformLayoutAttributes } from '@figpot/src/features/transformers/partials/transformLayout';
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
 import { CircleShape } from '@figpot/src/models/entities/penpot/shapes/circle';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
 export function transformEllipseNode(
-  registry: PageRegistry,
+  registry: AbstractRegistry,
   node: EllipseNode & Pick<SubcanvasNode, 'id'>,
   figmaNodeTransform: Transform
 ): CircleShape {
@@ -28,5 +29,6 @@ export function transformEllipseNode(
     ...transformProportion(node),
     ...transformLayoutAttributes(node),
     ...transformConstraints(node),
+    ...transformInheritance(registry, node),
   };
 }

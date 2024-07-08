@@ -1,10 +1,10 @@
 import { HasGeometryTrait, IndividualStrokesTrait, Paint, strokeAlign as StrokeAlign } from '@figpot/src/clients/figma';
 import { translateFill } from '@figpot/src/features/translators/fills/translateFills';
 import { Stroke, StrokeAlignment, StrokeCaps } from '@figpot/src/models/entities/penpot/traits/stroke';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
 export function translateStrokes(
-  registry: PageRegistry,
+  registry: AbstractRegistry,
   node: HasGeometryTrait | (HasGeometryTrait & IndividualStrokesTrait),
   strokeCaps: (stroke: Stroke) => Stroke = (stroke) => stroke
 ): Stroke[] {
@@ -22,7 +22,7 @@ export function translateStrokes(
 }
 
 export function translateStroke(
-  registry: PageRegistry,
+  registry: AbstractRegistry,
   paint: Paint,
   sharedStrokeProperties: Stroke,
   strokeCaps: (stroke: Stroke) => Stroke,

@@ -5,7 +5,7 @@ import { translateGrowType } from '@figpot/src/features/translators/text/propert
 import { translateVerticalAlign } from '@figpot/src/features/translators/text/properties/translateVerticalAlign';
 import { transformTextStyle, translateTextSegments } from '@figpot/src/features/translators/text/translateTextSegments';
 import { TextAttributes, TextShape } from '@figpot/src/models/entities/penpot/shapes/text';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
 export type Paragraph = TextSegment[];
 
@@ -72,7 +72,7 @@ function extractTextSegments(node: TextNode): Paragraph[] {
   return paragraphs;
 }
 
-export function transformText(registry: PageRegistry, node: TextNode): TextAttributes & Pick<TextShape, 'growType'> {
+export function transformText(registry: AbstractRegistry, node: TextNode): TextAttributes & Pick<TextShape, 'growType'> {
   const styledParagraphs = extractTextSegments(node);
 
   return {

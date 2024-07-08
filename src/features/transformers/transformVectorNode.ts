@@ -1,15 +1,16 @@
 import { Transform, VectorNode } from '@figpot/src/clients/figma';
 import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
+import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
 import { transformVectorPaths } from '@figpot/src/features/transformers/partials/transformVectorPaths';
 import { transformGroupNodeLike } from '@figpot/src/features/transformers/transformGroupNode';
 import { translateId } from '@figpot/src/features/translators/translateId';
 import { GroupShape } from '@figpot/src/models/entities/penpot/shapes/group';
 import { PathShape } from '@figpot/src/models/entities/penpot/shapes/path';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
 export function transformVectorNode(
-  registry: PageRegistry,
+  registry: AbstractRegistry,
   node: VectorNode,
   closestFigmaFrameId: string,
   figmaNodeTransform: Transform
@@ -23,6 +24,7 @@ export function transformVectorNode(
       name: node.name,
       ...dimensionRotationPosition,
       ...transformConstraints(node),
+      ...transformInheritance(registry, node),
     };
   }
 
@@ -43,7 +45,7 @@ export function transformVectorNode(
 
   return {
     shapes: children.map((penpotChild) => penpotChild.id as string),
-    ...transformGroupNodeLike(node, figmaNodeTransform),
+    ...transformGroupNodeLike(registry, node, figmaNodeTransform),
     ...transformConstraints(node),
   };
 }

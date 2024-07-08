@@ -7,13 +7,14 @@ import { transformConstraints } from '@figpot/src/features/transformers/partials
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
+import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
 import { transformLayoutAttributes } from '@figpot/src/features/transformers/partials/transformLayout';
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { PathShape, Segment } from '@figpot/src/models/entities/penpot/shapes/path';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
 function translatePathNode(node: StarNode | RegularPolygonNode, figmaNodeTransform: Transform): Segment[] {
   assert(node.fillGeometry);
@@ -21,7 +22,7 @@ function translatePathNode(node: StarNode | RegularPolygonNode, figmaNodeTransfo
   return translateCommands(node, figmaNodeTransform, parseSVG(node.fillGeometry[0].path));
 }
 
-export function transformPathNode(registry: PageRegistry, node: StarNode | RegularPolygonNode, figmaNodeTransform: Transform): PathShape {
+export function transformPathNode(registry: AbstractRegistry, node: StarNode | RegularPolygonNode, figmaNodeTransform: Transform): PathShape {
   return {
     type: 'path',
     name: node.name,
@@ -35,5 +36,6 @@ export function transformPathNode(registry: PageRegistry, node: StarNode | Regul
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformLayoutAttributes(node),
     ...transformConstraints(node),
+    ...transformInheritance(registry, node),
   };
 }

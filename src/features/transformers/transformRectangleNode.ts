@@ -6,15 +6,16 @@ import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/t
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
 import { transformFlip } from '@figpot/src/features/transformers/partials/transformFlip';
+import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
 import { transformLayoutAttributes } from '@figpot/src/features/transformers/partials/transformLayout';
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
 import { RectShape } from '@figpot/src/models/entities/penpot/shapes/rect';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
 export function transformRectangleNode(
-  registry: PageRegistry,
+  registry: AbstractRegistry,
   node: RectangleNode & Pick<SubcanvasNode, 'id'>,
   figmaNodeTransform: Transform
 ): RectShape {
@@ -32,5 +33,6 @@ export function transformRectangleNode(
     ...transformLayoutAttributes(node),
     ...transformCornerRadius(node),
     ...transformConstraints(node),
+    ...transformInheritance(registry, node),
   };
 }

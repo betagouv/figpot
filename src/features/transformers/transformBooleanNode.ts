@@ -7,6 +7,7 @@ import { transformChildren } from '@figpot/src/features/transformers/partials/tr
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
+import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
 import { transformLayoutAttributes } from '@figpot/src/features/transformers/partials/transformLayout';
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
@@ -15,7 +16,7 @@ import { translateBoolType } from '@figpot/src/features/translators/translateBoo
 import { translateId } from '@figpot/src/features/translators/translateId';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { BoolContent, BoolShape } from '@figpot/src/models/entities/penpot/shapes/bool';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
 function translatePathNode(node: BooleanOperationNode, figmaNodeTransform: Transform): BoolContent[] {
   assert(node.fillGeometry);
@@ -26,7 +27,7 @@ function translatePathNode(node: BooleanOperationNode, figmaNodeTransform: Trans
 }
 
 export function transformBooleanNode(
-  registry: PageRegistry,
+  registry: AbstractRegistry,
   node: BooleanOperationNode,
   closestFigmaFrameId: string,
   figmaNodeTransform: Transform
@@ -47,5 +48,6 @@ export function transformBooleanNode(
     ...transformBlend(node),
     ...transformProportion(node),
     ...transformLayoutAttributes(node),
+    ...transformInheritance(registry, node),
   };
 }

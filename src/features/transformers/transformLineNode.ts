@@ -5,13 +5,14 @@ import { transformBlend } from '@figpot/src/features/transformers/partials/trans
 import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
+import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
 import { transformLayoutAttributes } from '@figpot/src/features/transformers/partials/transformLayout';
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { PathShape, Segment } from '@figpot/src/models/entities/penpot/shapes/path';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
 function translateLineNode(node: LineNode, figmaNodeTransform: Transform): Segment[] {
   assert(node.size);
@@ -38,7 +39,7 @@ function translateLineNode(node: LineNode, figmaNodeTransform: Transform): Segme
  *
  * To represent the line rotated we do take into account the rotation of the line, but only in its content.
  */
-export function transformLineNode(registry: PageRegistry, node: LineNode, figmaNodeTransform: Transform): PathShape {
+export function transformLineNode(registry: AbstractRegistry, node: LineNode, figmaNodeTransform: Transform): PathShape {
   return {
     type: 'path',
     name: node.name,
@@ -51,5 +52,6 @@ export function transformLineNode(registry: PageRegistry, node: LineNode, figmaN
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformLayoutAttributes(node),
     ...transformConstraints(node),
+    ...transformInheritance(registry, node),
   };
 }

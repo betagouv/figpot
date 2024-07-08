@@ -5,14 +5,14 @@ import { translateColorId, translateDocumentId } from '@figpot/src/features/tran
 import { translateStrokeCap, translateStrokes } from '@figpot/src/features/translators/translateStrokes';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { Stroke } from '@figpot/src/models/entities/penpot/traits/stroke';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
 function hasFillGeometry(node: HasGeometryTrait): boolean {
   return !!node.fillGeometry && node.fillGeometry.length > 0;
 }
 
 export function transformStrokes(
-  registry: PageRegistry,
+  registry: AbstractRegistry,
   node: HasGeometryTrait | (HasGeometryTrait & IndividualStrokesTrait)
 ): Pick<ShapeAttributes, 'strokes'> {
   const vectorNetwork = node.strokeGeometry;
@@ -53,7 +53,7 @@ export function transformStrokes(
 //   return vertexs.find((vertex) => vertex.x === command.x && vertex.y === command.y);
 // }
 
-export function transformStrokesFromVector(registry: PageRegistry, node: VectorNode, vector: Command[]): Pick<ShapeAttributes, 'strokes'> {
+export function transformStrokesFromVector(registry: AbstractRegistry, node: VectorNode, vector: Command[]): Pick<ShapeAttributes, 'strokes'> {
   const strokeCaps = (stroke: Stroke) => {
     // if (vectorRegion !== undefined) {
     //   return stroke;

@@ -12,7 +12,7 @@ import { transformStrokesFromVector } from '@figpot/src/features/transformers/pa
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { translateWindingRule } from '@figpot/src/features/translators/vectors/translateWindingRule';
 import { PathShape } from '@figpot/src/models/entities/penpot/shapes/path';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
 function normalizePath(path: string): string {
   // Round to 2 decimal places all numbers
@@ -33,7 +33,7 @@ function getMergedFill(node: VectorNode, vectorPath: Path): Paint[] | null {
 }
 
 function transformVectorPath(
-  registry: PageRegistry,
+  registry: AbstractRegistry,
   node: VectorNode,
   figmaNodeTransform: Transform,
   vectorPath: Path,
@@ -62,7 +62,7 @@ function transformVectorPath(
   };
 }
 
-export function transformVectorPaths(registry: PageRegistry, node: VectorNode, figmaNodeTransform: Transform): PathShape[] {
+export function transformVectorPaths(registry: AbstractRegistry, node: VectorNode, figmaNodeTransform: Transform): PathShape[] {
   assert(node.strokeGeometry);
   assert(node.fillGeometry);
 

@@ -1,4 +1,4 @@
-import { ComponentNode, ComponentSetNode, FrameNode, SectionNode, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
+import { ComponentNode, ComponentSetNode, FrameNode, InstanceNode, SectionNode, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformChildren } from '@figpot/src/features/transformers/partials/transformChildren';
 import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
@@ -6,6 +6,7 @@ import { transformCornerRadius } from '@figpot/src/features/transformers/partial
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
+import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
 import { transformAutoLayout, transformLayoutAttributes } from '@figpot/src/features/transformers/partials/transformLayout';
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
@@ -13,15 +14,15 @@ import { transformStrokes } from '@figpot/src/features/transformers/partials/tra
 import { translateId } from '@figpot/src/features/translators/translateId';
 import { FrameShape } from '@figpot/src/models/entities/penpot/shapes/frame';
 import { Point } from '@figpot/src/models/entities/penpot/traits/point';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
-function isSectionNode(node: FrameNode | SectionNode | ComponentNode | ComponentSetNode): node is SectionNode {
+function isSectionNode(node: FrameNode | SectionNode | ComponentNode | ComponentSetNode | InstanceNode): node is SectionNode {
   return node.type === 'SECTION';
 }
 
 export function transformFrameNode(
-  registry: PageRegistry,
-  node: (FrameNode | SectionNode | ComponentNode | ComponentSetNode) & Pick<SubcanvasNode, 'id'>,
+  registry: AbstractRegistry,
+  node: (FrameNode | SectionNode | ComponentNode | ComponentSetNode | InstanceNode) & Pick<SubcanvasNode, 'id'>,
   figmaNodeTransform: Transform
 ): FrameShape {
   let frameSpecificAttributes: Partial<FrameShape> = {};
@@ -40,6 +41,7 @@ export function transformFrameNode(
       ...transformEffects(registry, node),
       ...transformConstraints(node),
       ...transformAutoLayout(node),
+      ...transformInheritance(registry, node),
     };
   }
 

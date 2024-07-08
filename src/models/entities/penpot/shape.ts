@@ -9,6 +9,7 @@ import { Point } from '@figpot/src/models/entities/penpot/traits/point';
 import { Selrect } from '@figpot/src/models/entities/penpot/traits/selrect';
 import { Shadow } from '@figpot/src/models/entities/penpot/traits/shadow';
 import { Stroke } from '@figpot/src/models/entities/penpot/traits/stroke';
+import { SyncGroups } from '@figpot/src/models/entities/penpot/traits/syncGroups';
 import { Uuid } from '@figpot/src/models/entities/penpot/traits/uuid';
 
 export type GrowType = 'auto-width' | 'auto-height' | 'fixed';
@@ -75,4 +76,5 @@ export type ShapeAttributes = {
   shadow?: Shadow[];
   blur?: Blur;
   growType?: GrowType;
+  touched?: SyncGroups[];
 };

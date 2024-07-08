@@ -3,11 +3,11 @@ import { transformGroupNodeLike } from '@figpot/src/features/transformers/transf
 import { transformSceneNode } from '@figpot/src/features/transformers/transformSceneNode';
 import { translateId } from '@figpot/src/features/translators/translateId';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 import { cumulateNodeTransforms, isTransformedNode } from '@figpot/src/utils/matrix';
 
 export function translateChildren(
-  registry: PageRegistry,
+  registry: AbstractRegistry,
   figmaChildren: SubcanvasNode[],
   figmaParentId: string,
   closestFigmaFrameId: string,
@@ -40,7 +40,7 @@ export function translateChildren(
  * @maskIndex The index of the mask node in the children array
  */
 export function translateMaskChildren(
-  registry: PageRegistry,
+  registry: AbstractRegistry,
   figmaChildren: SubcanvasNode[],
   maskIndex: number,
   figmaParentId: string,
@@ -82,7 +82,7 @@ export function translateMaskChildren(
   // }
 
   // const maskGroup = {
-  //   ...transformGroupNodeLike(maskChild),
+  //   ...transformGroupNodeLike(registry, maskChild, parentCumulativeTransform),
   //   children: maskedChildren,
   //   maskedGroup: true,
   // };

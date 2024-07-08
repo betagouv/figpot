@@ -1,13 +1,13 @@
 import { HasChildrenTrait, HasMaskTrait, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { translateChildren, translateMaskChildren } from '@figpot/src/features/translators/translateChildren';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
 function hasMaskTrait(node: SubcanvasNode): node is SubcanvasNode & HasMaskTrait {
   return 'isMask' in node;
 }
 
 export function transformChildren(
-  registry: PageRegistry,
+  registry: AbstractRegistry,
   node: HasChildrenTrait & Pick<SubcanvasNode, 'id'>,
   closestFigmaFrameId: string,
   parentCumulativeTransform: Transform

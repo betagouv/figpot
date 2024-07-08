@@ -4,15 +4,16 @@ import { transformConstraints } from '@figpot/src/features/transformers/partials
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformFlip } from '@figpot/src/features/transformers/partials/transformFlip';
+import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
 import { transformLayoutAttributes } from '@figpot/src/features/transformers/partials/transformLayout';
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
 import { transformText } from '@figpot/src/features/transformers/partials/transformText';
 import { TextShape } from '@figpot/src/models/entities/penpot/shapes/text';
-import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
-export function transformTextNode(registry: PageRegistry, node: TextNode, figmaNodeTransform: Transform): TextShape {
+export function transformTextNode(registry: AbstractRegistry, node: TextNode, figmaNodeTransform: Transform): TextShape {
   return {
     type: 'text',
     name: node.name,
@@ -26,5 +27,6 @@ export function transformTextNode(registry: PageRegistry, node: TextNode, figmaN
     ...transformLayoutAttributes(node),
     ...transformStrokes(registry, node),
     ...transformConstraints(node),
+    ...transformInheritance(registry, node),
   };
 }

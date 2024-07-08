@@ -30,7 +30,7 @@ export const neutralTransforMatrix: Matrix = {
 export function transformDimensionAndRotationAndPosition(
   node: HasLayoutTrait,
   nodeTransform: Transform
-): Pick<ShapeBaseAttributes, 'selrect' | 'points' | 'transform' | 'transformInverse' | 'rotation'> &
+): Pick<ShapeBaseAttributes, 'selrect' | 'points' | 'transform' | 'transformInverse' | 'rotation' | 'flipX' | 'flipY'> &
   Pick<ShapeGeomAttributes, 'x' | 'y' | 'width' | 'height'> {
   assert(node.absoluteBoundingBox);
   assert(node.size);
@@ -69,6 +69,9 @@ export function transformDimensionAndRotationAndPosition(
       rotation: 0,
       transform: neutralTransforMatrix,
       transformInverse: neutralTransforMatrix,
+      // TODO: implement (here just to avoid useless diff for now)
+      flipX: null,
+      flipY: null,
     };
   }
 
@@ -135,5 +138,8 @@ export function transformDimensionAndRotationAndPosition(
       e: 0,
       f: 0,
     },
+    // TODO: implement (here just to avoid useless diff for now)
+    flipX: null,
+    flipY: null,
   };
 }

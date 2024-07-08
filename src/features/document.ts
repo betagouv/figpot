@@ -813,6 +813,18 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
             ) {
               newMediasToUpload.push(difference.value.id as string);
             }
+
+            // A few cases objects makes impossible to modify the `parent-id` and `frame-id` (e.g. when having a variant inside it's component set, and we move the variant outside the group)
+            // The triggered error is `error on validating file referential integrity`
+            // The only workaround found is to prepare the move another way (maybe not perfect and a bit of duplicating work but it works)
+            if (difference.path.length === 1 && difference.type === 'CHANGE' && difference.path[0] === 'parentId') {
+              operations.push({
+                type: 'mov-objects',
+                shapes: [item.after.id], // Object needed to change its parent
+                pageId: item.after._realPageParentId || _pageId,
+                parentId: isPageRootFrameFromId(difference.value) ? rootFrameId : difference.value,
+              });
+            }
           }
         }
 

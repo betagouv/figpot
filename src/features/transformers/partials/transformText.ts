@@ -88,7 +88,7 @@ export function transformText(registry: AbstractRegistry, node: TextNode): TextA
                     return {
                       type: 'paragraph',
                       children: translateTextSegments(registry, node, paragraph),
-                      ...transformTextStyle(registry, node, paragraph[0]),
+                      ...transformTextStyle(registry, node, paragraph.length > 0 ? paragraph[0].style : node.style), // A paragraph can be empty, defaulting to the node style (maybe it should be adjusted to take style of the previous paragraph?)
                       ...transformFills(registry, node),
                     };
                   })

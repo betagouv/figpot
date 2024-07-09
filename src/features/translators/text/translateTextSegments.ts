@@ -18,13 +18,11 @@ export function translateTextSegments(registry: BoundVariableRegistry, node: Tex
   return segments.map((segment) => translateStyleTextSegment(registry, node, segment));
 }
 
-export function transformTextStyle(registry: BoundVariableRegistry, node: TextNode, segment: TextSegment): TextStyle {
-  assert(segment.style.fontSize);
-
+export function transformTextStyle(registry: BoundVariableRegistry, node: TextNode, style: TypeStyle): TextStyle {
   const typographyStyleId = getTypographyStyleId(node);
 
   return {
-    ...partialTransformTextStyle(registry, segment.style),
+    ...partialTransformTextStyle(registry, style),
     ...(typographyStyleId
       ? {
           typographyRefId: translateTypographyId(typographyStyleId, registry.getMapping()),
@@ -53,7 +51,7 @@ function translateStyleTextSegment(registry: BoundVariableRegistry, node: TextNo
 
   return {
     text: segment.characters,
-    ...transformTextStyle(registry, node, segment),
+    ...transformTextStyle(registry, node, segment.style),
     ...transformFills(registry, segment.style as MinimalFillsTrait), // TypeScript was not detecting the check made on `.fills`
   };
 }

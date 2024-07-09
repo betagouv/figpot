@@ -11,6 +11,7 @@ import {
   TypeStyle,
   VariableAlias,
   getFile,
+  getFileNodes,
   getLocalVariables,
   getProjectFiles,
   getTeamProjects,
@@ -46,6 +47,54 @@ export function processDocumentsParametersFromInput(parameters: string[]): Docum
       penpotDocument: parts[1], // May be undefined if the user wants a new Penpot document
     };
   });
+}
+
+export async function retrieveStylesNodes(documentId: string, stylesIds: string[]): Promise<GetFileNodesResponse['nodes']> {
+  if (!stylesIds.length) {
+    return {};
+  }
+
+  const nodes: GetFileNodesResponse['nodes'] = {};
+
+  // Figma gateway has URL length limit that is reached when having too many styles
+  // So we need to chunk according to this limit to minize calls (have to do it step by step because each entry has a different length)
+  // Ref: https://stackoverflow.com/a/40250849/3608410
+  // Note: styles types `GRID` and `EFFECT` are most of the time a few, so no removing them for retrieval for future use
+  const urlLengthLimitBytes = 8_192;
+  const remainingBytesPerRequest = urlLengthLimitBytes - `https://api.figma.com/v1/files/${documentId}/nodes?depth=1&ids=`.length - 10; // We add a safe marging of 10 in case of specific default adding
+
+  // [IMPORTANT] The generated Figma client is encoding all query parameters so we need to take this into account for `:` and `,`
+  const delimiterLength = encodeURIComponent(',').length;
+
+  let chunks: string[][] = [[]];
+  let currentChunkIndex = 0;
+  let currentChunkCount = 0;
+  for (const styleId of stylesIds) {
+    const encodedStyleIdLength = encodeURIComponent(styleId).length;
+
+    // Take into account the `,` delimiter
+    if (currentChunkCount + Math.max(chunks[currentChunkIndex].length - 1, 0) * delimiterLength + encodedStyleIdLength > remainingBytesPerRequest) {
+      chunks.push([]);
+      currentChunkIndex++;
+      currentChunkCount = 0;
+    }
+
+    chunks[currentChunkIndex].push(styleId);
+    currentChunkCount += encodedStyleIdLength;
+  }
+
+  for (const stylesIds of chunks) {
+    const response = await getFileNodes({
+      fileKey: documentId,
+      ids: stylesIds.join(','),
+      depth: 1, // Should only return styles but just in case...
+    });
+
+    // Merge nodes objects
+    Object.assign(nodes, response.nodes);
+  }
+
+  return nodes;
 }
 
 export async function retrieveColors(documentId: string): Promise<FigmaDefinedColor[]> {

@@ -1070,14 +1070,55 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
   }
 
   if (differences.newTreeOperations.length > 0) {
-    await postCommandUpdateFile({
-      requestBody: {
-        id: penpotDocumentId,
-        revn: 0, // Required but does no block to use a default one
-        sessionId: '00000000-0000-0000-0000-000000000000', // It has to be UUID format, no matter the value for us
-        changes: differences.newTreeOperations,
-      },
-    });
+    // [IMPORTANT] The Penpot scripts defines a default maximum body to 314572800 (300MB) (see `PENPOT_HTTP_SERVER_MAX_MULTIPART_BODY_SIZE`)
+    // but this seems not used in their code. The limit reached at runtime is 31457280 (30MB)
+    // For huge design systems the limit is easily reached since in adddition we use raw JSON and not the Penpot transit protocol that could help a bit (but would complexify the implementation since no JS Penpot mapper for now)
+    // We need to chunk operations if needed
+    const bodyLimitBytes = 31_457_280;
+
+    // Removing a hardcoded amount simulating the `Differences` structure
+    // It's not perfect but it would add complexity to have it exact
+    const remainingBodyBytes = bodyLimitBytes - 1_000_000;
+
+    const chunks: appCommonFilesChanges$change[][] = [[]];
+    let currentChunkIndex = 0;
+    let currentChunkCount = 0;
+    for (const operation of differences.newTreeOperations) {
+      const encodedOperationLength = JSON.stringify(operation).length;
+
+      // Take into account the `,` delimiter
+      if (currentChunkCount + Math.max(chunks[currentChunkIndex].length - 1, 0) + encodedOperationLength > remainingBodyBytes) {
+        chunks.push([]);
+        currentChunkIndex++;
+        currentChunkCount = 0;
+      }
+
+      chunks[currentChunkIndex].push(operation);
+      currentChunkCount += encodedOperationLength;
+    }
+
+    for (let i = 0; i < chunks.length; i++) {
+      try {
+        console.info(`processing the modifications chunk (${i + 1}/${chunks.length}). It contains ${chunks[i].length} operations`);
+
+        await postCommandUpdateFile({
+          requestBody: {
+            id: penpotDocumentId,
+            revn: 0, // Required but does no block to use a default one
+            sessionId: '00000000-0000-0000-0000-000000000000', // It has to be UUID format, no matter the value for us
+            changes: chunks[i],
+          },
+        });
+      } catch (error) {
+        if (i > 1) {
+          console.warn(
+            `it has failed while being processing the chunk (${i + 1}/${chunks.length}). Since first modifications have been processed by the server you must rerun the entire synchronization command`
+          );
+        }
+
+        throw error;
+      }
+    }
   }
 }
 

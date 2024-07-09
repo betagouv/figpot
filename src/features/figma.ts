@@ -66,7 +66,7 @@ export async function retrieveStylesNodes(documentId: string, stylesIds: string[
   // [IMPORTANT] The generated Figma client is encoding all query parameters so we need to take this into account for `:` and `,`
   const delimiterLength = encodeURIComponent(',').length;
 
-  let chunks: string[][] = [[]];
+  const chunks: string[][] = [[]];
   let currentChunkIndex = 0;
   let currentChunkCount = 0;
   for (const styleId of stylesIds) {

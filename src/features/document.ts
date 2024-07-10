@@ -404,6 +404,7 @@ export interface Differences {
 export function pushOperationsWithOrderingLogic(
   normalOperations: appCommonFilesChanges$change[],
   delayedOperations: appCommonFilesChanges$change[],
+  delayedForChildrenOperations: appCommonFilesChanges$change[],
   operationToAddress: appCommonFilesChanges$change
 ) {
   if (operationToAddress.type === 'mod-obj') {
@@ -414,7 +415,7 @@ export function pushOperationsWithOrderingLogic(
     });
 
     if (suboperationToSwitch !== -1) {
-      delayedOperations.push({
+      delayedForChildrenOperations.push({
         type: operationToAddress.type,
         id: operationToAddress.id,
         pageId: operationToAddress.pageId,
@@ -428,21 +429,23 @@ export function pushOperationsWithOrderingLogic(
     if (operationToAddress.operations.length > 0) {
       normalOperations.push(operationToAddress);
     }
-  } else if (operationToAddress.type === 'add-obj' && (operationToAddress.obj as any).shapes && (operationToAddress.obj as any).shapes.length > 0) {
-    delayedOperations.push({
-      type: 'mod-obj',
-      id: operationToAddress.id,
-      pageId: operationToAddress.pageId,
-      operations: [
-        {
-          type: 'set',
-          attr: 'shapes',
-          val: (operationToAddress.obj as any).shapes,
-        },
-      ],
-    });
+  } else if (operationToAddress.type === 'add-obj') {
+    if ((operationToAddress.obj as any).shapes && (operationToAddress.obj as any).shapes.length > 0) {
+      delayedForChildrenOperations.push({
+        type: 'mod-obj',
+        id: operationToAddress.id,
+        pageId: operationToAddress.pageId,
+        operations: [
+          {
+            type: 'set',
+            attr: 'shapes',
+            val: (operationToAddress.obj as any).shapes,
+          },
+        ],
+      });
 
-    (operationToAddress.obj as any).shapes = []; // Set the initial one sinc erequired
+      (operationToAddress.obj as any).shapes = []; // Set the initial one sinc erequired
+    }
 
     normalOperations.push(operationToAddress);
   } else {
@@ -450,14 +453,69 @@ export function pushOperationsWithOrderingLogic(
   }
 }
 
+export function delayBindingOperation(
+  delayedOperations: appCommonFilesChanges$change[],
+  nodeId?: string,
+  pageId?: string,
+  componentId?: string,
+  componentFile?: string,
+  componentRoot?: boolean,
+  mainInstance?: boolean,
+  shapeRef?: string
+) {
+  // Sometimes the API requires the targeted node by `shapeRef` to be created before (sometimes not)
+  // So we decided to delay all bindings to be sure locally all main component instances exist
+  // Note: maybe it happens since we chunk operations for large documents
+  // Note: we have to delay all component stuff otherwise the API invalidates the input
+  const delayedOperation: appCommonFilesChanges$change = {
+    type: 'mod-obj',
+    id: nodeId,
+    pageId: pageId,
+    operations: [],
+  };
+
+  // A main instance has no `shapeRef`, and the API refuses it if `null/undefined` so using conditions to avoid triggering a backend calculation
+  if (componentId !== undefined) {
+    delayedOperation.operations.push({ type: 'set', attr: kebabCase('componentId'), val: componentId });
+  }
+  if (componentFile !== undefined) {
+    delayedOperation.operations.push({ type: 'set', attr: kebabCase('componentFile'), val: componentFile });
+  }
+  if (componentRoot !== undefined) {
+    delayedOperation.operations.push({ type: 'set', attr: kebabCase('componentRoot'), val: componentRoot });
+  }
+  if (mainInstance !== undefined) {
+    delayedOperation.operations.push({ type: 'set', attr: kebabCase('mainInstance'), val: mainInstance });
+  }
+  if (shapeRef !== undefined) {
+    delayedOperation.operations.push({ type: 'set', attr: kebabCase('shapeRef'), val: shapeRef });
+  }
+
+  delayedOperations.push(delayedOperation);
+}
+
 export function performBasicNodeCreation(
   normalOperations: appCommonFilesChanges$change[],
   delayedOperations: appCommonFilesChanges$change[],
+  delayedForChildrenOperations: appCommonFilesChanges$change[],
   newMediasToUpload: string[],
   itemAfter: LiteNode,
   previousNodeIdBeforeMove?: string
 ) {
-  const { _apiType, _realPageParentId, _pageId, frameId, id, parentId, ...propertiesObj } = itemAfter; // Instruction to omit some properties
+  const {
+    _apiType,
+    _realPageParentId,
+    _pageId,
+    frameId,
+    id,
+    parentId,
+    componentId,
+    componentFile,
+    componentRoot,
+    mainInstance,
+    shapeRef,
+    ...propertiesObj
+  } = itemAfter; // Instruction to omit some properties
 
   assert(itemAfter.parentId);
   assert(itemAfter.frameId);
@@ -474,7 +532,12 @@ export function performBasicNodeCreation(
     },
   };
 
-  pushOperationsWithOrderingLogic(normalOperations, delayedOperations, operation);
+  pushOperationsWithOrderingLogic(normalOperations, delayedOperations, delayedForChildrenOperations, operation);
+
+
+  if (componentId) {
+    delayBindingOperation(delayedOperations, id, _pageId, componentId, componentFile, componentRoot, mainInstance, shapeRef);
+  }
 
   // Detect new images
   if (propertiesObj.fills) {
@@ -620,6 +683,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
   console.log(`[nodes differences] ${formatDiffResultLog(diffResult)}`);
 
   const operations: appCommonFilesChanges$change[] = [];
+  const delayedOperations: typeof operations = [];
 
   for (const [, item] of diffResult) {
     if (item.state === 'removed') {
@@ -750,9 +814,9 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
               }),
           };
 
-          pushOperationsWithOrderingLogic(operations, nodeOperationsAfterChildrenAreProcessed, operation);
+          pushOperationsWithOrderingLogic(operations, delayedOperations, nodeOperationsAfterChildrenAreProcessed, operation);
         } else {
-          performBasicNodeCreation(operations, nodeOperationsAfterChildrenAreProcessed, newMediasToUpload, item.after);
+          performBasicNodeCreation(operations, delayedOperations, nodeOperationsAfterChildrenAreProcessed, newMediasToUpload, item.after);
         }
       }
     } else if (item.state === 'updated') {
@@ -780,7 +844,8 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
           }
         }
       } else if (item.after._apiType === 'node') {
-        const { _apiType, _realPageParentId, _pageId, id, ...propertiesObj } = item.after; // Instruction to omit some properties
+        const { _apiType, _realPageParentId, _pageId, id, componentId, componentFile, componentRoot, mainInstance, shapeRef, ...propertiesObj } =
+          item.after; // Instruction to omit some properties
 
         assert(id);
 
@@ -794,7 +859,14 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
             pageId: item.before._pageId,
           });
 
-          performBasicNodeCreation(operations, nodeOperationsAfterChildrenAreProcessed, newMediasToUpload, item.after, item.before.id);
+          performBasicNodeCreation(
+            operations,
+            delayedOperations,
+            nodeOperationsAfterChildrenAreProcessed,
+            newMediasToUpload,
+            item.after,
+            item.before.id
+          );
         } else {
           // No matter if the difference is a creation/change/removal, it's committed the same way
           const changedFirstLevelProperties: (keyof typeof propertiesObj)[] = [];
@@ -863,7 +935,18 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
             }),
           };
 
-          pushOperationsWithOrderingLogic(operations, nodeOperationsAfterChildrenAreProcessed, operation);
+          pushOperationsWithOrderingLogic(operations, delayedOperations, nodeOperationsAfterChildrenAreProcessed, operation);
+
+          if (
+            item.before._apiType === 'node' &&
+            (item.before.componentId !== item.after.componentId ||
+              item.before.componentFile !== item.after.componentFile ||
+              item.before.componentRoot !== item.after.componentRoot ||
+              item.before.mainInstance !== item.after.mainInstance ||
+              item.before.shapeRef !== item.after.shapeRef)
+          ) {
+            delayBindingOperation(delayedOperations, id, _pageId, componentId, componentFile, componentRoot, mainInstance, shapeRef);
+          }
         }
       }
     }
@@ -884,6 +967,9 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
   for (const sourceId of sourcesIds) {
     browse(sourceId);
   }
+
+  // The API expects some bindings to have all nodes created, so running them at the end
+  operations.push(...delayedOperations);
 
   // Delete others (those should be orphan into the document now)
   for (const [, item] of diffResult) {

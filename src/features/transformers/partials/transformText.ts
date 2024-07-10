@@ -66,8 +66,10 @@ function extractTextSegments(node: TextNode): Paragraph[] {
     }
   }
 
-  // Save the last paragraph
-  paragraphs.push(currentParagraph);
+  // Save the last paragraph if not empty (Penpot does not allow empty paragraph)
+  if (currentParagraph.length > 0) {
+    paragraphs.push(currentParagraph);
+  }
 
   return paragraphs;
 }
@@ -88,7 +90,7 @@ export function transformText(registry: AbstractRegistry, node: TextNode): TextA
                     return {
                       type: 'paragraph',
                       children: translateTextSegments(registry, node, paragraph),
-                      ...transformTextStyle(registry, node, paragraph.length > 0 ? paragraph[0].style : node.style), // A paragraph can be empty, defaulting to the node style (maybe it should be adjusted to take style of the previous paragraph?)
+                      ...transformTextStyle(registry, node, paragraph[0].style), // A paragraph cannot be empty as stated into `extractTextSegments()` (Penpot does not allow this)
                       ...transformFills(registry, node),
                     };
                   })

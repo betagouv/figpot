@@ -42,6 +42,16 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
       // The backend is calculating the `touched` property when passing the `shapeRef` so no need to manage it ourselves
       delete object.touched;
 
+      // There is an issue when getting layout properties from the backend, there is a wrong case formatting due to close uppercases
+      if ('layoutItemHsizing' in object) {
+        (object as any).layoutItemHSizing = object.layoutItemHsizing;
+        delete object.layoutItemHsizing;
+      }
+      if ('layoutItemVsizing' in object) {
+        (object as any).layoutItemVSizing = object.layoutItemVsizing;
+        delete object.layoutItemVsizing;
+      }
+
       if (object.type === 'text') {
         // From the UI this is passed with all position for each texts, it would be really difficult to calculate it
         // on our own. Hopefully they are not required for the text to be correctly created, so ignoring it :)

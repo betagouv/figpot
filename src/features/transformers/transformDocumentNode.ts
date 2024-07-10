@@ -1,6 +1,4 @@
-import assert from 'assert';
-
-import { GetFileResponse } from '@figpot/src/clients/figma';
+import { GetFileResponse, SubcanvasNode } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { FigmaDefinedColor, FigmaDefinedTypography } from '@figpot/src/features/figma';
 import { transformPageNode } from '@figpot/src/features/transformers/transformPageNode';
@@ -11,6 +9,56 @@ import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { Registry } from '@figpot/src/models/entities/registry';
 
+export function detectLocalFigmaComponents(foundComponentsIds: string[], figmaNode: SubcanvasNode) {
+  if (figmaNode.type === 'COMPONENT') {
+    foundComponentsIds.push(figmaNode.id);
+  }
+
+  // Deep parse
+  if ('children' in figmaNode) {
+    for (const childNode of figmaNode.children) {
+      detectLocalFigmaComponents(foundComponentsIds, childNode);
+    }
+  }
+}
+
+export function cleanFigmaDefects(figmaNode: GetFileResponse) {
+  // [WORKAROUND] For whatever reason Figma may list components as being local whereas they are not (and not remote too) (maybe on old Figma files that have evolved with their internal changes)
+  // We mark them as remote to adjust since it's fine with our logic with the Penpot one, but we could also try to replace `INSTANCE` by a basic frame
+  // Ref: https://forum.figma.com/t/rest-api-issue-local-component-listed-but-not-existing-in-the-document-tree-but-accessible-via-node-endpoint/78294
+  const foundFigmaComponentsIds: string[] = [];
+  const expectedFigmaComponentsIds: string[] = Object.entries(figmaNode.components)
+    .filter(([componentId, component]) => {
+      return component.remote === false;
+    })
+    .map(([componentId, component]) => {
+      return componentId;
+    });
+
+  for (const canvas of figmaNode.document.children) {
+    for (const node of canvas.children) {
+      detectLocalFigmaComponents(foundFigmaComponentsIds, node);
+    }
+  }
+
+  const emulatedFigmaComponentsIds: string[] = [];
+
+  // Check the difference and mark as remote if not present locally
+  for (const expectedComponentId of expectedFigmaComponentsIds) {
+    if (foundFigmaComponentsIds.indexOf(expectedComponentId) === -1) {
+      emulatedFigmaComponentsIds.push(expectedComponentId);
+
+      figmaNode.components[expectedComponentId].remote = true;
+    }
+  }
+
+  if (emulatedFigmaComponentsIds.length > 0) {
+    console.warn(
+      `Figma has sent ${emulatedFigmaComponentsIds.length} local components defects, we emulated them as remote components for the ease of usage: [${emulatedFigmaComponentsIds.join(', ')}]`
+    );
+  }
+}
+
 export function transformDocumentNode(
   figmaNode: GetFileResponse,
   figmaDefinedColors: FigmaDefinedColor[],
@@ -18,6 +66,8 @@ export function transformDocumentNode(
   mapping: MappingType
 ): PenpotDocument {
   // We use `GetFileResponse` type instead of the type `DocumentNode` to have the "document" title
+
+  cleanFigmaDefects(figmaNode);
 
   const registry = new Registry(mapping);
 

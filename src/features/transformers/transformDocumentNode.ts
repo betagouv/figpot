@@ -51,7 +51,7 @@ export function transformDocumentNode(
       id: penpotComponentId,
       path: pathLevels.length > 0 ? pathLevels.join(' / ') : '', // We add spaces as normalized by Penpot
       name: name,
-      mainInstancePage: undefined, // Will be set after, once we have browsed the normal tree
+      mainInstancePage: null, // Will be set after, once we have browsed the normal tree
       mainInstanceId: penpotComponentInstanceId,
     };
 

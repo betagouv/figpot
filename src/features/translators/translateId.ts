@@ -4,6 +4,8 @@ import { TypeStyle } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 
+export const nullId = '00000000-0000-0000-0000-000000000000';
+
 export const rootFrameId = '00000000-0000-0000-0000-000000000000';
 export const rootFrameIdSuffix = '_rootFrame';
 

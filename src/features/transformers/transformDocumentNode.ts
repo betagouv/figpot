@@ -30,6 +30,13 @@ export function transformDocumentNode(
   }
 
   for (const [componentId, component] of Object.entries(figmaNode.components)) {
+    // TODO: implement cross-documents bindings if needed and if Penpot does not plan to have an easy feature for this
+
+    // Skip remote component because there are not listed at the document level, and instances have a different logic
+    if (component.remote === true) {
+      continue;
+    }
+
     // We do not reuse the same Figma ID because we keep it for the "transformed" frame representing the component definition
     const penpotComponentId = translateComponentId(`${componentId}_component`, mapping);
     const penpotComponentInstanceId = translateId(componentId, mapping);

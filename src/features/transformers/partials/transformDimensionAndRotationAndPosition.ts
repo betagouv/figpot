@@ -35,6 +35,13 @@ export function transformDimensionAndRotationAndPosition(
   assert(node.absoluteBoundingBox);
   assert(node.size);
 
+  // [WORKAROUND] For some obscure reasons the API may return the size object with `x` and `y` as null
+  // whereas it's not an allowed type according to their API. So we default to 0 to not break our whole logic
+  const nodeSize: typeof node.size = {
+    x: node.size.x ?? 0,
+    y: node.size.y ?? 0,
+  };
+
   const rotation = getRotationAngle(nodeTransform);
 
   if (rotation === 0) {
@@ -44,12 +51,12 @@ export function transformDimensionAndRotationAndPosition(
     const selrectWithNoRotation: Selrect = {
       x: x,
       y: y,
-      width: node.size.x,
-      height: node.size.y,
+      width: nodeSize.x,
+      height: nodeSize.y,
       x1: x,
       y1: y,
-      x2: x + node.size.x,
-      y2: y + node.size.y,
+      x2: x + nodeSize.x,
+      y2: y + nodeSize.y,
     };
 
     const pointsWithNoRotation: Point[] = [
@@ -79,10 +86,10 @@ export function transformDimensionAndRotationAndPosition(
   // but it was to move on, there are probably multiple adjustements to take into account other shapes
   // to both describe the dimension/position/selectionRectangle
   const pointsOnZero: Point[] = [
-    { x: -node.size.x / 2, y: -node.size.y / 2 },
-    { x: node.size.x - node.size.x / 2, y: -node.size.y / 2 },
-    { x: node.size.x - node.size.x / 2, y: node.size.y - node.size.y / 2 },
-    { x: -node.size.x / 2, y: node.size.y - node.size.y / 2 },
+    { x: -nodeSize.x / 2, y: -nodeSize.y / 2 },
+    { x: nodeSize.x - nodeSize.x / 2, y: -nodeSize.y / 2 },
+    { x: nodeSize.x - nodeSize.x / 2, y: nodeSize.y - nodeSize.y / 2 },
+    { x: -nodeSize.x / 2, y: nodeSize.y - nodeSize.y / 2 },
   ];
 
   const boundingBoxCenter = calculateCenter(node.absoluteBoundingBox);
@@ -95,12 +102,12 @@ export function transformDimensionAndRotationAndPosition(
   const selrect: Selrect = {
     x: initialPoints[0].x,
     y: initialPoints[0].y,
-    width: node.size.x,
-    height: node.size.y,
+    width: nodeSize.x,
+    height: nodeSize.y,
     x1: initialPoints[0].x,
     y1: initialPoints[0].y,
-    x2: initialPoints[0].x + node.size.x,
-    y2: initialPoints[0].y + node.size.y,
+    x2: initialPoints[0].x + nodeSize.x,
+    y2: initialPoints[0].y + nodeSize.y,
   };
 
   const transformedPoints = pointsOnZero.map((p) => {
@@ -115,8 +122,8 @@ export function transformDimensionAndRotationAndPosition(
   });
 
   return {
-    width: node.size.x,
-    height: node.size.y,
+    width: nodeSize.x,
+    height: nodeSize.y,
     x: selrect.x,
     y: selrect.y,
     points: transformedPoints,

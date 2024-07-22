@@ -268,7 +268,10 @@ export async function saveMapping(figmaDocumentId: string, penpotDocumentId: str
       },
       null,
       2
-    )
+    ),
+    {
+      encoding: 'utf-8',
+    }
   );
 }
 
@@ -315,8 +318,12 @@ export async function retrieve(options: RetrieveOptionsType) {
     await fs.mkdir(documentFolderPath, { recursive: true });
 
     await writeBigJsonFile(getFigmaDocumentTreePath(document.figmaDocument), documentTree);
-    await fs.writeFile(getFigmaDocumentColorsPath(document.figmaDocument), JSON.stringify(figmaColors, null, 2));
-    await fs.writeFile(getFigmaDocumentTypographiesPath(document.figmaDocument), JSON.stringify(figmaTypographies, null, 2));
+    await fs.writeFile(getFigmaDocumentColorsPath(document.figmaDocument), JSON.stringify(figmaColors, null, 2), {
+      encoding: 'utf-8',
+    });
+    await fs.writeFile(getFigmaDocumentTypographiesPath(document.figmaDocument), JSON.stringify(figmaTypographies, null, 2), {
+      encoding: 'utf-8',
+    });
 
     // Save images
     const imagesList = await getImageFills({

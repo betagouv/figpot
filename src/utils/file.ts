@@ -1,8 +1,15 @@
 import assert from 'assert';
 import contentType from 'content-type';
+import fsSync from 'fs';
 import fs from 'fs/promises';
 import { mimeData } from 'human-filetypes';
 import path from 'path';
+import { Readable } from 'stream';
+import { chain } from 'stream-chain';
+import Asm from 'stream-json/Assembler';
+import { disassembler } from 'stream-json/Disassembler';
+import { parser } from 'stream-json/Parser';
+import { stringer } from 'stream-json/Stringer';
 
 export async function downloadFile(url: string, destination: string, timeout?: number): Promise<void> {
   const response = await fetch(url, {
@@ -33,4 +40,47 @@ export async function downloadFile(url: string, destination: string, timeout?: n
 
   await fs.mkdir(path.dirname(filePathWithExtension), { recursive: true });
   await fs.writeFile(filePathWithExtension, new Uint8Array(content));
+}
+
+export async function readBigJsonFile(filePath: string): Promise<object> {
+  return await new Promise((resolve, reject) => {
+    const pipeline = chain([
+      fsSync.createReadStream(filePath, {
+        encoding: 'utf-8',
+      }),
+      parser(),
+    ]);
+
+    const asm = Asm.connectTo(pipeline);
+
+    asm.once('done', (asm) => {
+      resolve(asm.current);
+    });
+  });
+}
+
+export async function writeBigJsonFile(filePath: string, jsonObject: object): Promise<void> {
+  return await new Promise((resolve, reject) => {
+    const jsonStream = new Readable({ objectMode: true });
+
+    const pipeline = chain([
+      jsonStream,
+      disassembler(),
+      stringer(),
+      fsSync.createWriteStream(filePath, {
+        encoding: 'utf-8',
+      }),
+    ]);
+
+    pipeline.once('finish', () => {
+      resolve();
+    });
+
+    pipeline.once('error', (error) => {
+      reject(error);
+    });
+
+    jsonStream.push(jsonObject);
+    jsonStream.push(null);
+  });
 }

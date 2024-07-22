@@ -9,6 +9,7 @@ import graphlib, { Graph } from 'graphlib';
 import { mimeData } from 'human-filetypes';
 import arrayDiff from 'microdiff';
 import path from 'path';
+import { parser } from 'stream-json';
 import { Digraph, toDot } from 'ts-graphviz';
 import { toFile } from 'ts-graphviz/adapter';
 import { z } from 'zod';
@@ -42,7 +43,7 @@ import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { formatDiffResultLog, getDiff } from '@figpot/src/utils/comparaison';
-import { downloadFile } from '@figpot/src/utils/file';
+import { downloadFile, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
 import { gracefulExit } from '@figpot/src/utils/system';
 
 const __root_dirname = process.cwd();
@@ -149,9 +150,7 @@ export async function readFigmaTreeFile(documentId: string): Promise<GetFileResp
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
   }
 
-  const figmaTreeString = await fs.readFile(figmaTreePath, 'utf-8');
-
-  return JSON.parse(figmaTreeString) as GetFileResponse; // We did not implement a zod schema, hoping they keep the structure stable enough
+  return (await readBigJsonFile(figmaTreePath)) as GetFileResponse; // We did not implement a zod schema, hoping they keep the structure stable enough
 }
 
 export async function readFigmaColorsFile(documentId: string): Promise<FigmaDefinedColor[]> {
@@ -185,9 +184,7 @@ export async function readTransformedFigmaTreeFile(figmaDocumentId: string, penp
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${figmaDocumentId}" before using any other command`);
   }
 
-  const transformedTreeString = await fs.readFile(transformedFigmaTreePath, 'utf-8');
-
-  return JSON.parse(transformedTreeString) as PenpotDocument; // We did not implement a zod schema, hoping they keep the structure stable enough
+  return (await readBigJsonFile(transformedFigmaTreePath)) as PenpotDocument; // We did not implement a zod schema, hoping they keep the structure stable enough
 }
 
 export async function readFigmaToPenpotDiffFile(figmaDocumentId: string, penpotDocumentId: string): Promise<Differences> {
@@ -197,9 +194,7 @@ export async function readFigmaToPenpotDiffFile(figmaDocumentId: string, penpotD
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${figmaDocumentId}" before using any other command`);
   }
 
-  const diffString = await fs.readFile(diffPath, 'utf-8');
-
-  return JSON.parse(diffString) as Differences; // We did not implement a zod schema, hoping they keep the structure stable enough
+  return (await readBigJsonFile(diffPath)) as Differences; // We did not implement a zod schema, hoping they keep the structure stable enough
 }
 
 export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: string): Promise<MappingType> {
@@ -319,7 +314,7 @@ export async function retrieve(options: RetrieveOptionsType) {
     const documentFolderPath = getFigmaDocumentPath(document.figmaDocument);
     await fs.mkdir(documentFolderPath, { recursive: true });
 
-    await fs.writeFile(getFigmaDocumentTreePath(document.figmaDocument), JSON.stringify(documentTree, null, 2));
+    await writeBigJsonFile(getFigmaDocumentTreePath(document.figmaDocument), documentTree);
     await fs.writeFile(getFigmaDocumentColorsPath(document.figmaDocument), JSON.stringify(figmaColors, null, 2));
     await fs.writeFile(getFigmaDocumentTypographiesPath(document.figmaDocument), JSON.stringify(figmaTypographies, null, 2));
 
@@ -391,7 +386,7 @@ export async function transform(options: TransformOptionsType) {
     // Save mapping for later usage
     await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
 
-    await fs.writeFile(getTransformedFigmaTreePath(document.figmaDocument, document.penpotDocument), JSON.stringify(penpotTree, null, 2));
+    await writeBigJsonFile(getTransformedFigmaTreePath(document.figmaDocument, document.penpotDocument), penpotTree);
   }
 }
 
@@ -533,7 +528,6 @@ export function performBasicNodeCreation(
   };
 
   pushOperationsWithOrderingLogic(normalOperations, delayedOperations, delayedForChildrenOperations, operation);
-
 
   if (componentId) {
     delayBindingOperation(delayedOperations, id, _pageId, componentId, componentFile, componentRoot, mainInstance, shapeRef);
@@ -1055,14 +1049,14 @@ export async function compare(options: CompareOptionsType) {
     const penpotDocumentFolderPath = getPenpotDocumentPath(document.figmaDocument, document.penpotDocument);
     await fs.mkdir(penpotDocumentFolderPath, { recursive: true });
 
-    await fs.writeFile(getPenpotHostedDocumentTreePath(document.figmaDocument, document.penpotDocument), JSON.stringify(hostedDocument, null, 2));
+    await writeBigJsonFile(getPenpotHostedDocumentTreePath(document.figmaDocument, document.penpotDocument), hostedDocument);
 
     const transformedDocument = await readTransformedFigmaTreeFile(document.figmaDocument, document.penpotDocument);
 
     const hostedCoreDocument = cleanHostedDocument(hostedDocument);
     const diff = getDifferences(hostedCoreDocument, transformedDocument);
 
-    await fs.writeFile(getFigmaToPenpotDiffPath(document.figmaDocument, document.penpotDocument), JSON.stringify(diff, null, 2));
+    await writeBigJsonFile(getFigmaToPenpotDiffPath(document.figmaDocument, document.penpotDocument), diff);
   }
 }
 

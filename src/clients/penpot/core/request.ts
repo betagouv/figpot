@@ -284,6 +284,11 @@ export const catchErrorCodes = (options: ApiRequestOptions, result: ApiResult): 
 
 	const error = errors[result.status];
 	if (error) {
+		// Additional log to see fully details and not just `[ [Object], [Object], [Object], ... ]`
+		if (Array.isArray(result.body.details)) {
+			console.error(JSON.stringify(result.body.details));
+		}
+
 		throw new ApiError(options, result, error);
 	}
 

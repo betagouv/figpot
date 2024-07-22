@@ -21,9 +21,14 @@ import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 function translatePathNode(node: BooleanOperationNode, figmaNodeTransform: Transform): BoolContent[] {
   assert(node.fillGeometry);
 
-  // TODO: this won't work for `exclude`, the Figma path of the bool operation does seems to not involves the exclusion
-  // Meaning within the UI the preview will be a `difference` operation, if moving position or switching back and forth to another bool mode it will adjust correctly
-  return translateCommands(node, figmaNodeTransform, parseSVG(node.fillGeometry[0].path));
+  // With real data some nodes have their `fillGeometry` empty
+  if (node.fillGeometry.length > 0) {
+    // TODO: this won't work for `exclude`, the Figma path of the bool operation does seems to not involves the exclusion
+    // Meaning within the UI the preview will be a `difference` operation, if moving position or switching back and forth to another bool mode it will adjust correctly
+    return translateCommands(node, figmaNodeTransform, parseSVG(node.fillGeometry[0].path));
+  } else {
+    return [];
+  }
 }
 
 export function transformBooleanNode(

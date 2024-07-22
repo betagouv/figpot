@@ -8,7 +8,14 @@ export const neutralTransform: Transform = [
 ];
 
 export function isTransformedNode(node: HasLayoutTrait): boolean {
-  return node.relativeTransform !== undefined;
+  return (
+    node.relativeTransform !== undefined &&
+    // [WORKAROUND] It appears for some nodes the transform is returned but all values are `null`
+    // This may be a defect from previous Figma versions, so we take it into account
+    node.relativeTransform.length === 2 &&
+    node.relativeTransform[0].indexOf(null as unknown as number) === -1 &&
+    node.relativeTransform[1].indexOf(null as unknown as number) === -1
+  );
 }
 
 export function cumulateNodeTransforms(t1: Transform, t2: Transform): Transform {

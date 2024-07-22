@@ -970,7 +970,10 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
   }
 
   // The API expects some bindings to have all nodes created, so running them at the end
-  operations.push(...delayedOperations);
+  // Note: cannot use `.push(...delayedOperations)` because for huge files it goes over JavaScript parameters length limit
+  for (const delayedOperation of delayedOperations) {
+    operations.push(delayedOperation);
+  }
 
   // Delete others (those should be orphan into the document now)
   for (const [, item] of diffResult) {

@@ -32,7 +32,7 @@ export function transformDimensionAndRotationAndPosition(
   nodeTransform: Transform
 ): Pick<ShapeBaseAttributes, 'selrect' | 'points' | 'transform' | 'transformInverse' | 'rotation' | 'flipX' | 'flipY'> &
   Pick<ShapeGeomAttributes, 'x' | 'y' | 'width' | 'height'> {
-  assert(node.absoluteBoundingBox);
+  assert(node.absoluteBoundingBox !== undefined);
   assert(node.size);
 
   // [WORKAROUND] For some obscure reasons the API may return the size object with `x` and `y` as null
@@ -42,11 +42,19 @@ export function transformDimensionAndRotationAndPosition(
     y: node.size.y ?? 0,
   };
 
+  // `absoluteBoundingBox` can be null in some cases, so defaulting to 0 properties
+  const nodeAbsoluteBoundingBox: typeof node.absoluteBoundingBox = node.absoluteBoundingBox || {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  };
+
   const rotation = getRotationAngle(nodeTransform);
 
   if (rotation === 0) {
-    const x = node.absoluteBoundingBox.x;
-    const y = node.absoluteBoundingBox.y;
+    const x = nodeAbsoluteBoundingBox.x;
+    const y = nodeAbsoluteBoundingBox.y;
 
     const selrectWithNoRotation: Selrect = {
       x: x,
@@ -92,7 +100,7 @@ export function transformDimensionAndRotationAndPosition(
     { x: -nodeSize.x / 2, y: nodeSize.y - nodeSize.y / 2 },
   ];
 
-  const boundingBoxCenter = calculateCenter(node.absoluteBoundingBox);
+  const boundingBoxCenter = calculateCenter(nodeAbsoluteBoundingBox);
 
   // Since the selection area will only have the rotation during the rendering, we have to position the original shape center at the rotation Z-axis
   const initialPoints = pointsOnZero.map((p) => {

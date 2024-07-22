@@ -37,12 +37,12 @@ export function transformBooleanNode(
   closestFigmaFrameId: string,
   figmaNodeTransform: Transform
 ): BoolShape {
-  transformChildren(registry, node, closestFigmaFrameId, figmaNodeTransform);
+  const childrenShapes = transformChildren(registry, node, closestFigmaFrameId, figmaNodeTransform);
 
   return {
     type: 'bool',
     name: node.name,
-    shapes: node.children.map((figmaChild) => translateId(figmaChild.id, registry.getMapping())),
+    shapes: childrenShapes,
     boolContent: translatePathNode(node, figmaNodeTransform),
     boolType: translateBoolType(node.booleanOperation),
     ...transformFills(registry, node),

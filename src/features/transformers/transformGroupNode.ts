@@ -5,7 +5,6 @@ import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/t
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
-import { translateId } from '@figpot/src/features/translators/translateId';
 import { GroupShape } from '@figpot/src/models/entities/penpot/shapes/group';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
@@ -15,10 +14,10 @@ export function transformGroupNode(
   closestFigmaFrameId: string,
   figmaNodeTransform: Transform
 ): GroupShape {
-  transformChildren(registry, node, closestFigmaFrameId, figmaNodeTransform);
+  const childrenShapes = transformChildren(registry, node, closestFigmaFrameId, figmaNodeTransform);
 
   return {
-    shapes: node.children.map((figmaChild) => translateId(figmaChild.id, registry.getMapping())),
+    shapes: childrenShapes,
     ...transformGroupNodeLike(registry, node, figmaNodeTransform),
     ...transformEffects(registry, node),
     ...transformBlend(node),

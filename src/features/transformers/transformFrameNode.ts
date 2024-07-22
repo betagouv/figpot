@@ -11,7 +11,6 @@ import { transformAutoLayout, transformLayoutAttributes } from '@figpot/src/feat
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
-import { translateId } from '@figpot/src/features/translators/translateId';
 import { FrameShape } from '@figpot/src/models/entities/penpot/shapes/frame';
 import { Point } from '@figpot/src/models/entities/penpot/traits/point';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
@@ -45,12 +44,12 @@ export function transformFrameNode(
     };
   }
 
-  transformChildren(registry, node, node.id, figmaNodeTransform);
+  const childrenShapes = transformChildren(registry, node, node.id, figmaNodeTransform);
 
   return {
     type: 'frame',
     name: node.name,
-    shapes: node.children.map((figmaChild) => translateId(figmaChild.id, registry.getMapping())),
+    shapes: childrenShapes,
     showContent: isSectionNode(node) ? true : !node.clipsContent,
     ...transformFills(registry, node),
     ...frameSpecificAttributes,

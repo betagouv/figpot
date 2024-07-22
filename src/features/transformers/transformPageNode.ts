@@ -1,7 +1,7 @@
 import assert from 'assert';
 
 import { CanvasNode } from '@figpot/src/clients/figma';
-import { translateChildren } from '@figpot/src/features/translators/translateChildren';
+import { transformChildrenWithParentId } from '@figpot/src/features/transformers/partials/transformChildren';
 import { formatPageRootFrameId, registerId, translateId, translateUuidAsObjectKey } from '@figpot/src/features/translators/translateId';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { PageRegistry } from '@figpot/src/models/entities/registry';
@@ -18,6 +18,9 @@ export function transformPageNode(registry: PageRegistry, figmaNode: CanvasNode)
 
   // Force registration in case in a child the ID is used
   registerId(virtualFigmaRootFrameId, penpotRootFrameId, registry.getMapping());
+
+  // We provide a transform cumulative variable so rotation is based on parents too (a page cannot have a rotation so starting with neutral transform)
+  const childrenShapes = transformChildrenWithParentId(registry, figmaNode, virtualFigmaRootFrameId, virtualFigmaRootFrameId, neutralTransform);
 
   const page: PenpotPage = {
     id: penpotPageId,
@@ -93,13 +96,10 @@ export function transformPageNode(registry: PageRegistry, figmaNode: CanvasNode)
             fillOpacity: 1,
           },
         ],
-        shapes: figmaNode.children.map((figmaChild) => translateId(figmaChild.id, registry.getMapping())),
+        shapes: childrenShapes,
       },
     },
   };
-
-  // We provide a transform cumulative variable so rotation is based on parents too (a page cannot have a rotation so starting with neutral transform)
-  translateChildren(registry, figmaNode.children, virtualFigmaRootFrameId, virtualFigmaRootFrameId, neutralTransform);
 
   for (const [_, penpotPageNode] of registry.getNodes()) {
     assert(penpotPageNode.id); // It would mean we forget to translate it in a specific node type

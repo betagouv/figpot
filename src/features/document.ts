@@ -536,7 +536,7 @@ export function performBasicNodeCreation(
 
   pushOperationsWithOrderingLogic(normalOperations, delayedOperations, delayedForChildrenOperations, operation);
 
-  if (componentId) {
+  if (componentId || componentFile || componentRoot || mainInstance || shapeRef) {
     delayBindingOperation(delayedOperations, id, _pageId, componentId, componentFile, componentRoot, mainInstance, shapeRef);
   }
 

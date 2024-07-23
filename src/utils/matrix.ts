@@ -19,7 +19,7 @@ export function isTransformedNode(node: HasLayoutTrait): boolean {
 }
 
 export function cumulateNodeTransforms(t1: Transform, t2: Transform): Transform {
-  const matrix = math.multiply(math.matrix([t1[0], t1[1], [0, 0, 0]]), math.matrix([t2[0], t2[1], [0, 0, 0]])).toArray() as any;
+  const matrix = math.multiply(math.matrix([t1[0], t1[1], [0, 0, 1]]), math.matrix([t2[0], t2[1], [0, 0, 1]])).toArray() as any;
 
   return [matrix[0], matrix[1]];
 }

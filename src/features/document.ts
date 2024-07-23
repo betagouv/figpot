@@ -1173,6 +1173,7 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
     const chunks: appCommonFilesChanges$change[][] = [[]];
     let currentChunkIndex = 0;
     let currentChunkCount = 0;
+    let succeededOperations = 0;
     for (const operation of differences.newTreeOperations) {
       const encodedOperationLength = JSON.stringify(operation).length;
 
@@ -1199,11 +1200,25 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
             changes: chunks[i],
           },
         });
+
+        succeededOperations += chunks[i].length;
       } catch (error) {
-        if (i > 1) {
-          console.warn(
-            `it has failed while being processing the chunk (${i + 1}/${chunks.length}). Since first modifications have been processed by the server you must rerun the entire synchronization command`
-          );
+        console.error(`it has failed while being processing the chunk (${i + 1}/${chunks.length})`);
+
+        if (succeededOperations > 0) {
+          console.warn(`Wait a bit since we are removing processed chunks for your next retry, it will reduce the input and speed up`);
+
+          try {
+            differences.newTreeOperations.splice(0, succeededOperations - 1);
+
+            await writeBigJsonFile(getFigmaToPenpotDiffPath(figmaDocumentId, penpotDocumentId), differences);
+          } catch (error) {
+            console.error(
+              `it has failed removing processed chunks, please rerun the synchronization from the start to be sure the comparaison is done with the updated Penpot document`
+            );
+
+            throw error;
+          }
         }
 
         throw error;

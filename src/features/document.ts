@@ -1192,14 +1192,14 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
       try {
         console.info(`processing the modifications chunk (${i + 1}/${chunks.length}). It contains ${chunks[i].length} operations`);
 
-        await postCommandUpdateFile({
+        (await postCommandUpdateFile({
           requestBody: {
             id: penpotDocumentId,
             revn: 0, // Required but does no block to use a default one
             sessionId: '00000000-0000-0000-0000-000000000000', // It has to be UUID format, no matter the value for us
             changes: chunks[i],
           },
-        });
+        })) as unknown; // We patched the response to avoid some processing
 
         succeededOperations += chunks[i].length;
       } catch (error) {

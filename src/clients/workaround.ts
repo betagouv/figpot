@@ -20,7 +20,7 @@ export async function getJsonResponseBody(response: Response): Promise<any> {
     ((contentLength && parseInt(contentLength, 10) >= 0x1fffffe8) ||
       // [WORKAROUND] `Content-Length` header is not returned so applying the patch to appropriate URLs
       response.url.includes('v1/files/') || // For Figma to get an entire file
-      response.url.includes('api/rpc/command/get-file?')) // For Penpot to get an entire file
+      response.url.endsWith('api/rpc/command/get-file')) // For Penpot to get an entire file (stricter condition since that's the prefix of other endpoints)
   ) {
     const stream = Readable.fromWeb(response.body);
 

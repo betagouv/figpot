@@ -1,10 +1,12 @@
 import assert from 'assert';
 
+import { Overrides } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
+import { SyncGroups } from '@figpot/src/models/entities/penpot/traits/syncGroups';
 
 export interface BoundVariableRegistry {
   getColors(): Map<string, Color>;
@@ -15,16 +17,32 @@ export interface BoundVariableRegistry {
 
 export interface AbstractRegistry extends BoundVariableRegistry {
   addNode(node: PenpotNode): void;
+  newComponentScope(): ComponentRegistry;
+  newComponentInstanceScope(overrides: Overrides[]): ComponentInstanceRegistry;
+  getOverrides(nodeId: string): Overrides['overriddenFields'] | null;
 }
 
-export class ComponentRegistry implements AbstractRegistry {
-  // This is helpful to know while browsing we are in a component
+export class ComponentInstanceRegistry implements AbstractRegistry {
+  // This is helpful to know while browsing we are in a component instance
   protected readonly globalRegistry: Registry;
   protected readonly pageRegistry: PageRegistry;
+  protected readonly overrides: Map<Overrides['id'], Overrides['overriddenFields']> = new Map();
 
-  constructor(pageRegistry: PageRegistry, globalRegistry: Registry) {
+  constructor(pageRegistry: PageRegistry, globalRegistry: Registry, overrides: Overrides[]) {
     this.pageRegistry = pageRegistry;
     this.globalRegistry = globalRegistry;
+
+    for (const overridesPerNode of overrides) {
+      this.overrides.set(overridesPerNode.id, overridesPerNode.overriddenFields);
+    }
+  }
+
+  public newComponentScope(): ComponentRegistry {
+    return this.pageRegistry.newComponentScope();
+  }
+
+  public newComponentInstanceScope(overrides: Overrides[]): ComponentInstanceRegistry {
+    return this.pageRegistry.newComponentInstanceScope(overrides);
   }
 
   public addNode(node: PenpotNode) {
@@ -50,6 +68,57 @@ export class ComponentRegistry implements AbstractRegistry {
   public getComponents(): Map<string, LibraryComponent> {
     return this.pageRegistry.getComponents();
   }
+
+  public getOverrides(nodeId: string): Overrides['overriddenFields'] | null {
+    return this.overrides.get(nodeId) || null;
+  }
+}
+
+export class ComponentRegistry implements AbstractRegistry {
+  // This is helpful to know while browsing we are in a component
+  protected readonly globalRegistry: Registry;
+  protected readonly pageRegistry: PageRegistry;
+
+  constructor(pageRegistry: PageRegistry, globalRegistry: Registry) {
+    this.pageRegistry = pageRegistry;
+    this.globalRegistry = globalRegistry;
+  }
+
+  public newComponentScope(): ComponentRegistry {
+    return this.pageRegistry.newComponentScope();
+  }
+
+  public newComponentInstanceScope(overrides: Overrides[]): ComponentInstanceRegistry {
+    return this.pageRegistry.newComponentInstanceScope(overrides);
+  }
+
+  public addNode(node: PenpotNode) {
+    this.pageRegistry.addNode(node);
+  }
+
+  public getNodes() {
+    this.pageRegistry.getNodes();
+  }
+
+  public getMapping() {
+    return this.pageRegistry.getMapping();
+  }
+
+  public getColors(): Map<string, Color> {
+    return this.pageRegistry.getColors();
+  }
+
+  public getTypographies(): Map<string, LibraryTypography> {
+    return this.pageRegistry.getTypographies();
+  }
+
+  public getComponents(): Map<string, LibraryComponent> {
+    return this.pageRegistry.getComponents();
+  }
+
+  public getOverrides(nodeId: string): Overrides['overriddenFields'] | null {
+    return this.pageRegistry.getOverrides(nodeId);
+  }
 }
 
 export class PageRegistry implements AbstractRegistry {
@@ -62,6 +131,10 @@ export class PageRegistry implements AbstractRegistry {
 
   public newComponentScope(): ComponentRegistry {
     return new ComponentRegistry(this, this.globalRegistry);
+  }
+
+  public newComponentInstanceScope(overrides: Overrides[]): ComponentInstanceRegistry {
+    return new ComponentInstanceRegistry(this, this.globalRegistry, overrides);
   }
 
   public addNode(node: PenpotNode) {
@@ -88,6 +161,10 @@ export class PageRegistry implements AbstractRegistry {
 
   public getComponents(): Map<string, LibraryComponent> {
     return this.globalRegistry.getComponents();
+  }
+
+  public getOverrides(nodeId: string): Overrides['overriddenFields'] | null {
+    return null;
   }
 }
 

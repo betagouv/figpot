@@ -39,9 +39,6 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
       object.parentId = object.parentId === rootFrameId ? newRootFrameNodeId : object.parentId;
       object.frameId = object.frameId === rootFrameId ? newRootFrameNodeId : object.frameId;
 
-      // The backend is calculating the `touched` property when passing the `shapeRef` so no need to manage it ourselves
-      delete object.touched;
-
       // There is an issue when getting layout properties from the backend, there is a wrong case formatting due to close uppercases
       if ('layoutItemHsizing' in object) {
         (object as any).layoutItemHSizing = object.layoutItemHsizing;

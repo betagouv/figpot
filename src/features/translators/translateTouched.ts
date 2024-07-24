@@ -1,11 +1,11 @@
 import { Overrides } from '@figpot/src/clients/figma';
 import { SyncGroups } from '@figpot/src/models/entities/penpot/traits/syncGroups';
 
-type SyncAttributes = {
+export type SyncAttributes = {
   [key in string]: SyncGroups[];
 };
 
-const syncAttributes: SyncAttributes = {
+export const syncAttributes: SyncAttributes = {
   name: ['name-group'],
   fills: ['fill-group'],
   backgrounds: ['fill-group'],
@@ -136,20 +136,21 @@ const syncAttributes: SyncAttributes = {
   code: [],
 };
 
-// export function translateTouched(changedProperties: Overrides[] | undefined): SyncGroups[] {
-//   const syncGroups: Set<SyncGroups> = new Set();
+export function translateTouched(figmaChangedProperties: Overrides['overriddenFields'] | null): SyncGroups[] | undefined {
+  const syncGroups: Set<SyncGroups> = new Set();
 
-//   if (!changedProperties) {
-//     return [];
-//   }
+  // An empty array is not allowed by the Penpot API
+  if (!figmaChangedProperties || figmaChangedProperties.length === 0) {
+    return undefined;
+  }
 
-//   changedProperties.forEach((changedProperty) => {
-//     const syncGroup = syncAttributes[changedProperty];
+  for (const figmaChangedProperty of figmaChangedProperties) {
+    const syncGroup = syncAttributes[figmaChangedProperty];
 
-//     if (syncGroup && syncGroup.length > 0) {
-//       syncGroup.forEach((group) => syncGroups.add(group));
-//     }
-//   });
+    if (syncGroup && syncGroup.length > 0) {
+      syncGroup.forEach((group) => syncGroups.add(group));
+    }
+  }
 
-//   return Array.from(syncGroups);
-// }
+  return Array.from(syncGroups);
+}

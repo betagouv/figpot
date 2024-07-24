@@ -1,19 +1,19 @@
-import assert from 'assert';
-
 import { InstanceNode, Transform } from '@figpot/src/clients/figma';
 import { transformFrameNode } from '@figpot/src/features/transformers/transformFrameNode';
 import { nullId, translateComponentId, translateDocumentId } from '@figpot/src/features/translators/translateId';
+import { syncAttributes } from '@figpot/src/features/translators/translateTouched';
 import { FrameShape } from '@figpot/src/models/entities/penpot/shapes/frame';
 import { AbstractRegistry, PageRegistry } from '@figpot/src/models/entities/registry';
 
 export function transformInstanceNode(registry: AbstractRegistry, node: InstanceNode, figmaNodeTransform: Transform): FrameShape {
   let componentRoot: true | undefined = undefined;
   if (registry instanceof PageRegistry) {
+    // If the first instance from a page registry it means that's the root
     componentRoot = true;
-
-    // Help the children knowing their are part of a component
-    registry = registry.newComponentScope();
   }
+
+  // Help the children knowing their are part of an instance to manage overrides for example
+  registry = registry.newComponentInstanceScope(node.overrides);
 
   // Note: inside the page tree the component instance type is a frame, so reusing the frame logic and transform
   const instanceFrame = transformFrameNode(registry, node, figmaNodeTransform);
@@ -24,7 +24,14 @@ export function transformInstanceNode(registry: AbstractRegistry, node: Instance
   const boundLocalComponent = registry.getComponents().get(potentialComponentId);
 
   if (boundLocalComponent) {
-    instanceFrame.name = boundLocalComponent.name; // In case of a varant
+    // If no override Penpot expects by default the instance node to have the same name than the component defition
+    // so due to Figma having variants and not Penpot, we have to force the name
+    const instanceOverrides = registry.getOverrides(node.id);
+    const overrideNameField: keyof typeof syncAttributes = 'name';
+    if (instanceOverrides && !instanceOverrides.includes(overrideNameField)) {
+      instanceFrame.name = boundLocalComponent.name; // In case of a variant
+    }
+
     instanceFrame.componentFile = translateDocumentId('current', registry.getMapping());
     instanceFrame.componentId = potentialComponentId;
 

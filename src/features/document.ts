@@ -948,7 +948,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
               if (property === 'touched') {
                 return {
                   type: 'set-touched',
-                  touched: propertiesObj.touched as string[] | null, // Don't know why but casting has to be specified
+                  touched: propertiesObj.touched || null,
                 };
               } else {
                 return {

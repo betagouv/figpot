@@ -8,6 +8,7 @@ import {
   LocalVariable,
   Paint,
   RGBA,
+  SubcanvasNode,
   TypeStyle,
   VariableAlias,
   getFile,
@@ -179,6 +180,35 @@ export function extractStylesTypographies(documentTree: GetFileResponse, stylesN
   }
 
   return typographies;
+}
+
+export function countNestedTreeElements(figmaNode: SubcanvasNode): number {
+  let childrenCount = 0;
+
+  // Deep parse
+  if ('children' in figmaNode) {
+    childrenCount += figmaNode.children.length;
+
+    for (const childNode of figmaNode.children) {
+      childrenCount += countNestedTreeElements(childNode);
+    }
+  }
+
+  return childrenCount;
+}
+
+export function countTotalElements(tree: GetFileResponse, colors: FigmaDefinedColor[], typographies: FigmaDefinedTypography[]): number {
+  let treeCount = tree.document.children.length;
+
+  for (const canvas of tree.document.children) {
+    treeCount += canvas.children.length;
+
+    for (const node of canvas.children) {
+      treeCount += countNestedTreeElements(node);
+    }
+  }
+
+  return treeCount + colors.length + typographies.length;
 }
 
 export async function retrieveDocument(documentId: string) {

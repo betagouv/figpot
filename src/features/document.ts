@@ -27,6 +27,7 @@ import {
 import {
   FigmaDefinedColor,
   FigmaDefinedTypography,
+  countTotalElements,
   extractStylesTypographies,
   mergeStylesColors,
   retrieveColors,
@@ -383,6 +384,24 @@ export async function transform(options: TransformOptionsType) {
     const figmaTree = await readFigmaTreeFile(document.figmaDocument);
     const figmaColors = await readFigmaColorsFile(document.figmaDocument);
     const figmaTypographies = await readFigmaTypographiesFile(document.figmaDocument);
+
+    // TODO: the count should be done once exclusions are applied?
+    const elementsCount = countTotalElements(figmaTree, figmaColors, figmaTypographies);
+
+    console.log(`the figma document contains around ${elementsCount} elements`);
+
+    const advisedElementsLimit = 150_000;
+    if (elementsCount > advisedElementsLimit) {
+      const answer = await confirm({
+        message: `The Figma document tree you want to synchronize is really huge. Over ${advisedElementsLimit} elements we are quick sure both the Penpot backend and the frontend won't be able to render your document until Penpot evolves. Have a look at our documentation see how to exclude nodes that brings to you no value and that could make the document loadable. Do you want to by-pass this warning and continue processing an unloadable file?`,
+      });
+
+      if (!answer) {
+        console.warn('the transformation operation has been aborted');
+
+        return Promise.reject(gracefulExit);
+      }
+    }
 
     assert(document.penpotDocument);
 

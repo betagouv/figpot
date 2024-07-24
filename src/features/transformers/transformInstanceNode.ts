@@ -21,9 +21,10 @@ export function transformInstanceNode(registry: AbstractRegistry, node: Instance
 
   const potentialComponentId = translateComponentId(`${node.componentId}_component`, registry.getMapping()); // The component definition has a different ID than the representation in the normal tree
 
-  const isLocalComponent = registry.getComponents().has(potentialComponentId);
+  const boundLocalComponent = registry.getComponents().get(potentialComponentId);
 
-  if (isLocalComponent) {
+  if (boundLocalComponent) {
+    instanceFrame.name = boundLocalComponent.name; // In case of a varant
     instanceFrame.componentFile = translateDocumentId('current', registry.getMapping());
     instanceFrame.componentId = potentialComponentId;
 
@@ -31,11 +32,7 @@ export function transformInstanceNode(registry: AbstractRegistry, node: Instance
     // since Figma may set them a node ID without the original shape, so as fallback we use the main instance node ID
     // to match the Penpot expectations
     if (!instanceFrame.shapeRef) {
-      const component = registry.getComponents().get(potentialComponentId);
-
-      assert(component);
-
-      instanceFrame.shapeRef = component.mainInstanceId;
+      instanceFrame.shapeRef = boundLocalComponent.mainInstanceId;
     }
   } else {
     // An instance of a remote component should require information not available here to be bound to the remote component

@@ -944,14 +944,22 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
             id: isPageRootFrameFromId(id) ? rootFrameId : id,
             pageId: _pageId,
             operations: uniqueProperties.map((property) => {
-              return {
-                type: 'set',
-                attr: kebabCase(property), // Since it's a value we make sure to respect backend keywords logic (otherwise we ended having 2 `transformInverse` (the initial one, and one from our update))
-                val:
-                  (property === 'parentId' || property === 'frameId') && isPageRootFrameFromId(propertiesObj[property] as string)
-                    ? rootFrameId
-                    : propertiesObj[property],
-              };
+              // The `touched` property has a specific operation format
+              if (property === 'touched') {
+                return {
+                  type: 'set-touched',
+                  touched: propertiesObj.touched as string[] | null, // Don't know why but casting has to be specified
+                };
+              } else {
+                return {
+                  type: 'set',
+                  attr: kebabCase(property), // Since it's a value we make sure to respect backend keywords logic (otherwise we ended having 2 `transformInverse` (the initial one, and one from our update))
+                  val:
+                    (property === 'parentId' || property === 'frameId') && isPageRootFrameFromId(propertiesObj[property] as string)
+                      ? rootFrameId
+                      : propertiesObj[property],
+                };
+              }
             }),
           };
 

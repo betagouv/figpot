@@ -859,7 +859,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
               option: kebabCase(optionKey), // Since it's a value we make sure to respect backend keywords logic
               value:
                 // Checking the property removal, also check the path length since an array item removal will produce a `REMOVE` too
-                difference.type === 'REMOVE' && difference.path.length === 1 ? null : propertiesObj.options[optionKey],
+                difference.type === 'REMOVE' && difference.path.length === 2 ? null : propertiesObj.options[optionKey],
             });
           }
         }

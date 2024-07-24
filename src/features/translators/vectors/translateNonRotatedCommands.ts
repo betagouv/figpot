@@ -42,6 +42,7 @@ export function translateNonRotatedCommand(command: Command, baseX: number, base
     default:
       return {
         command: 'close-path',
+        params: null,
       };
   }
 }

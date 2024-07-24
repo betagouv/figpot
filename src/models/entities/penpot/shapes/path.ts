@@ -30,6 +30,7 @@ type LineTo = {
 
 export type ClosePath = {
   command: 'close-path' | typeof VECTOR_CLOSE_PATH;
+  params: null;
 };
 
 type MoveTo = {

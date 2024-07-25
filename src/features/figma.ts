@@ -17,7 +17,7 @@ import {
   getProjectFiles,
   getTeamProjects,
 } from '@figpot/src/clients/figma';
-import { DocumentOptionsType } from '@figpot/src/features/document';
+import { DocumentOptionsType, ExcludePatternsType } from '@figpot/src/features/document';
 
 export type FigmaDefinedTypography = {
   id: LocalVariable['id'];
@@ -209,6 +209,80 @@ export function countTotalElements(tree: GetFileResponse, colors: FigmaDefinedCo
   }
 
   return treeCount + colors.length + typographies.length;
+}
+
+export function patchNestedTreeElements(figmaNode: SubcanvasNode, excludePatterns: ExcludePatternsType) {
+  // Deep parse
+  // Note: arrays are browsed the reverse order since modifying it while browsing
+  if ('children' in figmaNode) {
+    let w = figmaNode.children.length;
+    while (w--) {
+      if (excludePatterns.nodeNamePatterns && excludePatterns.nodeNamePatterns.some((pattern) => pattern.test(figmaNode.children[w].name))) {
+        figmaNode.children.splice(w, 1);
+      } else {
+        patchNestedTreeElements(figmaNode.children[w], excludePatterns);
+      }
+    }
+  }
+}
+
+export function patchDocument(
+  documentTree: GetFileResponse,
+  definedColors: FigmaDefinedColor[],
+  definedTypographies: FigmaDefinedTypography[],
+  excludePatterns: ExcludePatternsType
+) {
+  // Here we apply `excludePatterns` settings
+  // Note: arrays are browsed the reverse order since modifying it while browsing
+  let v = documentTree.document.children.length;
+  while (v--) {
+    const canvas = documentTree.document.children[v];
+
+    if (excludePatterns.pageNamePatterns && excludePatterns.pageNamePatterns.some((pattern) => pattern.test(canvas.name))) {
+      documentTree.document.children.splice(v, 1);
+    } else {
+      let w = canvas.children.length;
+      while (w--) {
+        if (excludePatterns.nodeNamePatterns && excludePatterns.nodeNamePatterns.some((pattern) => pattern.test(canvas.children[w].name))) {
+          canvas.children.splice(w, 1);
+        } else {
+          patchNestedTreeElements(canvas.children[w], excludePatterns);
+        }
+      }
+    }
+  }
+
+  if (excludePatterns.componentNamePatterns) {
+    for (const [componentId, component] of Object.entries(documentTree.components)) {
+      if (excludePatterns.componentNamePatterns.some((pattern) => pattern.test(component.name))) {
+        delete documentTree.components[componentId];
+      }
+    }
+
+    for (const [componentSetId, componentSet] of Object.entries(documentTree.componentSets)) {
+      if (excludePatterns.componentNamePatterns.some((pattern) => pattern.test(componentSet.name))) {
+        delete documentTree.componentSets[componentSetId];
+      }
+    }
+  }
+
+  if (excludePatterns.typographyNamePatterns) {
+    let i = definedTypographies.length;
+    while (i--) {
+      if (excludePatterns.typographyNamePatterns.some((pattern) => pattern.test(definedTypographies[i].name))) {
+        definedTypographies.splice(i, 1);
+      }
+    }
+  }
+
+  if (excludePatterns.colorNamePatterns) {
+    let u = definedColors.length;
+    while (u--) {
+      if (excludePatterns.colorNamePatterns.some((pattern) => pattern.test(definedColors[u].name))) {
+        definedColors.splice(u, 1);
+      }
+    }
+  }
 }
 
 export async function retrieveDocument(documentId: string) {

@@ -25,10 +25,37 @@ const debugDocument = document.command('debug').description('manage documents st
 
 const documentsOption = new Option('-d, --document [documents...]', 'figma document id as source and penpot one as target (`-d figmaId[:penpotId]`)');
 
+const patternInfo = '(use single quotes around the regexp to prevent your terminal to replace special characters)';
+const excludePagePatternsOption = new Option(
+  '-expp, --exclude-page-pattern [excludePagePatterns...]',
+  `regexp applied on each page name ${patternInfo}`
+);
+const excludeNodePatternsOption = new Option(
+  '-exnp, --exclude-node-pattern [excludeNodePatterns...]',
+  `regexp applied on each node name ${patternInfo}`
+);
+const excludeComponentPatternsOption = new Option(
+  '-excp, --exclude-component-pattern [excludeComponentPatterns...]',
+  `regexp applied on each component name ${patternInfo}`
+);
+const excludeTypographyPatternsOption = new Option(
+  '-extp, --exclude-typography-pattern [excludeTypographyPatterns...]',
+  `regexp applied on each typography name ${patternInfo}`
+);
+const excludeColorPatternsOption = new Option(
+  '-excp, --exclude-color-pattern [excludeColorPatterns...]',
+  `regexp applied on each color name ${patternInfo}`
+);
+
 document
   .command('synchronize')
   .description('synchronize Figma documents to Penpot ones')
   .addOption(documentsOption)
+  .addOption(excludePagePatternsOption)
+  .addOption(excludeNodePatternsOption)
+  .addOption(excludeComponentPatternsOption)
+  .addOption(excludeTypographyPatternsOption)
+  .addOption(excludeColorPatternsOption)
   .action(async (options) => {
     await ensureAccessTokens();
 
@@ -46,6 +73,13 @@ document
     await synchronize(
       SynchronizeOptions.parse({
         documents: documents,
+        excludePatterns: {
+          pageNamePatterns: Array.isArray(options.excludePagePattern) ? options.excludePagePattern : undefined,
+          nodeNamePatterns: Array.isArray(options.excludeNodePattern) ? options.excludeNodePattern : undefined,
+          componentNamePatterns: Array.isArray(options.excludeComponentPattern) ? options.excludeComponentPattern : undefined,
+          typographyNamePatterns: Array.isArray(options.excludeTypographyPattern) ? options.excludeTypographyPattern : undefined,
+          colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
+        },
       })
     );
   });
@@ -70,6 +104,11 @@ debugDocument
   .command('transform')
   .description('transform Figma documents format to Penpot one')
   .addOption(documentsOption)
+  .addOption(excludePagePatternsOption)
+  .addOption(excludeNodePatternsOption)
+  .addOption(excludeComponentPatternsOption)
+  .addOption(excludeTypographyPatternsOption)
+  .addOption(excludeColorPatternsOption)
   .action(async (options) => {
     await ensureAccessTokens();
 
@@ -78,6 +117,13 @@ debugDocument
     await transform(
       TransformOptions.parse({
         documents: documents,
+        excludePatterns: {
+          pageNamePatterns: Array.isArray(options.excludePagePattern) ? options.excludePagePattern : undefined,
+          nodeNamePatterns: Array.isArray(options.excludeNodePattern) ? options.excludeNodePattern : undefined,
+          componentNamePatterns: Array.isArray(options.excludeComponentPattern) ? options.excludeComponentPattern : undefined,
+          typographyNamePatterns: Array.isArray(options.excludeTypographyPattern) ? options.excludeTypographyPattern : undefined,
+          colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
+        },
       })
     );
   });

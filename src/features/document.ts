@@ -30,6 +30,7 @@ import {
   countTotalElements,
   extractStylesTypographies,
   mergeStylesColors,
+  patchDocument,
   retrieveColors,
   retrieveDocument,
   retrieveStylesNodes,
@@ -371,8 +372,24 @@ export function transformDocument(
   return penpotTree;
 }
 
+export const Pattern = z.string().transform((val) => {
+  // We make it case insensitive because in huge files sometimes common patterns are not exact
+  return new RegExp(val, 'i');
+});
+export type PatternsType = z.infer<typeof Pattern>;
+
+export const ExcludePatterns = z.object({
+  pageNamePatterns: z.array(Pattern).optional(),
+  nodeNamePatterns: z.array(Pattern).optional(),
+  componentNamePatterns: z.array(Pattern).optional(),
+  typographyNamePatterns: z.array(Pattern).optional(),
+  colorNamePatterns: z.array(Pattern).optional(),
+});
+export type ExcludePatternsType = z.infer<typeof ExcludePatterns>;
+
 export const TransformOptions = z.object({
   documents: z.array(DocumentOptions),
+  excludePatterns: ExcludePatterns,
 });
 export type TransformOptionsType = z.infer<typeof TransformOptions>;
 
@@ -385,7 +402,8 @@ export async function transform(options: TransformOptionsType) {
     const figmaColors = await readFigmaColorsFile(document.figmaDocument);
     const figmaTypographies = await readFigmaTypographiesFile(document.figmaDocument);
 
-    // TODO: the count should be done once exclusions are applied?
+    patchDocument(figmaTree, figmaColors, figmaTypographies, options.excludePatterns);
+
     const elementsCount = countTotalElements(figmaTree, figmaColors, figmaTypographies);
 
     console.log(`the figma document contains around ${elementsCount} elements`);
@@ -1295,6 +1313,7 @@ export async function set(options: SetOptionsType) {
 
 export const SynchronizeOptions = z.object({
   documents: z.array(DocumentOptions),
+  excludePatterns: ExcludePatterns,
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;
 

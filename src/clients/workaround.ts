@@ -11,7 +11,9 @@ export async function getJsonResponseBody(response: Response): Promise<any> {
   // [WORKAROUND] Currently the backend is sending back all changes we just did
   // For huge documents it doubles or more the time of processing, since the answer is not used now we just ignore it
   // Note: ideally the backend would not send at all this over the network
-  if (response.status >= 200 && response.status < 300 && response.url.endsWith('api/rpc/command/update-file')) {
+  if (response.status >= 200 && response.status < 300 && response.body && response.url.endsWith('api/rpc/command/update-file')) {
+    response.body.cancel();
+
     return { message: `unusable patched object, please see "src/clients/workaround.ts"` };
   }
 

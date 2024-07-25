@@ -3,7 +3,10 @@ import { translateTouched } from '@figpot/src/features/translators/translateTouc
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
-export function transformOverrides(registry: AbstractRegistry, node: SubcanvasNode): Pick<ShapeAttributes, 'touched'> {
+export function transformOverrides(
+  registry: AbstractRegistry,
+  node: Pick<SubcanvasNode, 'id' | 'componentPropertyReferences'>
+): Pick<ShapeAttributes, 'touched'> {
   // Get overrides from the closest parent component instance
   // But some are not specified inside so patching these overrides with the ones specified at the component level
   let overrides = registry.getOverrides(node.id);

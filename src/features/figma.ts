@@ -17,7 +17,7 @@ import {
   getProjectFiles,
   getTeamProjects,
 } from '@figpot/src/clients/figma';
-import { DocumentOptionsType, ExcludePatternsType } from '@figpot/src/features/document';
+import { DocumentOptionsType, ExcludePatternsType, ReplaceFontPatternType } from '@figpot/src/features/document';
 
 export type FigmaDefinedTypography = {
   id: LocalVariable['id'];
@@ -211,7 +211,23 @@ export function countTotalElements(tree: GetFileResponse, colors: FigmaDefinedCo
   return treeCount + colors.length + typographies.length;
 }
 
-export function patchNestedTreeElements(figmaNode: SubcanvasNode, excludePatterns: ExcludePatternsType) {
+export function patchFontFamily(fontSettings: TypeStyle, replaceFontPatterns: ReplaceFontPatternType[]) {
+  if (fontSettings.fontFamily) {
+    for (const replaceFontPattern of replaceFontPatterns) {
+      if (replaceFontPattern.search.test(fontSettings.fontFamily as string)) {
+        fontSettings.fontFamily = replaceFontPattern.set;
+
+        return;
+      }
+    }
+  }
+}
+
+export function patchNestedTreeElements(
+  figmaNode: SubcanvasNode,
+  excludePatterns: ExcludePatternsType,
+  replaceFontPatterns: ReplaceFontPatternType[]
+) {
   // Deep parse
   // Note: arrays are browsed the reverse order since modifying it while browsing
   if ('children' in figmaNode) {
@@ -220,8 +236,17 @@ export function patchNestedTreeElements(figmaNode: SubcanvasNode, excludePattern
       if (excludePatterns.nodeNamePatterns && excludePatterns.nodeNamePatterns.some((pattern) => pattern.test(figmaNode.children[w].name))) {
         figmaNode.children.splice(w, 1);
       } else {
-        patchNestedTreeElements(figmaNode.children[w], excludePatterns);
+        patchNestedTreeElements(figmaNode.children[w], excludePatterns, replaceFontPatterns);
       }
+    }
+  }
+
+  // Patch the font if needed
+  if (figmaNode.type === 'TEXT' && replaceFontPatterns.length > 0) {
+    patchFontFamily(figmaNode.style, replaceFontPatterns);
+
+    for (const segmentStyle of Object.values(figmaNode.styleOverrideTable)) {
+      patchFontFamily(segmentStyle, replaceFontPatterns);
     }
   }
 }
@@ -230,7 +255,8 @@ export function patchDocument(
   documentTree: GetFileResponse,
   definedColors: FigmaDefinedColor[],
   definedTypographies: FigmaDefinedTypography[],
-  excludePatterns: ExcludePatternsType
+  excludePatterns: ExcludePatternsType,
+  replaceFontPatterns: ReplaceFontPatternType[]
 ) {
   // Here we apply `excludePatterns` settings
   // Note: arrays are browsed the reverse order since modifying it while browsing
@@ -246,7 +272,7 @@ export function patchDocument(
         if (excludePatterns.nodeNamePatterns && excludePatterns.nodeNamePatterns.some((pattern) => pattern.test(canvas.children[w].name))) {
           canvas.children.splice(w, 1);
         } else {
-          patchNestedTreeElements(canvas.children[w], excludePatterns);
+          patchNestedTreeElements(canvas.children[w], excludePatterns, replaceFontPatterns);
         }
       }
     }
@@ -281,6 +307,13 @@ export function patchDocument(
       if (excludePatterns.colorNamePatterns.some((pattern) => pattern.test(definedColors[u].name))) {
         definedColors.splice(u, 1);
       }
+    }
+  }
+
+  // Patch the fonts if needed
+  if (replaceFontPatterns.length > 0) {
+    for (const definedTypography of definedTypographies) {
+      patchFontFamily(definedTypography.value, replaceFontPatterns);
     }
   }
 }

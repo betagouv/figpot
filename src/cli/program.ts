@@ -25,7 +25,7 @@ const debugDocument = document.command('debug').description('manage documents st
 
 const documentsOption = new Option('-d, --document [documents...]', 'figma document id as source and penpot one as target (`-d figmaId[:penpotId]`)');
 
-const patternInfo = '(use single quotes around the regexp to prevent your terminal to replace special characters)';
+const patternInfo = '(use single quotes around the parameter to prevent your terminal to replace special characters)';
 const excludePagePatternsOption = new Option(
   '-expp, --exclude-page-pattern [excludePagePatterns...]',
   `regexp applied on each page name ${patternInfo}`
@@ -35,7 +35,7 @@ const excludeNodePatternsOption = new Option(
   `regexp applied on each node name ${patternInfo}`
 );
 const excludeComponentPatternsOption = new Option(
-  '-excp, --exclude-component-pattern [excludeComponentPatterns...]',
+  '-excompp, --exclude-component-pattern [excludeComponentPatterns...]',
   `regexp applied on each component name ${patternInfo}`
 );
 const excludeTypographyPatternsOption = new Option(
@@ -43,9 +43,30 @@ const excludeTypographyPatternsOption = new Option(
   `regexp applied on each typography name ${patternInfo}`
 );
 const excludeColorPatternsOption = new Option(
-  '-excp, --exclude-color-pattern [excludeColorPatterns...]',
+  '-excolp, --exclude-color-pattern [excludeColorPatterns...]',
   `regexp applied on each color name ${patternInfo}`
 );
+
+const replaceFontPatternsOption = new Option(
+  '-rfp, --replace-font-pattern [replaceFontPatterns...]',
+  `pair of a regexp and the value in the form of '^Arial:Helvetica' " ${patternInfo}`
+);
+
+function formatReplaceFontPatterns(replaceFontPattern: string[]): object[] {
+  return replaceFontPattern.map((patternSettings): object => {
+    // The regex could include the `:` symbol whereas the value to set will not (fonts do not have special character in their name)
+    const lastIndex = patternSettings.lastIndexOf(':');
+
+    if (lastIndex === -1) {
+      throw new Error(`the --replace-font-pattern must contain a regexp and the replace value, in the form of: '^Arial:Helvetica'`);
+    }
+
+    return {
+      search: patternSettings.substring(0, lastIndex),
+      set: patternSettings.substring(lastIndex + 1),
+    };
+  });
+}
 
 document
   .command('synchronize')
@@ -56,6 +77,7 @@ document
   .addOption(excludeComponentPatternsOption)
   .addOption(excludeTypographyPatternsOption)
   .addOption(excludeColorPatternsOption)
+  .addOption(replaceFontPatternsOption)
   .action(async (options) => {
     await ensureAccessTokens();
 
@@ -80,6 +102,7 @@ document
           typographyNamePatterns: Array.isArray(options.excludeTypographyPattern) ? options.excludeTypographyPattern : undefined,
           colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
         },
+        replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
       })
     );
   });
@@ -109,6 +132,7 @@ debugDocument
   .addOption(excludeComponentPatternsOption)
   .addOption(excludeTypographyPatternsOption)
   .addOption(excludeColorPatternsOption)
+  .addOption(replaceFontPatternsOption)
   .action(async (options) => {
     await ensureAccessTokens();
 
@@ -124,6 +148,7 @@ debugDocument
           typographyNamePatterns: Array.isArray(options.excludeTypographyPattern) ? options.excludeTypographyPattern : undefined,
           colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
         },
+        replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
       })
     );
   });

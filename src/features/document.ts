@@ -387,9 +387,16 @@ export const ExcludePatterns = z.object({
 });
 export type ExcludePatternsType = z.infer<typeof ExcludePatterns>;
 
+export const ReplaceFontPattern = z.object({
+  search: Pattern,
+  set: z.string().min(1),
+});
+export type ReplaceFontPatternType = z.infer<typeof ReplaceFontPattern>;
+
 export const TransformOptions = z.object({
   documents: z.array(DocumentOptions),
   excludePatterns: ExcludePatterns,
+  replaceFontPatterns: z.array(ReplaceFontPattern),
 });
 export type TransformOptionsType = z.infer<typeof TransformOptions>;
 
@@ -402,7 +409,7 @@ export async function transform(options: TransformOptionsType) {
     const figmaColors = await readFigmaColorsFile(document.figmaDocument);
     const figmaTypographies = await readFigmaTypographiesFile(document.figmaDocument);
 
-    patchDocument(figmaTree, figmaColors, figmaTypographies, options.excludePatterns);
+    patchDocument(figmaTree, figmaColors, figmaTypographies, options.excludePatterns, options.replaceFontPatterns);
 
     const elementsCount = countTotalElements(figmaTree, figmaColors, figmaTypographies);
 
@@ -1314,6 +1321,7 @@ export async function set(options: SetOptionsType) {
 export const SynchronizeOptions = z.object({
   documents: z.array(DocumentOptions),
   excludePatterns: ExcludePatterns,
+  replaceFontPatterns: z.array(ReplaceFontPattern),
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;
 

@@ -152,5 +152,6 @@ export function translateTouched(figmaChangedProperties: Overrides['overriddenFi
     }
   }
 
-  return Array.from(syncGroups);
+  // We sort them so when it's "refreshed" by the frontend the order won't matter (we did the same into `cleanHostedDocument()`)
+  return Array.from(syncGroups).sort();
 }

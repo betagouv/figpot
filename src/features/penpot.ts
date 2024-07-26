@@ -39,6 +39,11 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
       object.parentId = object.parentId === rootFrameId ? newRootFrameNodeId : object.parentId;
       object.frameId = object.frameId === rootFrameId ? newRootFrameNodeId : object.frameId;
 
+      // We sort them so when it's "refreshed" by the frontend the order won't matter (we did the same into `translateTouched()`)
+      if (Array.isArray(object.touched)) {
+        object.touched = object.touched.sort();
+      }
+
       // There is an issue when getting layout properties from the backend, there is a wrong case formatting due to close uppercases
       if ('layoutItemHsizing' in object) {
         (object as any).layoutItemHSizing = object.layoutItemHsizing;

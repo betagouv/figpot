@@ -15,7 +15,7 @@ import { toFile } from 'ts-graphviz/adapter';
 import { z } from 'zod';
 
 import { GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
-import { OpenAPI as PenpotClientSettings, postCommandGetFontVariants } from '@figpot/src/clients/penpot';
+import { OpenAPI as PenpotClientSettings, postCommandGetFileObjectThumbnails, postCommandGetFontVariants } from '@figpot/src/clients/penpot';
 import {
   PostCommandGetFileResponse,
   appCommonFilesChanges$change,
@@ -445,6 +445,7 @@ export interface Differences {
   newDocumentName?: string;
   newTreeOperations: appCommonFilesChanges$change[];
   newMedias: string[];
+  oldThumbnails: string[];
 }
 
 export function pushOperationsWithOrderingLogic(
@@ -540,6 +541,22 @@ export function delayBindingOperation(
   delayedOperations.push(delayedOperation);
 }
 
+export function formatThumbnailId(documentId: string, pageId: string, objectId: string, objectType: 'component' | 'frame') {
+  return `${documentId}/${pageId}/${objectId}/${objectType}`;
+}
+
+export function markThumbnailToBeKept(
+  thumbnailsToKeep: Set<string>,
+  documentId: string,
+  pageId: string,
+  objectId: string,
+  objectType: 'component' | 'frame'
+) {
+  const thumbnailId = formatThumbnailId(documentId, pageId, objectId, objectType);
+
+  thumbnailsToKeep.add(thumbnailId);
+}
+
 export function performBasicNodeCreation(
   normalOperations: appCommonFilesChanges$change[],
   delayedOperations: appCommonFilesChanges$change[],
@@ -594,7 +611,7 @@ export function performBasicNodeCreation(
   }
 }
 
-export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocument): Differences {
+export function getDifferences(documentId: string, currentTree: PenpotDocument, newTree: PenpotDocument, currentThumbnails: string[]): Differences {
   const newDocumentName = currentTree.name !== newTree.name ? newTree.name : undefined;
   const newMediasToUpload: string[] = [];
 
@@ -728,6 +745,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
   console.log(`[nodes differences] ${formatDiffResultLog(diffResult)}`);
 
   const operations: appCommonFilesChanges$change[] = [];
+  const thumbnailsToKeep: Set<string> = new Set(); // Thumbails are only done on top frame for each tree branch (page deletion does not trigger thumbnail removal)
   const delayedOperations: typeof operations = [];
 
   for (const [, item] of diffResult) {
@@ -809,10 +827,30 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
     }
   }
 
-  const browse = (graphNodeId: string) => {
+  const browse = (
+    graphNodeId: string,
+    foundTopBranchFrame: boolean // This excludes the root frame
+  ): boolean => {
+    // Returns in case of modifications
     const item = diffResult.get(graphNodeId);
 
     assert(item);
+
+    let subTreeModified = false;
+    let topBranchFrame: LiteNode | null = null;
+    if (!foundTopBranchFrame) {
+      let node: NodeLabel | null = null;
+      if (item.state === 'unchanged') {
+        node = item.model;
+      } else if (item.state !== 'removed') {
+        node = item.after;
+      }
+
+      if (node && node._apiType === 'node' && node.type === 'frame' && !isPageRootFrameFromId(node.id as string)) {
+        foundTopBranchFrame = true;
+        topBranchFrame = node;
+      }
+    }
 
     const nodeOperationsAfterChildrenAreProcessed: appCommonFilesChanges$change[] = [];
 
@@ -1008,17 +1046,35 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
 
     if (children && children?.length > 0) {
       for (const childId of children) {
-        browse(childId);
+        const childTreeModified = browse(childId, foundTopBranchFrame);
+
+        if (childTreeModified) {
+          subTreeModified = true;
+        }
+      }
+    }
+
+    // If the children tree has been modified in a way we require the thumbnail refresh
+    if (topBranchFrame && !subTreeModified) {
+      assert(topBranchFrame.id);
+
+      markThumbnailToBeKept(thumbnailsToKeep, documentId, topBranchFrame._pageId, topBranchFrame.id, 'frame');
+
+      // If the frame is also a component definition, it has also its thumbnail for library usage
+      if (topBranchFrame.mainInstance) {
+        markThumbnailToBeKept(thumbnailsToKeep, documentId, topBranchFrame._pageId, topBranchFrame.id, 'component');
       }
     }
 
     // The API expects a specific order of execution
     operations.push(...nodeOperationsAfterChildrenAreProcessed);
+
+    return subTreeModified;
   };
 
   const sourcesIds = newGraph.sources();
   for (const sourceId of sourcesIds) {
-    browse(sourceId);
+    browse(sourceId, false);
   }
 
   // The API expects some bindings to have all nodes created, so running them at the end
@@ -1071,10 +1127,20 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
     }
   }
 
+  // Make the difference between hosted thumbnails and those we think should be kept
+  // TODO: we do not manage thumbnail of type `component` for now since impossible to reproduce in the UI
+  const thumbnailsToDelete: string[] = [];
+  for (const currentThumbnail of currentThumbnails) {
+    if (!thumbnailsToKeep.has(currentThumbnail)) {
+      thumbnailsToDelete.push(currentThumbnail);
+    }
+  }
+
   return {
     newDocumentName: newDocumentName,
     newTreeOperations: operations,
     newMedias: [...new Set(newMediasToUpload)], // Remove duplicates
+    oldThumbnails: thumbnailsToDelete,
   };
 }
 
@@ -1099,6 +1165,12 @@ export async function compare(options: CompareOptionsType) {
       );
     }
 
+    const currentThumbnails = await postCommandGetFileObjectThumbnails({
+      requestBody: {
+        fileId: document.penpotDocument,
+      },
+    });
+
     let hostedDocument = await postCommandGetFile({
       requestBody: {
         id: document.penpotDocument,
@@ -1116,7 +1188,7 @@ export async function compare(options: CompareOptionsType) {
     const transformedDocument = await readTransformedFigmaTreeFile(document.figmaDocument, document.penpotDocument);
 
     const hostedCoreDocument = cleanHostedDocument(hostedDocument);
-    const diff = getDifferences(hostedCoreDocument, transformedDocument);
+    const diff = getDifferences(document.penpotDocument, hostedCoreDocument, transformedDocument, Object.keys(currentThumbnails));
 
     await writeBigJsonFile(getFigmaToPenpotDiffPath(document.figmaDocument, document.penpotDocument), diff);
   }
@@ -1297,6 +1369,41 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
     // The last chunk must be processed
     if (currentChunk.length > 0) {
       await processOperationsChunk(figmaDocumentId, penpotDocumentId, differences, currentChunk, chunkNumber, succeededOperations);
+    }
+  }
+
+  if (differences.oldThumbnails.length > 0) {
+    console.log(`processing the removal of ${differences.oldThumbnails.length} thumbails`);
+
+    // Note: we do not parallelize with `Promise.all()` because it could trigger rate limit
+    for (const oldThumbnail of differences.oldThumbnails) {
+      // TODO: uncomment when the OpenAPI schema exposes this endpoint
+      // await postCommandDeleteFileObjectThumbnail({
+      //   requestBody: {
+      //     fileId: penpotDocumentId,
+      //     objectId: oldThumbnail,
+      //   },
+      // });
+
+      const response = await fetch(`${PenpotClientSettings.BASE}/command/delete-file-object-thumbnail`, {
+        method: 'POST',
+        body: JSON.stringify({
+          fileId: penpotDocumentId,
+          objectId: oldThumbnail,
+        }),
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: (PenpotClientSettings.HEADERS as any)?.Authorization,
+        },
+      });
+
+      if (response.status !== 200) {
+        // If not removed there is a risk of visual defect until there is a modification inside
+        // We have no easy way to retry this on the next synchronization because the tree will already be modified
+        console.error(await response.json());
+        console.warn(`the thumbnail ${oldThumbnail} seems to not be deleted correctly`);
+      }
     }
   }
 }

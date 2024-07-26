@@ -114,12 +114,18 @@ export function transformDocumentNode(
     return transformPageNode(pageRegistry, child);
   });
 
-  // Patch components with the component page ID since the API requires it (it's not known at definition time)
+  // Patch components with information gotten while browing the entire tree
   for (const component of registry.getComponents().values()) {
     pagesLoop: for (const pageIndex of penpotPagesNodes) {
       for (const object of Object.values(pageIndex.objects)) {
         if (object.id === component.mainInstanceId) {
+          // The API requires the page ID (it's not known at definition time)
           component.mainInstancePage = pageIndex.id;
+
+          // In Figma the components are organized by pages (e.g. a component "A" inside the "Button" page will be displayed "Button > A")
+          // so for the ease of usage into Penpot we reproduce this UI effect even if it implies "hardcoding" the prefix into the `path`
+          // TODO: it won't work for components not inside the tree (those with instance excluded by a CLI pattern, or remote components), maybe we should try to get this information to patch them too... (tried `/v1/components/$COMPONENT_KEY` but it returns 404)
+          component.path = component.path !== '' ? `${pageIndex.name} / ${component.path}` : pageIndex.name;
 
           break pagesLoop;
         }

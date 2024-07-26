@@ -7,7 +7,7 @@ module.exports = {
     ecmaVersion: 2021,
     sourceType: 'module',
   },
-  env: { node: true, jest: true },
+  env: { node: true, browser: true, jest: true },
   ignorePatterns: ['data', 'dist'],
   rules: {
     'interface-name': 'off',

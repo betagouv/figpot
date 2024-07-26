@@ -33,6 +33,7 @@
     "allowSyntheticDefaultImports": true,
     "lib": [
       "esnext",
+      "dom",
     ],
     "plugins": [],
     "noUnusedLocals": false,

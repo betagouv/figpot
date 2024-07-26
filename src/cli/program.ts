@@ -3,18 +3,20 @@ import { Command, Option } from '@commander-js/extra-typings';
 import {
   CompareOptions,
   DocumentOptionsType,
+  HydrateOptions,
   RetrieveOptions,
   SetOptions,
   SynchronizeOptions,
   TransformOptions,
   compare,
+  hydrate,
   retrieve,
   set,
   synchronize,
   transform,
 } from '@figpot/src/features/document';
 import { processDocumentsParametersFromInput, retrieveDocumentsFromInput } from '@figpot/src/features/figma';
-import { ensureAccessTokens } from '@figpot/src/utils/environment';
+import { ensureAccessTokens, ensureCredentials } from '@figpot/src/utils/environment';
 
 export const program = new Command();
 
@@ -23,7 +25,7 @@ program.name('figpot').description('CLI to perform actions between Figma and Pen
 const document = program.command('document').description('manage documents');
 const debugDocument = document.command('debug').description('manage documents step by step to debug');
 
-const documentsOption = new Option('-d, --document [documents...]', 'figma document id as source and penpot one as target (`-d figmaId[:penpotId]`)');
+const documentsOption = new Option('-d, --document [documents...]', 'figma document id as source and penpot one as target (`-d figmaId:penpotId`)');
 
 const patternInfo = '(use single quotes around the parameter to prevent your terminal to replace special characters)';
 const excludePagePatternsOption = new Option(
@@ -78,16 +80,20 @@ document
   .addOption(excludeTypographyPatternsOption)
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
+  .option('-nh, --no-hydrate', 'prevent performing hydratation after the synchronization')
+  .option('-ht, --hydrate-timeout <hydrateTimeout>', 'specify a maximum of duration for hydratation')
   .action(async (options) => {
     await ensureAccessTokens();
 
     let documents: DocumentOptionsType[];
     if (!options.document || options.document === true) {
-      documents = (await retrieveDocumentsFromInput()).map((figmaDocument) => {
-        return {
-          figmaDocument: figmaDocument,
-        };
-      });
+      throw new Error('please specify both figma and penpot documents to synchronize');
+      // TODO: disabling this for now until we implement the documents retrieval from Penpot
+      // documents = (await retrieveDocumentsFromInput()).map((figmaDocument) => {
+      //   return {
+      //     figmaDocument: figmaDocument,
+      //   };
+      // });
     } else {
       documents = processDocumentsParametersFromInput(options.document);
     }
@@ -103,6 +109,31 @@ document
           colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
         },
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
+        hydrate: options.hydrate,
+        hydrateTimeout: options.hydrateTimeout || null,
+      })
+    );
+  });
+
+document
+  .command('hydrate')
+  .description('hydrate Penpot documents after a synchronization')
+  .addOption(documentsOption)
+  .option('-t, --timeout <timeout>', 'specify a maximum of duration for hydratation')
+  .action(async (options) => {
+    await ensureCredentials();
+
+    let documents: DocumentOptionsType[];
+    if (!options.document || options.document === true) {
+      throw new Error('please specify both figma and penpot documents to synchronize');
+    } else {
+      documents = processDocumentsParametersFromInput(options.document);
+    }
+
+    await hydrate(
+      HydrateOptions.parse({
+        documents: documents,
+        timeout: options.timeout || null,
       })
     );
   });

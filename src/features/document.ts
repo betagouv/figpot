@@ -7,8 +7,11 @@ import fs from 'fs/promises';
 import { glob } from 'glob';
 import graphlib, { Graph } from 'graphlib';
 import { mimeData } from 'human-filetypes';
+import { parse, toSeconds } from 'iso8601-duration';
 import arrayDiff from 'microdiff';
 import path from 'path';
+import { Request, chromium } from 'playwright';
+import setCookieParser from 'set-cookie-parser';
 import { parser } from 'stream-json';
 import { Digraph, toDot } from 'ts-graphviz';
 import { toFile } from 'ts-graphviz/adapter';
@@ -45,6 +48,7 @@ import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { formatDiffResultLog, getDiff } from '@figpot/src/utils/comparaison';
+import { config } from '@figpot/src/utils/environment';
 import { downloadFile, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
 import { gracefulExit } from '@figpot/src/utils/system';
 
@@ -87,16 +91,18 @@ export const Mapping = z.object({
 export type MappingType = z.infer<typeof Mapping>;
 
 export const Metadata = z.object({
-  lastRetrieve: z.date(),
-  // fonts: z.array(z.string()),
-  // assets: ?,
-  documentDependencies: z.array(z.string()),
+  figmaDocumentId: z.string(),
+  figmaLastModified: z.string().pipe(z.coerce.date()),
+  penpotProjectId: z.string(),
+  penpotDocumentId: z.string(),
+  penpotLastModified: z.string().pipe(z.coerce.date()),
+  penpotPages: z.array(z.string().uuid()),
 });
 export type MetadataType = z.infer<typeof Metadata>;
 
 export const DocumentOptions = z.object({
   figmaDocument: z.string(),
-  penpotDocument: z.string().optional(), // If empty a new file will be created
+  penpotDocument: z.string(),
 });
 export type DocumentOptionsType = z.infer<typeof DocumentOptions>;
 
@@ -127,6 +133,10 @@ export function getPenpotDocumentPath(figmaDocumentId: string, penpotDocumentId:
 
 export function getPenpotHostedDocumentTreePath(figmaDocumentId: string, penpotDocumentId: string) {
   return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'hosted-tree.json');
+}
+
+export function getFigmaToPenpotMetaPath(figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'meta.json');
 }
 
 export function getFigmaToPenpotMappingPath(figmaDocumentId: string, penpotDocumentId: string) {
@@ -197,6 +207,41 @@ export async function readFigmaToPenpotDiffFile(figmaDocumentId: string, penpotD
   }
 
   return (await readBigJsonFile(diffPath)) as Differences; // We did not implement a zod schema, hoping they keep the structure stable enough
+}
+
+export async function restoreMeta(figmaDocumentId: string, penpotDocumentId: string): Promise<MetadataType> {
+  const metaPath = getFigmaToPenpotMetaPath(figmaDocumentId, penpotDocumentId);
+  let meta: MetadataType | null = null;
+
+  if (fsSync.existsSync(metaPath)) {
+    const metaString = await fs.readFile(metaPath, 'utf-8');
+    const metaJson = JSON.parse(metaString);
+
+    meta = Metadata.parse(metaJson);
+  }
+
+  // If none, create a new one to be used
+  // Note: we use meaningless values just to respect the typings
+  if (!meta) {
+    await fs.mkdir(path.dirname(metaPath), { recursive: true });
+
+    meta = {
+      figmaDocumentId: figmaDocumentId,
+      figmaLastModified: new Date(0),
+      penpotProjectId: 'not_known_yet',
+      penpotDocumentId: 'not_known_yet',
+      penpotLastModified: new Date(0),
+      penpotPages: [],
+    };
+  }
+
+  return meta;
+}
+
+export async function saveMeta(figmaDocumentId: string, penpotDocumentId: string, meta: MetadataType): Promise<void> {
+  await fs.writeFile(getFigmaToPenpotMetaPath(figmaDocumentId, penpotDocumentId), JSON.stringify(meta, null, 2), {
+    encoding: 'utf-8',
+  });
 }
 
 export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: string): Promise<MappingType> {
@@ -279,8 +324,6 @@ export async function saveMapping(figmaDocumentId: string, penpotDocumentId: str
 
 export async function retrieve(options: RetrieveOptionsType) {
   for (const document of options.documents) {
-    assert(document.penpotDocument);
-
     // Get all predefined colors from Figma
     // We do not use `getPublishedVariables()` because it contains only a part of the local ones, and without values
     // Note: other variable kinds are not retrieved because Penpot cannot manage them (so using their raw value)
@@ -305,6 +348,12 @@ export async function retrieve(options: RetrieveOptionsType) {
 
     // Save the document tree locally
     const documentTree = await retrieveDocument(document.figmaDocument);
+
+    // Use metadata for future usage
+    const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
+    meta.figmaDocumentId = documentTree.mainFileKey || document.figmaDocument;
+    meta.figmaLastModified = new Date(documentTree.lastModified);
+    await saveMeta(document.figmaDocument, document.penpotDocument, meta);
 
     // Process attached styles
     const stylesIds: string[] = Object.keys(documentTree.styles);
@@ -376,7 +425,7 @@ export const Pattern = z.string().transform((val) => {
   // We make it case insensitive because in huge files sometimes common patterns are not exact
   return new RegExp(val, 'i');
 });
-export type PatternsType = z.infer<typeof Pattern>;
+export type PatternType = z.infer<typeof Pattern>;
 
 export const ExcludePatterns = z.object({
   pageNamePatterns: z.array(Pattern).optional(),
@@ -427,8 +476,6 @@ export async function transform(options: TransformOptionsType) {
         return Promise.reject(gracefulExit);
       }
     }
-
-    assert(document.penpotDocument);
 
     const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument);
 
@@ -1165,6 +1212,8 @@ export async function compare(options: CompareOptionsType) {
       );
     }
 
+    const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
+
     const currentThumbnails = await postCommandGetFileObjectThumbnails({
       requestBody: {
         fileId: document.penpotDocument,
@@ -1176,6 +1225,13 @@ export async function compare(options: CompareOptionsType) {
         id: document.penpotDocument,
       },
     });
+
+    // Use metadata for future usage
+    meta.penpotProjectId = hostedDocument.projectId as string;
+    meta.penpotDocumentId = hostedDocument.id as string;
+    meta.penpotLastModified = hostedDocument.modifiedAt as Date;
+    meta.penpotPages = (hostedDocument.data as PenpotDocument['data']).pages;
+    await saveMeta(document.figmaDocument, document.penpotDocument, meta);
 
     // TODO: for now the response is kebab-case despite types, so forcing the conversion (ref: https://github.com/penpot/penpot/pull/4760#pullrequestreview-2125984653)
     hostedDocument = camelCase(hostedDocument, Number.MAX_SAFE_INTEGER) as PostCommandGetFileResponse;
@@ -1417,18 +1473,25 @@ export async function set(options: SetOptionsType) {
   // Execute operations onto Penpot instance to match the Figma documents
   // and adjust local mapping with deleted/modified/created nodes
   for (const document of options.documents) {
-    assert(document.penpotDocument);
-
     const diff = await readFigmaToPenpotDiffFile(document.figmaDocument, document.penpotDocument);
 
     await processDifferences(document.figmaDocument, document.penpotDocument, diff);
   }
 }
 
+export const Duration = z.string().transform((val) => {
+  // We make it case insensitive because in huge files sometimes common patterns are not exact
+  // Note: we rely on the duration format ISO 8601 but we expect only people to specify the time part (after "T")
+  return toSeconds(parse(`PT${val.toUpperCase()}`)) * 1000; // Milliseconds
+});
+export type DurationType = z.infer<typeof Duration>;
+
 export const SynchronizeOptions = z.object({
   documents: z.array(DocumentOptions),
   excludePatterns: ExcludePatterns,
   replaceFontPatterns: z.array(ReplaceFontPattern),
+  hydrate: z.boolean(),
+  hydrateTimeout: Duration.nullable(),
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;
 
@@ -1440,4 +1503,227 @@ export async function synchronize(options: SynchronizeOptionsType) {
   await transform(options);
   await compare(options);
   await set(options);
+
+  if (!options.hydrate) {
+    console.warn(
+      `the document has been synchronized but some graphical enhancements can only be done from a browser. If the synchronization has pushed modifications the first user seeing the updated document may encounter those loadings for a few seconds or minutes depending on the size of the document. We advise you to perform a hydration by yourself so the first user will see the document properly directly. Either open your document into the browser, or rerun this command without "--no-hydrate", or by running the dedicated command "figpot document hydrate ..."`
+    );
+
+    return;
+  }
+
+  await hydrate({
+    documents: options.documents,
+    timeout: options.hydrateTimeout,
+  });
+}
+
+export function formatPenpotPageUrl(baseUrl: string, projectId: string, documentId: string, pageId: string): string {
+  return `${baseUrl}/#/workspace/${projectId}/${documentId}?page-id=${pageId}`;
+}
+
+export const HydrateOptions = z.object({
+  documents: z.array(DocumentOptions),
+  timeout: Duration.nullable(),
+});
+export type HydrateOptionsType = z.infer<typeof HydrateOptions>;
+
+export async function hydrate(options: HydrateOptionsType) {
+  // Get the UI access token (short-lived) (the API access token would not compatible for the following actions)
+  // Note: this is inspired by `postCommandLoginWithPassword()` but we need to catch the response cookie header
+  const response = await fetch(`${PenpotClientSettings.BASE}/command/login-with-password`, {
+    method: 'POST',
+    body: JSON.stringify({
+      email: config.penpotUserEmail,
+      password: config.penpotUserPassword,
+    }),
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+  });
+
+  if (response.status !== 200) {
+    let details = await response.text();
+
+    // [WORKAROUND] Mask the password if leaked by the backend
+    // Ref: https://github.com/penpot/penpot/issues/4932
+    details = details.replaceAll(config.penpotUserPassword, '********');
+
+    console.error(details);
+
+    throw new Error(`cannot generate an access token for the penpot user interface`);
+  }
+
+  const cookiesToSet = response.headers
+    .getSetCookie()
+    .map((cookieString) => {
+      return setCookieParser.parse(cookieString);
+    })
+    .flat(); // Flatten because the cookie set and the library may have nested things;
+
+  // Detect updates needed by the frontend, and wait for them to finish
+  const mininumStartupTimeSeconds = 30;
+  const idleIntervalAfterChangeSeconds = 10;
+
+  const browser = await chromium.launch({
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+    // headless: false, // Can help debugging
+  });
+
+  try {
+    const browserContext = await browser.newContext();
+    const baseUrl = process.env.PENPOT_BASE_URL || 'https://design.penpot.app/';
+    const domain = new URL(baseUrl).host;
+
+    await browserContext.addCookies(
+      cookiesToSet.map((cookie) => {
+        return {
+          ...cookie,
+          domain: domain,
+          expires: cookie.expires ? cookie.expires.getTime() / 1000 : undefined,
+          sameSite: cookie.sameSite as 'Strict' | 'Lax' | 'None' | undefined,
+        };
+      })
+    );
+
+    for (const document of options.documents) {
+      console.log(`start hydratation for the penpot document ${document.penpotDocument}`);
+      console.log(`it may take from seconds to minutes depending on the document size and if this one is synchronized for the first time`);
+
+      const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
+
+      // Check we have the needed information into the `meta.json`
+      if (meta.penpotProjectId === 'not_known_yet') {
+        throw new Error(`to run hydration you must first run the synchronization on this document on this machine`);
+      }
+
+      const page = await browserContext.newPage();
+
+      try {
+        const endpointsToWatch = ['/api/rpc/command/update-file?', '/api/rpc/command/create-file-object-thumbnail?'];
+        let stage: 'start' | 'waiting-updates' = 'start';
+
+        const pagesToWatch = [...meta.penpotPages];
+
+        if (pagesToWatch.length === 0) {
+          break;
+        }
+
+        const firstPageToWatch = pagesToWatch.shift() as string;
+
+        await new Promise<void>((resolve, reject) => {
+          // TODO: timeout should be global to all documents
+          const timeoutTimerId = options.timeout
+            ? setTimeout(() => {
+                if (successTimerId) {
+                  clearTimeout(successTimerId);
+                }
+
+                reject(new Error('hydratation has timed out before being fully complete'));
+              }, options.timeout)
+            : null;
+
+          let successTimerId: ReturnType<typeof setTimeout>;
+
+          const waitForPageChange = (timeout: number) => {
+            successTimerId = setTimeout(() => {
+              if (pagesToWatch.length > 0) {
+                const pageToWatch = pagesToWatch.shift() as string;
+                const pageUrl = formatPenpotPageUrl(baseUrl, meta.penpotProjectId, document.penpotDocument, pageToWatch);
+
+                page
+                  .evaluate((newUrl) => {
+                    // We tried using `pushState` but it was not working. It seems by modifying the `href` the page is not reloaded so it fits our need
+                    window.location.href = newUrl;
+                  }, pageUrl)
+                  .then(() => {
+                    // Start again the analysis process
+                    console.log(`look for change needed on the page ${pageToWatch}`);
+
+                    waitForPageChange(idleIntervalAfterChangeSeconds * 1000);
+                  })
+                  .catch(reject);
+              } else {
+                if (timeoutTimerId) {
+                  clearTimeout(timeoutTimerId);
+                }
+
+                resolve();
+              }
+            }, timeout);
+          };
+
+          const ongoingChanges: Request[] = [];
+
+          page.on('request', (request) => {
+            const url = request.url();
+            if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => url.includes(endpoint))) {
+              console.log(`a needed request has been detected`);
+
+              // Pause the timer until this same request triggers a respponse
+              clearTimeout(successTimerId);
+
+              ongoingChanges.push(request);
+            }
+          });
+
+          page.on('response', async (response) => {
+            const url = response.url();
+            if (stage === 'start' && url.includes('/api/rpc/command/get-file?')) {
+              if (response.status() === 200) {
+                stage = 'waiting-updates';
+
+                console.log(`look for change needed on the page ${firstPageToWatch}`);
+
+                waitForPageChange(mininumStartupTimeSeconds * 1000);
+              } else {
+                reject(new Error(`document data cannot be fetched: ${await response.text()}`));
+              }
+            } else if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => url.includes(endpoint))) {
+              console.log(`the needed request has been performed, looking for more...`);
+
+              // Find the corresponding request and remove it
+              const requestIndex = ongoingChanges.indexOf(response.request());
+              if (requestIndex !== -1) {
+                ongoingChanges.splice(requestIndex, 1);
+
+                // If no more waiting we can enable again the timer
+                if (ongoingChanges.length === 0) {
+                  // Note: the time is different since after the first detected change it means the rest has been loaded already
+                  waitForPageChange(idleIntervalAfterChangeSeconds * 1000);
+                }
+              }
+            }
+          });
+
+          const firstPageUrl = formatPenpotPageUrl(baseUrl, meta.penpotProjectId, document.penpotDocument, firstPageToWatch);
+
+          page
+            .goto(firstPageUrl, {
+              // timeout: xxx, // It should be working by having the command timeout that will close the browser
+              waitUntil: 'load',
+            })
+            .then((response) => {
+              if (response && response.status() !== 200) {
+                response
+                  .text()
+                  .then((value) => {
+                    console.log(value);
+                  })
+                  .finally(() => {
+                    reject(new Error(`cannot load the document page`));
+                  });
+              }
+            });
+        });
+
+        console.log('no more update needed on the document');
+      } finally {
+        await page.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
 }

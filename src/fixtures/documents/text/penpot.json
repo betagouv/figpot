@@ -24,8 +24,6 @@
                 "letterSpacing": "0",
                 "lineHeight": "1",
                 "textTransform": "none",
-                "typographyRefFile": null,
-                "typographyRefId": null,
                 "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
               },
               {
@@ -41,8 +39,6 @@
                 "letterSpacing": "0",
                 "lineHeight": "1",
                 "textTransform": "none",
-                "typographyRefFile": null,
-                "typographyRefId": null,
                 "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
               },
               {
@@ -58,8 +54,6 @@
                 "letterSpacing": "0",
                 "lineHeight": "1",
                 "textTransform": "none",
-                "typographyRefFile": null,
-                "typographyRefId": null,
                 "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
               },
               {
@@ -75,8 +69,6 @@
                 "letterSpacing": "0",
                 "lineHeight": "1",
                 "textTransform": "none",
-                "typographyRefFile": null,
-                "typographyRefId": null,
                 "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
               }
             ],
@@ -91,8 +83,6 @@
             "letterSpacing": "0",
             "lineHeight": "1",
             "textTransform": "none",
-            "typographyRefFile": null,
-            "typographyRefId": null,
             "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
           },
           {
@@ -111,8 +101,6 @@
                 "letterSpacing": "0",
                 "lineHeight": "1",
                 "textTransform": "none",
-                "typographyRefFile": null,
-                "typographyRefId": null,
                 "fills": [{ "fillColor": "#ff0000", "fillOpacity": 1 }]
               },
               {
@@ -128,8 +116,6 @@
                 "letterSpacing": "0",
                 "lineHeight": "1",
                 "textTransform": "none",
-                "typographyRefFile": null,
-                "typographyRefId": null,
                 "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
               },
               {
@@ -145,8 +131,6 @@
                 "letterSpacing": "0",
                 "lineHeight": "1",
                 "textTransform": "none",
-                "typographyRefFile": null,
-                "typographyRefId": null,
                 "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
               }
             ],
@@ -161,8 +145,6 @@
             "letterSpacing": "0",
             "lineHeight": "1",
             "textTransform": "none",
-            "typographyRefFile": null,
-            "typographyRefId": null,
             "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
           }
         ]

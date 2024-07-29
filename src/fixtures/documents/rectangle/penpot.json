@@ -85,6 +85,7 @@
             "flipY": null,
             "hideFillOnExport": false,
             "proportionLock": false,
+            "shapes": ["ddfee392-d246-80fc-8004-8664a46a5d1f"],
             "strokes": [],
             "proportion": 1,
             "fills": [
@@ -98,6 +99,10 @@
             "id": "ddfee392-d246-80fc-8004-8664a46a5d1f",
             "name": "Rectangle 1",
             "type": "rect",
+            "hidden": false,
+            "blendMode": "normal",
+            "constraintsH": "left",
+            "constraintsV": "top",
             "x": -282,
             "y": -153,
             "width": 326,
@@ -151,19 +156,15 @@
             "frameId": "00000000-0000-0000-0000-000000000000",
             "flipX": null,
             "flipY": null,
-            "rx": 0,
-            "growType": "fixed",
-            "hideInViewer": false,
-            "proportionLock": false,
+            "shadow": [],
             "strokes": [],
-            "proportion": 1,
             "fills": [
               {
                 "fillColor": "#00ff19",
                 "fillOpacity": 1
               }
             ],
-            "ry": 0
+            "opacity": 1
           }
         },
         "id": "4bf0e9f6-08c8-809c-8004-85445179c2aa",
@@ -174,22 +175,9 @@
     "options": {
       "componentsV2": true
     },
-    "recentColors": [
-      {
-        "color": "#e8e9ea",
-        "opacity": 1
-      },
-      {
-        "color": "#ff0000",
-        "opacity": 1
-      },
-      {
-        "color": "#00ff19",
-        "opacity": 1,
-        "id": null,
-        "fileId": null,
-        "image": null
-      }
-    ]
+    "colors": {},
+    "components": {},
+    "typographies": {},
+    "recentColors": []
   }
 }

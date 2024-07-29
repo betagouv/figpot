@@ -53,9 +53,9 @@ describe('document comparaison', () => {
 
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
 
-      expect(differences.newDocumentName).not.toBeUndefined();
-      expect(differences.newTreeOperations.length).toBe(3);
-      expect(differences.newTreeOperations.map((op) => op.type)).toEqual(['add-page', 'mod-obj', 'del-page']);
+      expect(differences.newDocumentName).toBeUndefined();
+      expect(differences.newTreeOperations.length).toBe(6);
+      expect(differences.newTreeOperations.map((op) => op.type)).toEqual(['add-page', 'set-option', 'mod-obj', 'del-page', 'del-obj', 'mov-page']);
     });
   });
 
@@ -106,9 +106,18 @@ describe('document comparaison', () => {
 
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
 
-      expect(differences.newDocumentName).not.toBeUndefined();
-      expect(differences.newTreeOperations.length).toBe(6);
-      expect(differences.newTreeOperations.map((op) => op.type)).toEqual(['add-page', 'add-obj', 'add-obj', 'del-page', 'del-obj', 'del-obj']);
+      expect(differences.newDocumentName).toBeUndefined();
+      expect(differences.newTreeOperations.length).toBe(8);
+      expect(differences.newTreeOperations.map((op) => op.type)).toEqual([
+        'add-page',
+        'set-option',
+        'mod-obj',
+        'add-obj',
+        'del-page',
+        'del-obj',
+        'del-obj',
+        'mov-page',
+      ]);
     });
   });
 });

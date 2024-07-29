@@ -85,6 +85,7 @@
             "flipY": null,
             "hideFillOnExport": false,
             "proportionLock": false,
+            "shapes": [],
             "strokes": [],
             "proportion": 1,
             "fills": [
@@ -102,6 +103,9 @@
     "id": "4bf0e9f6-08c8-809c-8004-85445179c2a9",
     "options": {
       "componentsV2": true
-    }
+    },
+    "colors": {},
+    "components": {},
+    "typographies": {}
   }
 }

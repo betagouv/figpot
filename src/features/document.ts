@@ -47,7 +47,7 @@ import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
-import { formatDiffResultLog, getDiff } from '@figpot/src/utils/comparaison';
+import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot/src/utils/comparaison';
 import { config } from '@figpot/src/utils/environment';
 import { downloadFile, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
 import { gracefulExit } from '@figpot/src/utils/system';
@@ -417,6 +417,11 @@ export function transformDocument(
 ) {
   // Go from the Figma format to the Penpot one
   const penpotTree = transformDocumentNode(documentTree, colors, typographies, mapping);
+
+  // We have to patch the document since `{}` is not equal to `{ a: undefined }`,
+  // and since we do comparaisons both in later stage or when doing tests we need to make sure
+  // all properties set to `undefined` by `transformDocumentNode()` won't "produce" an object difference
+  removeUndefinedProperties(penpotTree);
 
   return penpotTree;
 }

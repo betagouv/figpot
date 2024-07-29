@@ -107,3 +107,19 @@ export function formatDiffResultLog<ReferenceProperty, Model>(result: GetDiffRes
 
   return `added: ${counts.added} | removed: ${counts.removed} | updated: ${counts.updated} | unchanged: ${counts.unchanged}`;
 }
+
+export function removeUndefinedProperties(obj: any) {
+  if (Array.isArray(obj)) {
+    obj.forEach(removeUndefinedProperties);
+  } else if (obj !== null && typeof obj === 'object') {
+    // `null` is an object
+    for (const key in obj) {
+      if (obj[key] === undefined) {
+        // No need to use `Object.hasOwn()` because it iterating it means it exists on the object
+        delete obj[key];
+      } else {
+        removeUndefinedProperties(obj[key]);
+      }
+    }
+  }
+}

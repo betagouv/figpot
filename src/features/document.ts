@@ -1553,7 +1553,7 @@ export async function hydrate(options: HydrateOptionsType) {
 
     // [WORKAROUND] Mask the password if leaked by the backend
     // Ref: https://github.com/penpot/penpot/issues/4932
-    details = details.replaceAll(config.penpotUserPassword, '********');
+    details = config.penpotUserPassword !== '' ? details.replaceAll(config.penpotUserPassword, '********') : details;
 
     console.error(details);
 

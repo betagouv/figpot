@@ -51,7 +51,7 @@ export function transformLayoutAttributes(
     layoutItemHSizing: node.layoutSizingHorizontal ? translateLayoutSizing(node.layoutSizingHorizontal) : undefined,
     layoutItemVSizing: node.layoutSizingVertical ? translateLayoutSizing(node.layoutSizingVertical) : undefined,
     layoutItemAlignSelf: node.layoutAlign ? translateLayoutItemAlignSelf(node.layoutAlign) : undefined,
-    layoutItemAbsolute: node.layoutPositioning === 'ABSOLUTE',
+    layoutItemAbsolute: node.layoutPositioning ? node.layoutPositioning === 'ABSOLUTE' : undefined,
     layoutItemMaxH: node.maxHeight ?? undefined,
     layoutItemMinH: node.minHeight ?? undefined,
     layoutItemMaxW: node.maxWidth ?? undefined,

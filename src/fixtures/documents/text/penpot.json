@@ -172,7 +172,6 @@
   "hidden": false,
   "blendMode": "normal",
   "opacity": 1,
-  "layoutItemAbsolute": false,
   "strokes": [],
   "constraintsH": "left",
   "constraintsV": "top"

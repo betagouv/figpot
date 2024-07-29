@@ -9,6 +9,8 @@ import withRectangePenpotTree from '@figpot/src/fixtures/documents/rectangle/pen
 describe('document comparaison', () => {
   describe('empty', () => {
     it('should be equivalent', () => {
+      const penpotTree = JSON.parse(JSON.stringify(emptyPenpotTree)); // Deep copy to isolate each test
+
       const mapping: MappingType = {
         lastExport: new Date(),
         assets: new Map(),
@@ -24,7 +26,7 @@ describe('document comparaison', () => {
       };
 
       const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], [], mapping);
-      const cleanHostedTree = cleanHostedDocument(emptyPenpotTree);
+      const cleanHostedTree = cleanHostedDocument(penpotTree);
 
       expect(transformedTree).toEqual(cleanHostedTree);
 
@@ -35,6 +37,8 @@ describe('document comparaison', () => {
     });
 
     it('should require changes', () => {
+      const penpotTree = JSON.parse(JSON.stringify(emptyPenpotTree)); // Deep copy to isolate each test
+
       const mapping: MappingType = {
         lastExport: new Date(),
         assets: new Map(),
@@ -47,7 +51,7 @@ describe('document comparaison', () => {
       };
 
       const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], [], mapping);
-      const cleanHostedTree = cleanHostedDocument(emptyPenpotTree);
+      const cleanHostedTree = cleanHostedDocument(penpotTree);
 
       expect(transformedTree).not.toEqual(cleanHostedTree);
 
@@ -60,6 +64,8 @@ describe('document comparaison', () => {
   });
 
   describe('with rectangle', () => {
+    const penpotTree = JSON.parse(JSON.stringify(withRectangePenpotTree)); // Deep copy to isolate each test
+
     it('should be equivalent', () => {
       const mapping: MappingType = {
         lastExport: new Date(),
@@ -77,7 +83,7 @@ describe('document comparaison', () => {
       };
 
       const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], [], mapping);
-      const cleanHostedTree = cleanHostedDocument(withRectangePenpotTree);
+      const cleanHostedTree = cleanHostedDocument(penpotTree);
 
       expect(transformedTree).toEqual(cleanHostedTree);
 
@@ -88,6 +94,8 @@ describe('document comparaison', () => {
     });
 
     it('should require changes', () => {
+      const penpotTree = JSON.parse(JSON.stringify(withRectangePenpotTree)); // Deep copy to isolate each test
+
       const mapping: MappingType = {
         lastExport: new Date(),
         assets: new Map(),
@@ -100,7 +108,7 @@ describe('document comparaison', () => {
       };
 
       const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], [], mapping);
-      const cleanHostedTree = cleanHostedDocument(withRectangePenpotTree);
+      const cleanHostedTree = cleanHostedDocument(penpotTree);
 
       expect(transformedTree).not.toEqual(cleanHostedTree);
 

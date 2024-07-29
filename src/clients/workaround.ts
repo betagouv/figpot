@@ -2,6 +2,7 @@ import { Readable } from 'stream';
 import { chain } from 'stream-chain';
 import Asm from 'stream-json/Assembler';
 import { parser } from 'stream-json/Parser';
+import { ReadableStream } from 'stream/web';
 
 export async function getJsonResponseBody(response: Response): Promise<any> {
   // [WORKAROUND] When the content is over 500MB it cannot fit into a string to be parsed (e.g. error `ERR_STRING_TOO_LONG`)
@@ -24,7 +25,9 @@ export async function getJsonResponseBody(response: Response): Promise<any> {
       response.url.includes('v1/files/') || // For Figma to get an entire file
       response.url.endsWith('api/rpc/command/get-file')) // For Penpot to get an entire file (stricter condition since that's the prefix of other endpoints)
   ) {
-    const stream = Readable.fromWeb(response.body);
+    // [WORKAROUND] Have to cast the stream to keep things simple (we made sure it works inside Node.js)
+    // Ref: https://github.com/DefinitelyTyped/DefinitelyTyped/discussions/65542
+    const stream = Readable.fromWeb(response.body as ReadableStream<any>);
 
     return await new Promise((resolve, reject) => {
       const pipeline = chain([stream, parser()]);

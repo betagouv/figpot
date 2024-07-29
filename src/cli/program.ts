@@ -85,6 +85,10 @@ document
   .action(async (options) => {
     await ensureAccessTokens();
 
+    if (options.hydrate) {
+      await ensureCredentials();
+    }
+
     let documents: DocumentOptionsType[];
     if (!options.document || options.document === true) {
       throw new Error('please specify both figma and penpot documents to synchronize');

@@ -2,6 +2,8 @@ import diff, { Difference } from 'microdiff';
 
 export type DiffState = 'added' | 'removed' | 'updated' | 'unchanged';
 
+export const NUMBER_TOLERANCE: number = 0.0000000000001;
+
 export type GetDiffResult<Model> =
   | {
       state: Extract<DiffState, 'added'>;
@@ -39,12 +41,37 @@ export function getDiff<Model extends Record<ReferenceProperty, any>, ReferenceP
 
       // `microdiff` won't return if unchange, so we can rely on the diff length to detect any change
       if (beforeAfterModelDiff.length > 0) {
-        itemResult = {
-          state: 'updated',
-          before: sameBeforeReferenceModel,
-          after: afterModel,
-          differences: beforeAfterModelDiff,
-        };
+        // [WORKAROUND] When comparing 2 objects it happens a float is different between "before" and "after"
+        // This happens when reading from a file, from the API, or if the backend has done another operation that changes a bit the rounding
+        // So we make sure to ignore those non-significant changes
+        let w = beforeAfterModelDiff.length;
+        while (w--) {
+          const wDiff = beforeAfterModelDiff[w];
+
+          if (
+            wDiff.type === 'CHANGE' &&
+            typeof wDiff.oldValue === 'number' &&
+            typeof wDiff.value === 'number' &&
+            Math.abs(wDiff.value - wDiff.oldValue) < NUMBER_TOLERANCE
+          ) {
+            beforeAfterModelDiff.splice(w, 1);
+          }
+        }
+
+        // In case the workaround has removes changed, set the object as unchanged
+        if (beforeAfterModelDiff.length === 0) {
+          itemResult = {
+            state: 'unchanged',
+            model: afterModel,
+          };
+        } else {
+          itemResult = {
+            state: 'updated',
+            before: sameBeforeReferenceModel,
+            after: afterModel,
+            differences: beforeAfterModelDiff,
+          };
+        }
       } else {
         itemResult = {
           state: 'unchanged',

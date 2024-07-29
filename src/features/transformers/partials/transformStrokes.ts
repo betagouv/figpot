@@ -1,4 +1,4 @@
-import { Command } from 'svg-path-parser';
+import type { Command } from 'svg-path-parser';
 
 import { HasGeometryTrait, IndividualStrokesTrait, VectorNode } from '@figpot/src/clients/figma';
 import { translateColorId, translateDocumentId } from '@figpot/src/features/translators/translateId';

@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { parseSVG } from 'svg-path-parser';
+import svgPathParser from 'svg-path-parser';
 
 import { Paint, PaintOverride, Path, Transform, VectorNode } from '@figpot/src/clients/figma';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
@@ -13,6 +13,8 @@ import { translateCommands } from '@figpot/src/features/translators/vectors/tran
 import { translateWindingRule } from '@figpot/src/features/translators/vectors/translateWindingRule';
 import { PathShape } from '@figpot/src/models/entities/penpot/shapes/path';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
+
+const { parseSVG } = svgPathParser;
 
 function normalizePath(path: string): string {
   // Round to 2 decimal places all numbers

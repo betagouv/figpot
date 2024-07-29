@@ -1,4 +1,4 @@
-import { Command, CurveToCommand, LineToCommand, MoveToCommand } from 'svg-path-parser';
+import type { Command, CurveToCommand, LineToCommand, MoveToCommand } from 'svg-path-parser';
 
 import { Segment } from '@figpot/src/models/entities/penpot/shapes/path';
 

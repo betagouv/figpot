@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { parseSVG } from 'svg-path-parser';
+import svgPathParser from 'svg-path-parser';
 
 import { RegularPolygonNode, StarNode, Transform } from '@figpot/src/clients/figma';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
@@ -15,6 +15,8 @@ import { transformStrokes } from '@figpot/src/features/transformers/partials/tra
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { PathShape, Segment } from '@figpot/src/models/entities/penpot/shapes/path';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
+
+const { parseSVG } = svgPathParser;
 
 function translatePathNode(node: StarNode | RegularPolygonNode, figmaNodeTransform: Transform): Segment[] {
   assert(node.fillGeometry);

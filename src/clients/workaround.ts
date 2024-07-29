@@ -1,8 +1,11 @@
 import { Readable } from 'stream';
-import { chain } from 'stream-chain';
+import streamChain from 'stream-chain';
 import Asm from 'stream-json/Assembler';
-import { parser } from 'stream-json/Parser';
+import streamJsonParser from 'stream-json/Parser';
 import { ReadableStream } from 'stream/web';
+
+const { chain } = streamChain;
+const { parser } = streamJsonParser;
 
 export async function getJsonResponseBody(response: Response): Promise<any> {
   // [WORKAROUND] When the content is over 500MB it cannot fit into a string to be parsed (e.g. error `ERR_STRING_TOO_LONG`)

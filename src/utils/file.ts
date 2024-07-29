@@ -5,12 +5,12 @@ import fs from 'fs/promises';
 import { mimeData } from 'human-filetypes';
 import { JsonStreamStringify } from 'json-stream-stringify';
 import path from 'path';
-import { Readable } from 'stream';
-import { chain } from 'stream-chain';
+import streamChain from 'stream-chain';
 import Asm from 'stream-json/Assembler';
-import { disassembler } from 'stream-json/Disassembler';
-import { parser } from 'stream-json/Parser';
-import { stringer } from 'stream-json/Stringer';
+import streamJsonParser from 'stream-json/Parser';
+
+const { chain } = streamChain;
+const { parser } = streamJsonParser;
 
 export async function downloadFile(url: string, destination: string, timeout?: number): Promise<void> {
   const response = await fetch(url, {

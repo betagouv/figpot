@@ -1,4 +1,4 @@
-import { Command } from 'svg-path-parser';
+import type { Command } from 'svg-path-parser';
 
 import { Rectangle, Transform } from '@figpot/src/clients/figma';
 import { translateNonRotatedCommand } from '@figpot/src/features/translators/vectors/translateNonRotatedCommands';

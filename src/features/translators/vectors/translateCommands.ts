@@ -1,4 +1,4 @@
-import { Command } from 'svg-path-parser';
+import type { Command } from 'svg-path-parser';
 
 import { HasLayoutTrait, Transform } from '@figpot/src/clients/figma';
 import { translateNonRotatedCommands } from '@figpot/src/features/translators/vectors/translateNonRotatedCommands';

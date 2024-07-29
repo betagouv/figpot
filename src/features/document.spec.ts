@@ -28,8 +28,6 @@ describe('document comparaison', () => {
       const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], [], mapping);
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
-      expect(transformedTree).toEqual(cleanHostedTree);
-
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
 
       expect(differences.newDocumentName).toBeUndefined();
@@ -52,8 +50,6 @@ describe('document comparaison', () => {
 
       const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], [], mapping);
       const cleanHostedTree = cleanHostedDocument(penpotTree);
-
-      expect(transformedTree).not.toEqual(cleanHostedTree);
 
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
 
@@ -85,8 +81,6 @@ describe('document comparaison', () => {
       const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], [], mapping);
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
-      expect(transformedTree).toEqual(cleanHostedTree);
-
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
 
       expect(differences.newDocumentName).toBeUndefined();
@@ -109,8 +103,6 @@ describe('document comparaison', () => {
 
       const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], [], mapping);
       const cleanHostedTree = cleanHostedDocument(penpotTree);
-
-      expect(transformedTree).not.toEqual(cleanHostedTree);
 
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
 

@@ -10,6 +10,12 @@
   "publishConfig": {
     "access": "public"
   },
+  "files": [
+    "dist",
+    "LICENSE",
+    "package.json",
+    "README.md"
+  ],
   "type": "module",
   "module": "./dist/index.js",
   "bin": {

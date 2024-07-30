@@ -11,8 +11,10 @@
     "access": "public"
   },
   "type": "module",
-  "main": "./dist/index.cjs",
   "module": "./dist/index.js",
+  "bin": {
+    "figpot": "./dist/cli/index.js"
+  },
   "types": "./dist/index.d.ts",
   "scripts": {
     "postinstall": "patch-package",

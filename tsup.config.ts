@@ -2,10 +2,11 @@ import path from 'path';
 import { defineConfig } from 'tsup';
 
 const entryPattern = path.resolve(__dirname, 'src/index.ts');
+const cliPattern = path.resolve(__dirname, 'src/cli/index.ts');
 
 export default defineConfig((options) => {
   return {
-    entry: [entryPattern],
+    entry: [entryPattern, cliPattern],
     outDir: 'dist',
     // Librairies like `change-case` are ESM-only and cannot be imported from a CJS package, so we decided to only package the ESM format
     // It should be fine since `figpot` is intended to be used as a CLI, and not directly imported into third-party code

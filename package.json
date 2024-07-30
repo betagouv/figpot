@@ -10,6 +10,12 @@
   "publishConfig": {
     "access": "public"
   },
+  "files": [
+    "dist",
+    "LICENSE",
+    "package.json",
+    "README.md"
+  ],
   "type": "module",
   "module": "./dist/index.js",
   "bin": {
@@ -93,7 +99,7 @@
     "jest": "^29.3.1",
     "jest-environment-node": "^29.4.1",
     "jest-environment-node-single-context": "^29.4.0",
-    "semantic-release": "21.0.2",
+    "semantic-release": "24.0.0",
     "testcontainers": "^9.6.0",
     "ts-jest": "^29.0.3",
     "ts-node": "^10.9.1",

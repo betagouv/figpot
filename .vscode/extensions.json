@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "christian-kohler.npm-intellisense",
+    "dbaeumer.vscode-eslint",
+    "deerawan.vscode-faker",
+    "EditorConfig.EditorConfig",
+    "esbenp.prettier-vscode",
+    "lacroixdavid1.vscode-format-context-menu",
+    "ms-vsliveshare.vsliveshare",
+    "Orta.vscode-jest",
+    "SimonSiefke.svg-preview"
+  ]
+}

@@ -1,0 +1,77 @@
+name: Continuous Integration
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+env:
+  APP_NAME: figpot
+  NODE_OPTIONS: --max_old_space_size=4096
+  NODE_VERSION: 20.15.0
+concurrency:
+  # Prevent parallel builds of the same branch
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  requirements:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Export npm store directory as an environment variable
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(npm config get cache)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v3
+        name: Setup npm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-npm-store-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-store-
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Setup API clients
+        run: npm run setup
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Install `docker-compose` for local CI/CD simulations (https://github.com/nektos/act/issues/112#issuecomment-1387307297)
+        if: ${{ env.ACT }}
+        uses: KengoTODA/actions-setup-docker-compose@v1
+        with:
+          version: '2.14.2'
+
+      - name: Test unit
+        run: npm run test:unit
+
+      - name: Build
+        run: npm run build
+
+      - name: Release package
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpx semantic-release@21.0.2

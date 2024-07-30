@@ -1,0 +1,9 @@
+/.cache/
+/data/
+/dist/
+/src/clients/figma
+/src/clients/penpot
+/src/features/translators/text/font/gfonts/gfonts.json
+**/.dockerignore
+/package-lock.json
+/tsconfig.json

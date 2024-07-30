@@ -1,0 +1,106 @@
+{
+  "id": "49:30",
+  "name": "Salut toi coucou Nouvelle ligne",
+  "type": "TEXT",
+  "scrollBehavior": "SCROLLS",
+  "blendMode": "PASS_THROUGH",
+  "absoluteBoundingBox": {
+    "x": 0,
+    "y": 0,
+    "width": 514,
+    "height": 230
+  },
+  "absoluteRenderBounds": {
+    "x": 0,
+    "y": 0,
+    "width": 514,
+    "height": 230
+  },
+  "constraints": {
+    "vertical": "TOP",
+    "horizontal": "LEFT"
+  },
+  "relativeTransform": [
+    [1, 0, 0],
+    [0, 1, 0]
+  ],
+  "size": {
+    "x": 514,
+    "y": 230
+  },
+  "fills": [
+    {
+      "blendMode": "NORMAL",
+      "type": "SOLID",
+      "color": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      }
+    }
+  ],
+  "fillGeometry": [],
+  "strokes": [],
+  "strokeWeight": 1,
+  "strokeAlign": "OUTSIDE",
+  "strokeGeometry": [],
+  "exportSettings": [],
+  "effects": [],
+  "characters": "Salut toi coucou\nNouvelle ligne",
+  "style": {
+    "fontFamily": "Open Sans",
+    "fontPostScriptName": "OpenSans-ExtraBoldItalic",
+    "italic": true,
+    "fontWeight": 800,
+    "paragraphIndent": 10,
+    "textAutoResize": "HEIGHT",
+    "fontSize": 40,
+    "textAlignHorizontal": "LEFT",
+    "textAlignVertical": "TOP",
+    "leadingTrim": "CAP_HEIGHT",
+    "letterSpacing": 0,
+    "lineHeightPx": 54.47265625,
+    "lineHeightPercent": 100,
+    "lineHeightUnit": "INTRINSIC_%"
+  },
+  "layoutVersion": 4,
+  "characterStyleOverrides": [190, 190, 190, 190, 190, 190, 188, 188, 188, 190, 0, 0, 0, 0, 0, 0, 0, 189, 189, 189, 189, 189, 189, 189, 189, 190],
+  "styleOverrideTable": {
+    "188": {
+      "fontFamily": "Open Sans",
+      "fontPostScriptName": "OpenSans-ExtraBold",
+      "fontWeight": 800,
+      "paragraphIndent": 10,
+      "fontSize": 20,
+      "lineHeightPx": 27.236328125,
+      "lineHeightPercent": 100,
+      "lineHeightUnit": "INTRINSIC_%"
+    },
+    "189": {
+      "fontSize": 10,
+      "fills": [
+        {
+          "blendMode": "NORMAL",
+          "type": "SOLID",
+          "color": {
+            "r": 1,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        }
+      ],
+      "lineHeightPx": 11.71875,
+      "lineHeightPercent": 100,
+      "lineHeightUnit": "INTRINSIC_%"
+    },
+    "190": {
+      "lineHeightPx": 46.875,
+      "lineHeightPercent": 100,
+      "lineHeightUnit": "INTRINSIC_%"
+    }
+  },
+  "lineTypes": ["NONE", "NONE"],
+  "lineIndentations": [0, 0]
+}

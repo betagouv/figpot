@@ -1,1 +1,1 @@
-import '@figpot/src/cli/program';
+import '@figpot/src/cli/index';

@@ -1,7 +1,7 @@
 import { Readable } from 'stream';
 import streamChain from 'stream-chain';
-import Asm from 'stream-json/Assembler';
-import streamJsonParser from 'stream-json/Parser';
+import Asm from 'stream-json/Assembler.js';
+import streamJsonParser from 'stream-json/Parser.js';
 import { ReadableStream } from 'stream/web';
 
 const { chain } = streamChain;

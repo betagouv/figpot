@@ -1,7 +1,7 @@
 # figpot
 
 > [!IMPORTANT]
-> This is a work in progress, please come back in a few... ⏱️🚀
+> The package is implemented and has been tested with a custom Penpot instance. To be widely used the Penpot SaaS must be patched... Be patient and follow the issue https://tree.taiga.io/project/penpot/us/8372 ⏱️🚀
 
 Figma to Penpot converter and synchronizer, to not maintain multiple platforms.
 

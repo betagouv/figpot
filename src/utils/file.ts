@@ -1,6 +1,7 @@
 import assert from 'assert';
 import contentType from 'content-type';
 import fsSync from 'fs';
+import type { openAsBlob as originalOpenAsBlob } from 'fs';
 import fs from 'fs/promises';
 import { mimeData } from 'human-filetypes';
 import { JsonStreamStringify } from 'json-stream-stringify';
@@ -78,3 +79,12 @@ export async function writeBigJsonFile(filePath: string, jsonObject: object): Pr
     );
   });
 }
+
+// We define our own instead of using `import { openAsBlob } from 'fs';` since it has been released inside Node.js v20 that is pretty recent
+// By using this polyfill users can remain on a lower Node.js version
+export async function openAsBlob(path: fsSync.PathLike, options?: fsSync.OpenAsBlobOptions): Promise<Blob> {
+  const buffer = await fs.readFile(path);
+
+  return new Blob([buffer], options);
+}
+openAsBlob satisfies typeof originalOpenAsBlob;

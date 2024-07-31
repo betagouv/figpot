@@ -2,7 +2,7 @@ import { confirm } from '@inquirer/prompts';
 import assert from 'assert';
 import { kebabCase } from 'change-case';
 import { camelCase } from 'change-case/keys';
-import fsSync, { openAsBlob } from 'fs';
+import fsSync from 'fs';
 import fs from 'fs/promises';
 import { glob } from 'glob';
 import graphlib, { Graph } from 'graphlib';
@@ -49,7 +49,7 @@ import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/tex
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot/src/utils/comparaison';
 import { config } from '@figpot/src/utils/environment';
-import { downloadFile, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
+import { downloadFile, openAsBlob, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
 import { gracefulExit } from '@figpot/src/utils/system';
 
 const __root_dirname = process.cwd();

@@ -1417,10 +1417,11 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
         // Directly process the chunk to not calculate all of them
         await processOperationsChunk(figmaDocumentId, penpotDocumentId, differences, currentChunk, chunkNumber, succeededOperations);
 
+        succeededOperations += currentChunk.length;
+
         currentChunk = [];
         currentChunkCount = 0;
         chunkNumber++;
-        succeededOperations += currentChunk.length;
       }
 
       currentChunk.push(operation);

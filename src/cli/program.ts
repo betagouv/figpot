@@ -1,4 +1,5 @@
 import { Command, Option } from '@commander-js/extra-typings';
+import { $ } from 'execa';
 
 import {
   CompareOptions,
@@ -22,6 +23,7 @@ export const program = new Command();
 
 program.name('figpot').description('CLI to perform actions between Figma and Penpot').version('0.0.0');
 
+const deps = program.command('deps').description('install required dependencies to use the package');
 const document = program.command('document').description('manage documents');
 const debugDocument = document.command('debug').description('manage documents step by step to debug');
 
@@ -70,6 +72,17 @@ function formatReplaceFontPatterns(replaceFontPattern: string[]): object[] {
     };
   });
 }
+
+deps.action(async (options) => {
+  console.log('Installing dependencies...');
+
+  // Install dependencies by the hydratation step
+  // ---
+  // Reproducing the Playwright CLI install logic by code is too complex, so executing a raw command instead
+  // (try to match the version from the dependency tree to make prevent breaking changes using a latest one)
+  // Ref: https://github.com/microsoft/playwright/blob/7c55b94280b89cc2612c8b4fa5d93d60203b3259/packages/playwright-core/src/cli/program.ts#L115-L179
+  await $`npx playwright@^1.45.3 install --with-deps chromium`;
+});
 
 document
   .command('synchronize')

@@ -29,6 +29,7 @@ Prepare the minimal information:
 Make sure to have [Node.js](https://nodejs.org/) installed and simply run:
 
 ```shell
+npx figpot deps # required to have a 100% complete synchronization, if not wanted use `--no-hydrate` on the following command
 npx figpot document synchronize -d CptbnRHeDv3pzOai91abcd:3d04e89b-bff0-8115-8004-bc14b0d50123
 ```
 

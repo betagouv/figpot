@@ -1418,7 +1418,7 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
       const encodedOperationLength = JSON.stringify(operation).length;
 
       // Take into account the `,` delimiter
-      if (currentChunkCount + Math.max(currentChunk.length - 1, 0) + encodedOperationLength > remainingBodyBytes) {
+      if (currentChunkCount === 2) {
         // Directly process the chunk to not calculate all of them
         await processOperationsChunk(figmaDocumentId, penpotDocumentId, differences, currentChunk, chunkNumber, succeededOperations);
 
@@ -1519,7 +1519,7 @@ export async function synchronize(options: SynchronizeOptionsType) {
 
   if (!options.hydrate) {
     console.warn(
-      `the document has been synchronized but some graphical enhancements can only be done from a browser. If the synchronization has pushed modifications the first user seeing the updated document may encounter those loadings for a few seconds or minutes depending on the size of the document. We advise you to perform a hydration by yourself so the first user will see the document properly directly. Either open your document into the browser, or rerun this command without "--no-hydrate", or by running the dedicated command "figpot document hydrate ..."`
+      `the document has been synchronized but some graphical enhancements can only be done from a browser. If the synchronization has pushed modifications the first user seeing the updated document may encounter some loadings for a few seconds or minutes depending on the size of the document. We advise you to perform a hydratation by yourself so the first user will see the document properly directly. Either open your document into the browser, or rerun this command without "--no-hydrate", or by running the dedicated command "figpot document hydrate ..."`
     );
 
     return;
@@ -1608,7 +1608,7 @@ export async function hydrate(options: HydrateOptionsType) {
 
       // Check we have the needed information into the `meta.json`
       if (meta.penpotProjectId === 'not_known_yet') {
-        throw new Error(`to run hydration you must first run the synchronization on this document on this machine`);
+        throw new Error(`to run hydratation you must first run the synchronization on this document on this machine`);
       }
 
       const page = await browserContext.newPage();

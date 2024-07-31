@@ -49,7 +49,7 @@ export async function ensureCredentials(prompting: boolean = true) {
   if (!result.success) {
     if (prompting) {
       console.log(
-        `The API access token cannot be used to reach the UI for hydration, you have to provide your Penpot credentials so we generate a UI access token`
+        `The API access token cannot be used to reach the UI for hydratation, you have to provide your Penpot credentials so we generate a UI access token`
       );
       const penpotUserEmail = await input({ message: 'What is your Penpot user email?' });
       const penpotUserPassword = await password({ message: 'What is your Penpot user password?' });

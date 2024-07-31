@@ -26,6 +26,7 @@ const document = program.command('document').description('manage documents');
 const debugDocument = document.command('debug').description('manage documents step by step to debug');
 
 const documentsOption = new Option('-d, --document [documents...]', 'figma document id as source and penpot one as target (`-d figmaId:penpotId`)');
+const continuousIntegrationOption = new Option('-ci, --ci', 'answer "yes" to all command prompts, use it with caution');
 
 const patternInfo = '(use single quotes around the parameter to prevent your terminal to replace special characters)';
 const excludePagePatternsOption = new Option(
@@ -80,19 +81,21 @@ document
   .addOption(excludeTypographyPatternsOption)
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
+  .addOption(continuousIntegrationOption)
   .option('-nh, --no-hydrate', 'prevent performing hydratation after the synchronization')
   .option('-ht, --hydrate-timeout <hydrateTimeout>', 'specify a maximum of duration for hydratation')
   .action(async (options) => {
-    await ensureAccessTokens();
+    await ensureAccessTokens(!options.ci);
 
     if (options.hydrate) {
-      await ensureCredentials();
+      await ensureCredentials(!options.ci);
     }
 
     let documents: DocumentOptionsType[];
     if (!options.document || options.document === true) {
       throw new Error('please specify both figma and penpot documents to synchronize');
       // TODO: disabling this for now until we implement the documents retrieval from Penpot
+      // TODO: should deal with `options.ci` value
       // documents = (await retrieveDocumentsFromInput()).map((figmaDocument) => {
       //   return {
       //     figmaDocument: figmaDocument,
@@ -115,6 +118,7 @@ document
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
         hydrate: options.hydrate,
         hydrateTimeout: options.hydrateTimeout || null,
+        prompting: !options.ci,
       })
     );
   });
@@ -124,8 +128,9 @@ document
   .description('hydrate Penpot documents after a synchronization')
   .addOption(documentsOption)
   .option('-t, --timeout <timeout>', 'specify a maximum of duration for hydratation')
+  .addOption(continuousIntegrationOption)
   .action(async (options) => {
-    await ensureCredentials();
+    await ensureCredentials(!options.ci);
 
     let documents: DocumentOptionsType[];
     if (!options.document || options.document === true) {
@@ -146,14 +151,16 @@ debugDocument
   .command('retrieve')
   .description('save Figma documents locally')
   .addOption(documentsOption)
+  .addOption(continuousIntegrationOption)
   .action(async (options) => {
-    await ensureAccessTokens();
+    await ensureAccessTokens(!options.ci);
 
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
 
     await retrieve(
       RetrieveOptions.parse({
         documents: documents,
+        prompting: !options.ci,
       })
     );
   });
@@ -168,8 +175,9 @@ debugDocument
   .addOption(excludeTypographyPatternsOption)
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
+  .addOption(continuousIntegrationOption)
   .action(async (options) => {
-    await ensureAccessTokens();
+    await ensureAccessTokens(!options.ci);
 
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
 
@@ -184,6 +192,7 @@ debugDocument
           colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
         },
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
+        prompting: !options.ci,
       })
     );
   });
@@ -192,8 +201,9 @@ debugDocument
   .command('compare')
   .description('compare Figma and Penpot documents to know what to operate')
   .addOption(documentsOption)
+  .addOption(continuousIntegrationOption)
   .action(async (options) => {
-    await ensureAccessTokens();
+    await ensureAccessTokens(!options.ci);
 
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
 
@@ -208,14 +218,16 @@ debugDocument
   .command('set')
   .description('execute operations')
   .addOption(documentsOption)
+  .addOption(continuousIntegrationOption)
   .action(async (options) => {
-    await ensureAccessTokens();
+    await ensureAccessTokens(!options.ci);
 
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
 
     await set(
       SetOptions.parse({
         documents: documents,
+        prompting: !options.ci,
       })
     );
   });

@@ -44,6 +44,8 @@ If you intend to perform synchronizations from a new machine, or from a server t
 
 ### Avoid command prompts
 
+#### Variables
+
 It's possible to prefill some environment variables to avoid typing information each time:
 
 - `FIGMA_ACCESS_TOKEN` _(the token can be created from your account settings under `Personal access tokens` section)_
@@ -54,6 +56,15 @@ It's possible to prefill some environment variables to avoid typing information 
 Optional ones:
 
 - `PENPOT_BASE_URL` _(by default it's `https://design.penpot.app/` but it has to be changed in case you use a custom Penpot instance)_
+
+#### Warnings
+
+Warnings to manually skip are emitted if:
+
+- Your file size goes over Penpot recommandations _(see the FAQ for more details)_
+- When synchronizing with no previous `mapping.json` _(we want to make sure you won't override a Penpot file by mistake)_
+
+In case of a CI/CD pipeline you want to automate this, you can use `--ci` as parameter to answer "yes" to all confirm prompts. Use it with caution.
 
 ### More advanced usage
 

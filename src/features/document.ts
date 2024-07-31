@@ -90,6 +90,9 @@ export const Mapping = z.object({
 });
 export type MappingType = z.infer<typeof Mapping>;
 
+export const Prompting = z.boolean().optional();
+export type PromptingType = z.infer<typeof Prompting>;
+
 export const Metadata = z.object({
   figmaDocumentId: z.string(),
   figmaLastModified: z.string().pipe(z.coerce.date()),
@@ -108,6 +111,7 @@ export type DocumentOptionsType = z.infer<typeof DocumentOptions>;
 
 export const RetrieveOptions = z.object({
   documents: z.array(DocumentOptions),
+  prompting: Prompting,
 });
 export type RetrieveOptionsType = z.infer<typeof RetrieveOptions>;
 
@@ -244,11 +248,11 @@ export async function saveMeta(figmaDocumentId: string, penpotDocumentId: string
   });
 }
 
-export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: string): Promise<MappingType> {
+export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: string, prompting: boolean = true): Promise<MappingType> {
   const mappingPath = getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId);
   let mapping: MappingType | null = null;
 
-  if (!fsSync.existsSync(mappingPath)) {
+  if (!fsSync.existsSync(mappingPath) && prompting) {
     // TODO: maybe add a warning if no node mapping?
     const answer = await confirm({
       message: `You target the Penpot document "${penpotDocumentId}" without having locally the mapping from previous synchronization. Are you sure to continue by overriding the target document?`,
@@ -335,7 +339,7 @@ export async function retrieve(options: RetrieveOptionsType) {
       },
     })) as unknown as any[];
 
-    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument);
+    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument, options.prompting);
 
     for (const customPenpotFontVariant of customPenpotFontsVariants) {
       const simulatedFigmaFontVariantId = `${customPenpotFontVariant.fontFamily}-${customPenpotFontVariant.fontStyle}-${customPenpotFontVariant.fontWeight}`;
@@ -451,6 +455,7 @@ export const TransformOptions = z.object({
   documents: z.array(DocumentOptions),
   excludePatterns: ExcludePatterns,
   replaceFontPatterns: z.array(ReplaceFontPattern),
+  prompting: Prompting,
 });
 export type TransformOptionsType = z.infer<typeof TransformOptions>;
 
@@ -482,7 +487,7 @@ export async function transform(options: TransformOptionsType) {
       }
     }
 
-    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument);
+    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument, options.prompting);
 
     const penpotTree = transformDocument(figmaTree, figmaColors, figmaTypographies, mapping);
 
@@ -1299,7 +1304,7 @@ export async function processOperationsChunk(
   }
 }
 
-export async function processDifferences(figmaDocumentId: string, penpotDocumentId: string, differences: Differences) {
+export async function processDifferences(figmaDocumentId: string, penpotDocumentId: string, differences: Differences, prompting: boolean = true) {
   if (differences.newDocumentName) {
     await postCommandRenameFile({
       requestBody: {
@@ -1315,7 +1320,7 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
   // We first upload files because they are used by nodes
   if (differences.newMedias.length > 0) {
     // Retrieve the original Figma IDs to upload files
-    const mapping = await restoreMapping(figmaDocumentId, penpotDocumentId);
+    const mapping = await restoreMapping(figmaDocumentId, penpotDocumentId, prompting);
 
     for (const penpotMediaId of differences.newMedias) {
       // We check all files we need to use have been retrieved locally before
@@ -1472,6 +1477,7 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
 
 export const SetOptions = z.object({
   documents: z.array(DocumentOptions),
+  prompting: Prompting,
 });
 export type SetOptionsType = z.infer<typeof SetOptions>;
 
@@ -1481,7 +1487,7 @@ export async function set(options: SetOptionsType) {
   for (const document of options.documents) {
     const diff = await readFigmaToPenpotDiffFile(document.figmaDocument, document.penpotDocument);
 
-    await processDifferences(document.figmaDocument, document.penpotDocument, diff);
+    await processDifferences(document.figmaDocument, document.penpotDocument, diff, options.prompting);
   }
 }
 
@@ -1498,6 +1504,7 @@ export const SynchronizeOptions = z.object({
   replaceFontPatterns: z.array(ReplaceFontPattern),
   hydrate: z.boolean(),
   hydrateTimeout: Duration.nullable(),
+  prompting: Prompting,
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;
 

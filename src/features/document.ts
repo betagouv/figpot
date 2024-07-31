@@ -472,7 +472,7 @@ export async function transform(options: TransformOptionsType) {
     const advisedElementsLimit = 150_000;
     if (elementsCount > advisedElementsLimit) {
       const answer = await confirm({
-        message: `The Figma document tree you want to synchronize is really huge. Over ${advisedElementsLimit} elements we are quick sure both the Penpot backend and the frontend won't be able to render your document until Penpot evolves. Have a look at our documentation see how to exclude nodes that brings to you no value and that could make the document loadable. Do you want to by-pass this warning and continue processing an unloadable file?`,
+        message: `The Figma document tree you want to synchronize is really huge. Over ${advisedElementsLimit} elements we are quick sure both the Penpot backend and the frontend won't be able to render your document until Penpot evolves. Have a look at our documentation to see how to exclude nodes that bring to you no value and that could make the document loadable. Do you want to by-pass this warning and continue processing an unloadable file?`,
       });
 
       if (!answer) {

@@ -53,6 +53,10 @@ export async function readBigJsonFile(filePath: string): Promise<object> {
       parser(),
     ]);
 
+    pipeline.once('error', (error) => {
+      reject(error);
+    });
+
     const asm = Asm.connectTo(pipeline);
 
     asm.once('done', (asm) => {

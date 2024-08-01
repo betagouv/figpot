@@ -6,6 +6,7 @@ import fs from 'fs/promises';
 import { mimeData } from 'human-filetypes';
 import { JsonStreamStringify } from 'json-stream-stringify';
 import path from 'path';
+import { pipeline } from 'stream';
 import streamChain from 'stream-chain';
 import Asm from 'stream-json/Assembler.js';
 import streamJsonParser from 'stream-json/Parser.js';
@@ -69,18 +70,20 @@ export async function writeBigJsonFile(filePath: string, jsonObject: object): Pr
   // [WORKAROUND] We do not use `stream-json` as we do for reading
   // since its internal logic will go over arrays size limit when transforming the object
   // Ref: https://github.com/uhop/stream-json/issues/157
+  const jsonStream = new JsonStreamStringify(jsonObject);
+
+  const fileStream = fsSync.createWriteStream(filePath, {
+    encoding: 'utf-8',
+  });
+
   return await new Promise((resolve, reject) => {
-    const jsonStream = new JsonStreamStringify(jsonObject);
-
-    jsonStream.once('error', reject);
-    jsonStream.once('end', resolve);
-    jsonStream.once('close', resolve);
-
-    jsonStream.pipe(
-      fsSync.createWriteStream(filePath, {
-        encoding: 'utf-8',
-      })
-    );
+    pipeline(jsonStream, fileStream, (error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
   });
 }
 

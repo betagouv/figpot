@@ -252,16 +252,18 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
   const mappingPath = getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId);
   let mapping: MappingType | null = null;
 
-  if (!fsSync.existsSync(mappingPath) && prompting) {
-    // TODO: maybe add a warning if no node mapping?
-    const answer = await confirm({
-      message: `You target the Penpot document "${penpotDocumentId}" without having locally the mapping from previous synchronization. Are you sure to continue by overriding the target document?`,
-    });
+  if (!fsSync.existsSync(mappingPath)) {
+    if (prompting) {
+      // TODO: maybe add a warning if no node mapping?
+      const answer = await confirm({
+        message: `You target the Penpot document "${penpotDocumentId}" without having locally the mapping from previous synchronization. Are you sure to continue by overriding the target document?`,
+      });
 
-    if (!answer) {
-      console.warn('the transformation operation has been aborted');
+      if (!answer) {
+        console.warn('the transformation operation has been aborted');
 
-      return Promise.reject(gracefulExit);
+        return Promise.reject(gracefulExit);
+      }
     }
   } else {
     const mappingString = await fs.readFile(mappingPath, 'utf-8');

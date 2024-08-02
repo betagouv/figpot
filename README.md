@@ -107,7 +107,19 @@ _Note: hydratation pushes updates to Penpot only when changes have been performe
 
 ### How to easily save `mapping.json` across synchronizations?
 
-[work in progress: a helper through the library will be implemented to save/restore to Git]
+If you are doing this from your own computer, in most cases you have nothing to do since the file is already persisted on the storage. If you cannot allow losing bindings you can go a step further by managing backups of this file:
+
+- Either with a manual backup (copy to an external storage)
+- Or by tracking the file with a Cloud storage service (Google Drive, etc.)
+- Or by using a Git repository
+
+Since we already rely on Git to develop this library, we chose to provide a helper for Git repositories.
+
+The idea is that if you run `figpot` from a cloned repository, you are able to use the parameter `--sync-mapping-with-git` so it fetches the latest commits before starting, and it pushes the mapping file to the current branch once modified.
+
+**Please have a look at [`penpot-dsfr`](https://github.com/betagouv/penpot-dsfr) to see how a dedicated repository is used to regularly synchronize a few files from Figma to Penpot.** Their use case is to effortlessly maintain a Penpot version of their design system from Figma.
+
+_Note: the file is pushed before updating the Penpot file. This way, in case of a partial update due to a failure, it prevents losing bindings already on the Penpot file and starting from scratch again._
 
 ### What if Penpot is laggy or crashing after synchronization?
 

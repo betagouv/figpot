@@ -38,6 +38,7 @@ import {
   retrieveDocument,
   retrieveStylesNodes,
 } from '@figpot/src/features/figma';
+import { restoreMappingFromRepository, saveMappingToRepository } from '@figpot/src/features/git';
 import { cleanHostedDocument } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
 import { isPageRootFrame, isPageRootFrameFromId, registerFontId, rootFrameId } from '@figpot/src/features/translators/translateId';
@@ -112,6 +113,7 @@ export type DocumentOptionsType = z.infer<typeof DocumentOptions>;
 export const RetrieveOptions = z.object({
   documents: z.array(DocumentOptions),
   prompting: Prompting,
+  syncMappingWithGit: z.boolean(),
 });
 export type RetrieveOptionsType = z.infer<typeof RetrieveOptions>;
 
@@ -341,6 +343,10 @@ export async function retrieve(options: RetrieveOptionsType) {
       },
     })) as unknown as any[];
 
+    if (options.syncMappingWithGit) {
+      await restoreMappingFromRepository(document.figmaDocument, document.penpotDocument);
+    }
+
     const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument, options.prompting);
 
     for (const customPenpotFontVariant of customPenpotFontsVariants) {
@@ -457,6 +463,7 @@ export const TransformOptions = z.object({
   documents: z.array(DocumentOptions),
   excludePatterns: ExcludePatterns,
   replaceFontPatterns: z.array(ReplaceFontPattern),
+  syncMappingWithGit: z.boolean(),
   prompting: Prompting,
 });
 export type TransformOptionsType = z.infer<typeof TransformOptions>;
@@ -501,6 +508,12 @@ export async function transform(options: TransformOptionsType) {
 
     // Save mapping for later usage
     await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
+
+    // Try to push to Git directly in case updating Penpot would fail, like that if elements have been partially pushed to Penpot
+    // they can be kept since having the same IDs on the next retry... helpful in case the failure was due to the amount of modifications :)
+    if (options.syncMappingWithGit) {
+      await saveMappingToRepository(document.figmaDocument, document.penpotDocument);
+    }
 
     await writeBigJsonFile(getTransformedFigmaTreePath(document.figmaDocument, document.penpotDocument), penpotTree);
   }
@@ -1512,6 +1525,7 @@ export const SynchronizeOptions = z.object({
   replaceFontPatterns: z.array(ReplaceFontPattern),
   hydrate: z.boolean(),
   hydrateTimeout: Duration.nullable(),
+  syncMappingWithGit: z.boolean(),
   prompting: Prompting,
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;

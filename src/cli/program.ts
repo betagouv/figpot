@@ -29,6 +29,10 @@ const debugDocument = document.command('debug').description('manage documents st
 
 const documentsOption = new Option('-d, --document [documents...]', 'figma document id as source and penpot one as target (`-d figmaId:penpotId`)');
 const continuousIntegrationOption = new Option('-ci, --ci', 'answer "yes" to all command prompts, use it with caution');
+const syncMappingWithGitOption = new Option(
+  '--sync-mapping-with-git',
+  'save and restore the mapping file with Git (must be run inside a repository with "git" command accessible'
+);
 
 const patternInfo = '(use single quotes around the parameter to prevent your terminal to replace special characters)';
 const excludePagePatternsOption = new Option(
@@ -94,6 +98,7 @@ document
   .addOption(excludeTypographyPatternsOption)
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
+  .addOption(syncMappingWithGitOption)
   .addOption(continuousIntegrationOption)
   .option('-nh, --no-hydrate', 'prevent performing hydratation after the synchronization')
   .option('-ht, --hydrate-timeout <hydrateTimeout>', 'specify a maximum of duration for hydratation')
@@ -131,6 +136,7 @@ document
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
         hydrate: options.hydrate,
         hydrateTimeout: options.hydrateTimeout || null,
+        syncMappingWithGit: options.syncMappingWithGit,
         prompting: !options.ci,
       })
     );
@@ -164,6 +170,7 @@ debugDocument
   .command('retrieve')
   .description('save Figma documents locally')
   .addOption(documentsOption)
+  .addOption(syncMappingWithGitOption)
   .addOption(continuousIntegrationOption)
   .action(async (options) => {
     await ensureAccessTokens(!options.ci);
@@ -173,6 +180,7 @@ debugDocument
     await retrieve(
       RetrieveOptions.parse({
         documents: documents,
+        syncMappingWithGit: options.syncMappingWithGit,
         prompting: !options.ci,
       })
     );
@@ -188,6 +196,7 @@ debugDocument
   .addOption(excludeTypographyPatternsOption)
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
+  .addOption(syncMappingWithGitOption)
   .addOption(continuousIntegrationOption)
   .action(async (options) => {
     await ensureAccessTokens(!options.ci);
@@ -205,6 +214,7 @@ debugDocument
           colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
         },
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
+        syncMappingWithGit: options.syncMappingWithGit,
         prompting: !options.ci,
       })
     );

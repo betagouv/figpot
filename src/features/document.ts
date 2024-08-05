@@ -1439,7 +1439,7 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
       const encodedOperationLength = JSON.stringify(operation).length;
 
       // Take into account the `,` delimiter
-      if (currentChunkCount === 2) {
+      if (currentChunkCount + Math.max(currentChunk.length - 1, 0) + encodedOperationLength > remainingBodyBytes) {
         // Directly process the chunk to not calculate all of them
         await processOperationsChunk(figmaDocumentId, penpotDocumentId, differences, currentChunk, chunkNumber, succeededOperations);
 

@@ -94,6 +94,9 @@ export type MappingType = z.infer<typeof Mapping>;
 export const Prompting = z.boolean().optional();
 export type PromptingType = z.infer<typeof Prompting>;
 
+export const ServerValidation = z.boolean().optional();
+export type ServerValidationType = z.infer<typeof ServerValidation>;
+
 export const Metadata = z.object({
   figmaDocumentId: z.string(),
   figmaLastModified: z.string().pipe(z.coerce.date()),
@@ -1287,7 +1290,8 @@ export async function processOperationsChunk(
   differences: Differences,
   currentChunk: appCommonFilesChanges$change[],
   chunkNumber: number,
-  succeededOperations: number
+  succeededOperations: number,
+  serverValidation: boolean = true
 ) {
   try {
     console.info(
@@ -1300,6 +1304,7 @@ export async function processOperationsChunk(
         revn: 0, // Required but does no block to use a default one
         sessionId: '00000000-0000-0000-0000-000000000000', // It has to be UUID format, no matter the value for us
         changes: currentChunk,
+        skipValidate: !serverValidation,
       },
     })) as unknown; // We patched the response to avoid some processing
   } catch (error) {
@@ -1325,7 +1330,13 @@ export async function processOperationsChunk(
   }
 }
 
-export async function processDifferences(figmaDocumentId: string, penpotDocumentId: string, differences: Differences, prompting: boolean = true) {
+export async function processDifferences(
+  figmaDocumentId: string,
+  penpotDocumentId: string,
+  differences: Differences,
+  serverValidation: boolean = true,
+  prompting: boolean = true
+) {
   if (differences.newDocumentName) {
     await postCommandRenameFile({
       requestBody: {
@@ -1421,6 +1432,12 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
   }
 
   if (differences.newTreeOperations.length > 0) {
+    if (!serverValidation) {
+      console.warn(
+        'the Penpot server-side validation of updates has been disabled. It may lead to a corrupted Penpot file in case the library does not handle all cases properly, so use it with caution'
+      );
+    }
+
     // [IMPORTANT] The Penpot scripts defines a default maximum body to 314572800 (300MB) (see `PENPOT_HTTP_SERVER_MAX_MULTIPART_BODY_SIZE`)
     // but this seems not used in their code. The limit reached at runtime is 31457280 (30MB)
     // For huge design systems the limit is easily reached since in adddition we use raw JSON and not the Penpot transit protocol that could help a bit (but would complexify the implementation since no JS Penpot mapper for now)
@@ -1441,7 +1458,15 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
       // Take into account the `,` delimiter
       if (currentChunkCount + Math.max(currentChunk.length - 1, 0) + encodedOperationLength > remainingBodyBytes) {
         // Directly process the chunk to not calculate all of them
-        await processOperationsChunk(figmaDocumentId, penpotDocumentId, differences, currentChunk, chunkNumber, succeededOperations);
+        await processOperationsChunk(
+          figmaDocumentId,
+          penpotDocumentId,
+          differences,
+          currentChunk,
+          chunkNumber,
+          succeededOperations,
+          serverValidation
+        );
 
         succeededOperations += currentChunk.length;
 
@@ -1456,7 +1481,7 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
 
     // The last chunk must be processed
     if (currentChunk.length > 0) {
-      await processOperationsChunk(figmaDocumentId, penpotDocumentId, differences, currentChunk, chunkNumber, succeededOperations);
+      await processOperationsChunk(figmaDocumentId, penpotDocumentId, differences, currentChunk, chunkNumber, succeededOperations, serverValidation);
     }
   }
 
@@ -1498,6 +1523,7 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
 
 export const SetOptions = z.object({
   documents: z.array(DocumentOptions),
+  serverValidation: ServerValidation,
   prompting: Prompting,
 });
 export type SetOptionsType = z.infer<typeof SetOptions>;
@@ -1508,7 +1534,7 @@ export async function set(options: SetOptionsType) {
   for (const document of options.documents) {
     const diff = await readFigmaToPenpotDiffFile(document.figmaDocument, document.penpotDocument);
 
-    await processDifferences(document.figmaDocument, document.penpotDocument, diff, options.prompting);
+    await processDifferences(document.figmaDocument, document.penpotDocument, diff, options.serverValidation, options.prompting);
   }
 }
 
@@ -1526,6 +1552,7 @@ export const SynchronizeOptions = z.object({
   hydrate: z.boolean(),
   hydrateTimeout: Duration.nullable(),
   syncMappingWithGit: z.boolean(),
+  serverValidation: ServerValidation,
   prompting: Prompting,
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;

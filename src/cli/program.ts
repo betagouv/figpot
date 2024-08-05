@@ -33,6 +33,10 @@ const syncMappingWithGitOption = new Option(
   '--sync-mapping-with-git',
   'save and restore the mapping file with Git (must be run inside a repository with "git" command accessible'
 );
+const serverValidationOption = new Option(
+  '--no-server-validation',
+  'skip Penpot validation server-side, useful for big files or for a Penpot instance with limited resources, use it with caution'
+);
 
 const patternInfo = '(use single quotes around the parameter to prevent your terminal to replace special characters)';
 const excludePagePatternsOption = new Option(
@@ -99,6 +103,7 @@ document
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
   .addOption(syncMappingWithGitOption)
+  .addOption(serverValidationOption)
   .addOption(continuousIntegrationOption)
   .option('-nh, --no-hydrate', 'prevent performing hydratation after the synchronization')
   .option('-ht, --hydrate-timeout <hydrateTimeout>', 'specify a maximum of duration for hydratation')
@@ -137,6 +142,7 @@ document
         hydrate: options.hydrate,
         hydrateTimeout: options.hydrateTimeout || null,
         syncMappingWithGit: options.syncMappingWithGit || false,
+        serverValidation: options.serverValidation,
         prompting: !options.ci,
       })
     );
@@ -241,6 +247,7 @@ debugDocument
   .command('set')
   .description('execute operations')
   .addOption(documentsOption)
+  .addOption(serverValidationOption)
   .addOption(continuousIntegrationOption)
   .action(async (options) => {
     await ensureAccessTokens(!options.ci);
@@ -250,6 +257,7 @@ debugDocument
     await set(
       SetOptions.parse({
         documents: documents,
+        serverValidation: options.serverValidation,
         prompting: !options.ci,
       })
     );

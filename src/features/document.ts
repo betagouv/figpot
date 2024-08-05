@@ -1260,13 +1260,6 @@ export async function compare(options: CompareOptionsType) {
       },
     });
 
-    // Use metadata for future usage
-    meta.penpotProjectId = hostedDocument.projectId as string;
-    meta.penpotDocumentId = hostedDocument.id as string;
-    meta.penpotLastModified = hostedDocument.modifiedAt as Date;
-    meta.penpotPages = (hostedDocument.data as PenpotDocument['data']).pages;
-    await saveMeta(document.figmaDocument, document.penpotDocument, meta);
-
     // TODO: for now the response is kebab-case despite types, so forcing the conversion (ref: https://github.com/penpot/penpot/pull/4760#pullrequestreview-2125984653)
     hostedDocument = camelCase(hostedDocument, Number.MAX_SAFE_INTEGER) as PostCommandGetFileResponse;
 
@@ -1281,6 +1274,15 @@ export async function compare(options: CompareOptionsType) {
     const diff = getDifferences(document.penpotDocument, hostedCoreDocument, transformedDocument, Object.keys(currentThumbnails));
 
     await writeBigJsonFile(getFigmaToPenpotDiffPath(document.figmaDocument, document.penpotDocument), diff);
+
+    // Use metadata for future usage
+    // Note: `lastModified` and `pages` may have not much value since they are retrieved because the modifications are pushed
+    // [WORKAROUND] We use transformed pages to fill the value so hydratation is based on pages after updates (otherwise it would work only after 2 stable synchronizations, which has no sense)
+    meta.penpotProjectId = hostedDocument.projectId as string;
+    meta.penpotDocumentId = hostedDocument.id as string;
+    meta.penpotLastModified = hostedDocument.modifiedAt as Date;
+    meta.penpotPages = (transformedDocument.data as PenpotDocument['data']).pages;
+    await saveMeta(document.figmaDocument, document.penpotDocument, meta);
   }
 }
 

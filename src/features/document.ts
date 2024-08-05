@@ -2,7 +2,7 @@ import { confirm } from '@inquirer/prompts';
 import assert from 'assert';
 import { kebabCase } from 'change-case';
 import { camelCase } from 'change-case/keys';
-import fsSync, { openAsBlob } from 'fs';
+import fsSync from 'fs';
 import fs from 'fs/promises';
 import { glob } from 'glob';
 import graphlib, { Graph } from 'graphlib';
@@ -38,6 +38,7 @@ import {
   retrieveDocument,
   retrieveStylesNodes,
 } from '@figpot/src/features/figma';
+import { restoreMappingFromRepository, saveMappingToRepository } from '@figpot/src/features/git';
 import { cleanHostedDocument } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
 import { isPageRootFrame, isPageRootFrameFromId, registerFontId, rootFrameId } from '@figpot/src/features/translators/translateId';
@@ -49,7 +50,7 @@ import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/tex
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot/src/utils/comparaison';
 import { config } from '@figpot/src/utils/environment';
-import { downloadFile, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
+import { downloadFile, openAsBlob, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
 import { gracefulExit } from '@figpot/src/utils/system';
 
 const __root_dirname = process.cwd();
@@ -90,6 +91,9 @@ export const Mapping = z.object({
 });
 export type MappingType = z.infer<typeof Mapping>;
 
+export const Prompting = z.boolean().optional();
+export type PromptingType = z.infer<typeof Prompting>;
+
 export const Metadata = z.object({
   figmaDocumentId: z.string(),
   figmaLastModified: z.string().pipe(z.coerce.date()),
@@ -108,6 +112,8 @@ export type DocumentOptionsType = z.infer<typeof DocumentOptions>;
 
 export const RetrieveOptions = z.object({
   documents: z.array(DocumentOptions),
+  prompting: Prompting,
+  syncMappingWithGit: z.boolean(),
 });
 export type RetrieveOptionsType = z.infer<typeof RetrieveOptions>;
 
@@ -244,20 +250,22 @@ export async function saveMeta(figmaDocumentId: string, penpotDocumentId: string
   });
 }
 
-export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: string): Promise<MappingType> {
+export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: string, prompting: boolean = true): Promise<MappingType> {
   const mappingPath = getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId);
   let mapping: MappingType | null = null;
 
   if (!fsSync.existsSync(mappingPath)) {
-    // TODO: maybe add a warning if no node mapping?
-    const answer = await confirm({
-      message: `You target the Penpot document "${penpotDocumentId}" without having locally the mapping from previous synchronization. Are you sure to continue by overriding the target document?`,
-    });
+    if (prompting) {
+      // TODO: maybe add a warning if no node mapping?
+      const answer = await confirm({
+        message: `You target the Penpot document "${penpotDocumentId}" without having locally the mapping from previous synchronization. Are you sure to continue by overriding the target document?`,
+      });
 
-    if (!answer) {
-      console.warn('the transformation operation has been aborted');
+      if (!answer) {
+        console.warn('the transformation operation has been aborted');
 
-      return Promise.reject(gracefulExit);
+        return Promise.reject(gracefulExit);
+      }
     }
   } else {
     const mappingString = await fs.readFile(mappingPath, 'utf-8');
@@ -335,7 +343,11 @@ export async function retrieve(options: RetrieveOptionsType) {
       },
     })) as unknown as any[];
 
-    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument);
+    if (options.syncMappingWithGit) {
+      await restoreMappingFromRepository(document.figmaDocument, document.penpotDocument);
+    }
+
+    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument, options.prompting);
 
     for (const customPenpotFontVariant of customPenpotFontsVariants) {
       const simulatedFigmaFontVariantId = `${customPenpotFontVariant.fontFamily}-${customPenpotFontVariant.fontStyle}-${customPenpotFontVariant.fontWeight}`;
@@ -451,6 +463,8 @@ export const TransformOptions = z.object({
   documents: z.array(DocumentOptions),
   excludePatterns: ExcludePatterns,
   replaceFontPatterns: z.array(ReplaceFontPattern),
+  syncMappingWithGit: z.boolean(),
+  prompting: Prompting,
 });
 export type TransformOptionsType = z.infer<typeof TransformOptions>;
 
@@ -471,23 +485,35 @@ export async function transform(options: TransformOptionsType) {
 
     const advisedElementsLimit = 150_000;
     if (elementsCount > advisedElementsLimit) {
-      const answer = await confirm({
-        message: `The Figma document tree you want to synchronize is really huge. Over ${advisedElementsLimit} elements we are quick sure both the Penpot backend and the frontend won't be able to render your document until Penpot evolves. Have a look at our documentation see how to exclude nodes that brings to you no value and that could make the document loadable. Do you want to by-pass this warning and continue processing an unloadable file?`,
-      });
+      if (options.prompting) {
+        const answer = await confirm({
+          message: `The Figma document tree you want to synchronize is really huge. Over ${advisedElementsLimit} elements we are quick sure both the Penpot backend and the frontend won't be able to render your document until Penpot evolves. Have a look at our documentation to see how to exclude nodes that bring to you no value and that could make the document loadable. Do you want to by-pass this warning and continue processing an unloadable file?`,
+        });
 
-      if (!answer) {
-        console.warn('the transformation operation has been aborted');
+        if (!answer) {
+          console.warn('the transformation operation has been aborted');
 
-        return Promise.reject(gracefulExit);
+          return Promise.reject(gracefulExit);
+        }
+      } else {
+        console.warn(
+          `the Figma document tree you want to synchronize is really huge. Over ${advisedElementsLimit} elements we are quick sure both the Penpot backend and the frontend won't be able to render your document until Penpot evolves. Have a look at our documentation to see how to exclude nodes that bring to you no value and that could make the document loadable`
+        );
       }
     }
 
-    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument);
+    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument, options.prompting);
 
     const penpotTree = transformDocument(figmaTree, figmaColors, figmaTypographies, mapping);
 
     // Save mapping for later usage
     await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
+
+    // Try to push to Git directly in case updating Penpot would fail, like that if elements have been partially pushed to Penpot
+    // they can be kept since having the same IDs on the next retry... helpful in case the failure was due to the amount of modifications :)
+    if (options.syncMappingWithGit) {
+      await saveMappingToRepository(document.figmaDocument, document.penpotDocument);
+    }
 
     await writeBigJsonFile(getTransformedFigmaTreePath(document.figmaDocument, document.penpotDocument), penpotTree);
   }
@@ -1299,7 +1325,7 @@ export async function processOperationsChunk(
   }
 }
 
-export async function processDifferences(figmaDocumentId: string, penpotDocumentId: string, differences: Differences) {
+export async function processDifferences(figmaDocumentId: string, penpotDocumentId: string, differences: Differences, prompting: boolean = true) {
   if (differences.newDocumentName) {
     await postCommandRenameFile({
       requestBody: {
@@ -1315,7 +1341,7 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
   // We first upload files because they are used by nodes
   if (differences.newMedias.length > 0) {
     // Retrieve the original Figma IDs to upload files
-    const mapping = await restoreMapping(figmaDocumentId, penpotDocumentId);
+    const mapping = await restoreMapping(figmaDocumentId, penpotDocumentId, prompting);
 
     for (const penpotMediaId of differences.newMedias) {
       // We check all files we need to use have been retrieved locally before
@@ -1413,14 +1439,15 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
       const encodedOperationLength = JSON.stringify(operation).length;
 
       // Take into account the `,` delimiter
-      if (currentChunkCount + Math.max(currentChunk.length - 1, 0) + encodedOperationLength > remainingBodyBytes) {
+      if (currentChunkCount === 2) {
         // Directly process the chunk to not calculate all of them
         await processOperationsChunk(figmaDocumentId, penpotDocumentId, differences, currentChunk, chunkNumber, succeededOperations);
+
+        succeededOperations += currentChunk.length;
 
         currentChunk = [];
         currentChunkCount = 0;
         chunkNumber++;
-        succeededOperations += currentChunk.length;
       }
 
       currentChunk.push(operation);
@@ -1471,6 +1498,7 @@ export async function processDifferences(figmaDocumentId: string, penpotDocument
 
 export const SetOptions = z.object({
   documents: z.array(DocumentOptions),
+  prompting: Prompting,
 });
 export type SetOptionsType = z.infer<typeof SetOptions>;
 
@@ -1480,7 +1508,7 @@ export async function set(options: SetOptionsType) {
   for (const document of options.documents) {
     const diff = await readFigmaToPenpotDiffFile(document.figmaDocument, document.penpotDocument);
 
-    await processDifferences(document.figmaDocument, document.penpotDocument, diff);
+    await processDifferences(document.figmaDocument, document.penpotDocument, diff, options.prompting);
   }
 }
 
@@ -1497,6 +1525,8 @@ export const SynchronizeOptions = z.object({
   replaceFontPatterns: z.array(ReplaceFontPattern),
   hydrate: z.boolean(),
   hydrateTimeout: Duration.nullable(),
+  syncMappingWithGit: z.boolean(),
+  prompting: Prompting,
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;
 
@@ -1511,7 +1541,7 @@ export async function synchronize(options: SynchronizeOptionsType) {
 
   if (!options.hydrate) {
     console.warn(
-      `the document has been synchronized but some graphical enhancements can only be done from a browser. If the synchronization has pushed modifications the first user seeing the updated document may encounter those loadings for a few seconds or minutes depending on the size of the document. We advise you to perform a hydration by yourself so the first user will see the document properly directly. Either open your document into the browser, or rerun this command without "--no-hydrate", or by running the dedicated command "figpot document hydrate ..."`
+      `the document has been synchronized but some graphical enhancements can only be done from a browser. If the synchronization has pushed modifications the first user seeing the updated document may encounter some loadings for a few seconds or minutes depending on the size of the document. We advise you to perform a hydratation by yourself so the first user will see the document properly directly. Either open your document into the browser, or rerun this command without "--no-hydrate", or by running the dedicated command "figpot document hydrate ..."`
     );
 
     return;
@@ -1600,7 +1630,7 @@ export async function hydrate(options: HydrateOptionsType) {
 
       // Check we have the needed information into the `meta.json`
       if (meta.penpotProjectId === 'not_known_yet') {
-        throw new Error(`to run hydration you must first run the synchronization on this document on this machine`);
+        throw new Error(`to run hydratation you must first run the synchronization on this document on this machine`);
       }
 
       const page = await browserContext.newPage();

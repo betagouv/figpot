@@ -1,10 +1,12 @@
 import assert from 'assert';
 import contentType from 'content-type';
 import fsSync from 'fs';
+import type { openAsBlob as originalOpenAsBlob } from 'fs';
 import fs from 'fs/promises';
 import { mimeData } from 'human-filetypes';
 import { JsonStreamStringify } from 'json-stream-stringify';
 import path from 'path';
+import { pipeline } from 'stream';
 import streamChain from 'stream-chain';
 import Asm from 'stream-json/Assembler.js';
 import streamJsonParser from 'stream-json/Parser.js';
@@ -52,6 +54,10 @@ export async function readBigJsonFile(filePath: string): Promise<object> {
       parser(),
     ]);
 
+    pipeline.once('error', (error) => {
+      reject(error);
+    });
+
     const asm = Asm.connectTo(pipeline);
 
     asm.once('done', (asm) => {
@@ -64,17 +70,28 @@ export async function writeBigJsonFile(filePath: string, jsonObject: object): Pr
   // [WORKAROUND] We do not use `stream-json` as we do for reading
   // since its internal logic will go over arrays size limit when transforming the object
   // Ref: https://github.com/uhop/stream-json/issues/157
+  const jsonStream = new JsonStreamStringify(jsonObject);
+
+  const fileStream = fsSync.createWriteStream(filePath, {
+    encoding: 'utf-8',
+  });
+
   return await new Promise((resolve, reject) => {
-    const jsonStream = new JsonStreamStringify(jsonObject);
-
-    jsonStream.once('error', reject);
-    jsonStream.once('end', resolve);
-    jsonStream.once('close', resolve);
-
-    jsonStream.pipe(
-      fsSync.createWriteStream(filePath, {
-        encoding: 'utf-8',
-      })
-    );
+    pipeline(jsonStream, fileStream, (error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
   });
 }
+
+// We define our own instead of using `import { openAsBlob } from 'fs';` since it has been released inside Node.js v20 that is pretty recent
+// By using this polyfill users can remain on a lower Node.js version
+export async function openAsBlob(path: fsSync.PathLike, options?: fsSync.OpenAsBlobOptions): Promise<Blob> {
+  const buffer = await fs.readFile(path);
+
+  return new Blob([buffer], options);
+}
+openAsBlob satisfies typeof originalOpenAsBlob;

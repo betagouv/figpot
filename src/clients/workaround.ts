@@ -35,6 +35,10 @@ export async function getJsonResponseBody(response: Response): Promise<any> {
     return await new Promise((resolve, reject) => {
       const pipeline = chain([stream, parser()]);
 
+      pipeline.once('error', (error) => {
+        reject(error);
+      });
+
       const asm = Asm.connectTo(pipeline);
 
       asm.once('done', (asm) => {

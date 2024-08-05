@@ -45,7 +45,7 @@ export function translateFontId(simulatedFigmaFontVariantId: string, fontName: T
   const penpotFontId = mapping.fonts.get(simulatedFigmaFontVariantId);
   if (!penpotFontId) {
     throw new Error(
-      `the font variant "${fontName.fontPostScriptName || fontName.fontFamily}" is missing onto the Penpot instance for your team. Please go to your dashboard and add the font manually. We advise you to upload all variants of the font for the ease. Also, note we were not able to automate this because it cannot be scoped to a file and there would be a risk of duplication due to Penpot current validation`
+      `the font variant "${fontName.fontPostScriptName}" from the font family "${fontName.fontFamily}" is missing onto the Penpot instance for your team. Please go to your dashboard and add the font manually. We advise you to upload all variants of the font for the ease. Also, note we were not able to automate this because it cannot be scoped to a file and there would be a risk of duplication due to Penpot current validation. If needed you can use a parameter to replace a font family, see our documentation`
     );
   }
 

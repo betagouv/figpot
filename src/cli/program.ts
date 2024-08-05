@@ -1,4 +1,5 @@
 import { Command, Option } from '@commander-js/extra-typings';
+import { $ } from 'execa';
 
 import {
   CompareOptions,
@@ -22,10 +23,16 @@ export const program = new Command();
 
 program.name('figpot').description('CLI to perform actions between Figma and Penpot').version('0.0.0');
 
+const deps = program.command('deps').description('install required dependencies to use the package');
 const document = program.command('document').description('manage documents');
 const debugDocument = document.command('debug').description('manage documents step by step to debug');
 
 const documentsOption = new Option('-d, --document [documents...]', 'figma document id as source and penpot one as target (`-d figmaId:penpotId`)');
+const continuousIntegrationOption = new Option('-ci, --ci', 'answer "yes" to all command prompts, use it with caution');
+const syncMappingWithGitOption = new Option(
+  '--sync-mapping-with-git',
+  'save and restore the mapping file with Git (must be run inside a repository with "git" command accessible'
+);
 
 const patternInfo = '(use single quotes around the parameter to prevent your terminal to replace special characters)';
 const excludePagePatternsOption = new Option(
@@ -70,6 +77,17 @@ function formatReplaceFontPatterns(replaceFontPattern: string[]): object[] {
   });
 }
 
+deps.action(async (options) => {
+  console.log('Installing dependencies...');
+
+  // Install dependencies by the hydratation step
+  // ---
+  // Reproducing the Playwright CLI install logic by code is too complex, so executing a raw command instead
+  // (try to match the version from the dependency tree to make prevent breaking changes using a latest one)
+  // Ref: https://github.com/microsoft/playwright/blob/7c55b94280b89cc2612c8b4fa5d93d60203b3259/packages/playwright-core/src/cli/program.ts#L115-L179
+  await $`npx playwright@^1.45.3 install --with-deps chromium`;
+});
+
 document
   .command('synchronize')
   .description('synchronize Figma documents to Penpot ones')
@@ -80,19 +98,22 @@ document
   .addOption(excludeTypographyPatternsOption)
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
+  .addOption(syncMappingWithGitOption)
+  .addOption(continuousIntegrationOption)
   .option('-nh, --no-hydrate', 'prevent performing hydratation after the synchronization')
   .option('-ht, --hydrate-timeout <hydrateTimeout>', 'specify a maximum of duration for hydratation')
   .action(async (options) => {
-    await ensureAccessTokens();
+    await ensureAccessTokens(!options.ci);
 
     if (options.hydrate) {
-      await ensureCredentials();
+      await ensureCredentials(!options.ci);
     }
 
     let documents: DocumentOptionsType[];
     if (!options.document || options.document === true) {
       throw new Error('please specify both figma and penpot documents to synchronize');
       // TODO: disabling this for now until we implement the documents retrieval from Penpot
+      // TODO: should deal with `options.ci` value
       // documents = (await retrieveDocumentsFromInput()).map((figmaDocument) => {
       //   return {
       //     figmaDocument: figmaDocument,
@@ -115,6 +136,8 @@ document
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
         hydrate: options.hydrate,
         hydrateTimeout: options.hydrateTimeout || null,
+        syncMappingWithGit: options.syncMappingWithGit,
+        prompting: !options.ci,
       })
     );
   });
@@ -124,8 +147,9 @@ document
   .description('hydrate Penpot documents after a synchronization')
   .addOption(documentsOption)
   .option('-t, --timeout <timeout>', 'specify a maximum of duration for hydratation')
+  .addOption(continuousIntegrationOption)
   .action(async (options) => {
-    await ensureCredentials();
+    await ensureCredentials(!options.ci);
 
     let documents: DocumentOptionsType[];
     if (!options.document || options.document === true) {
@@ -146,14 +170,18 @@ debugDocument
   .command('retrieve')
   .description('save Figma documents locally')
   .addOption(documentsOption)
+  .addOption(syncMappingWithGitOption)
+  .addOption(continuousIntegrationOption)
   .action(async (options) => {
-    await ensureAccessTokens();
+    await ensureAccessTokens(!options.ci);
 
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
 
     await retrieve(
       RetrieveOptions.parse({
         documents: documents,
+        syncMappingWithGit: options.syncMappingWithGit,
+        prompting: !options.ci,
       })
     );
   });
@@ -168,8 +196,10 @@ debugDocument
   .addOption(excludeTypographyPatternsOption)
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
+  .addOption(syncMappingWithGitOption)
+  .addOption(continuousIntegrationOption)
   .action(async (options) => {
-    await ensureAccessTokens();
+    await ensureAccessTokens(!options.ci);
 
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
 
@@ -184,6 +214,8 @@ debugDocument
           colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
         },
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
+        syncMappingWithGit: options.syncMappingWithGit,
+        prompting: !options.ci,
       })
     );
   });
@@ -192,8 +224,9 @@ debugDocument
   .command('compare')
   .description('compare Figma and Penpot documents to know what to operate')
   .addOption(documentsOption)
+  .addOption(continuousIntegrationOption)
   .action(async (options) => {
-    await ensureAccessTokens();
+    await ensureAccessTokens(!options.ci);
 
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
 
@@ -208,14 +241,16 @@ debugDocument
   .command('set')
   .description('execute operations')
   .addOption(documentsOption)
+  .addOption(continuousIntegrationOption)
   .action(async (options) => {
-    await ensureAccessTokens();
+    await ensureAccessTokens(!options.ci);
 
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
 
     await set(
       SetOptions.parse({
         documents: documents,
+        prompting: !options.ci,
       })
     );
   });

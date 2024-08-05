@@ -136,7 +136,7 @@ document
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
         hydrate: options.hydrate,
         hydrateTimeout: options.hydrateTimeout || null,
-        syncMappingWithGit: options.syncMappingWithGit,
+        syncMappingWithGit: options.syncMappingWithGit || false,
         prompting: !options.ci,
       })
     );
@@ -180,7 +180,7 @@ debugDocument
     await retrieve(
       RetrieveOptions.parse({
         documents: documents,
-        syncMappingWithGit: options.syncMappingWithGit,
+        syncMappingWithGit: options.syncMappingWithGit || false,
         prompting: !options.ci,
       })
     );
@@ -214,7 +214,7 @@ debugDocument
           colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
         },
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
-        syncMappingWithGit: options.syncMappingWithGit,
+        syncMappingWithGit: options.syncMappingWithGit || false,
         prompting: !options.ci,
       })
     );

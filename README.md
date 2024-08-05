@@ -149,13 +149,13 @@ If you encounter issues like `JavaScript heap out of memory`, try to:
 
 ### How to synchronize multiple Figma files while keeping their components references between each other?
 
-Currently when you convert a Figma file with `figpot`, all instances of remote components will loose their "component definition link" since the dependencies files are maybe not what you want to synchronize. To ease the user experience, we decided tokeep this logic instead of assuming the library has to transfer all files (or almost all).
+Currently when you convert a Figma file with `figpot`, all instances of remote components will loose their "component definition link" since the dependencies files are maybe not what you want to synchronize. To ease the user experience, we decided to keep this logic instead of assuming the library has to transfer all files (or almost all).
 
 It may be implemented in the future, but it would require all expected files to be synchronized first, and the "binding operation" would appear after. This because Figma allows bidirectional dependencies ("file A" may rely on "file B" components, and "file B" may rely on "file A" components).
 
 ### How to set up a recurrent synchronization?
 
-This library is not intended to do real time synchronization, and usually almost real time synchronization it's not even needed.
+This library is not intended to do real time synchronization, and usually almost real time synchronization is not even needed.
 
 We advise you to run the synchronization twice a week. Trying to synchronize has no data integrity impact, but it consumes a lot of ressources for nothing if your file is quite stable (fetching, transforming, comparing...).
 
@@ -193,7 +193,7 @@ Make sure to use a Node.js version aligned with one specified into `.nvmrc`. The
 ```shell
 npm install
 npm run setup # discard in Git changes produced in files `*/request.ts`, we have patch some for optimization. Note also we do not use fixed schema version since their SaaS API evolve all the time. We rely on types check to detect any breaking change so we can adjust our logic
-copy .env.model .env.local
+cp .env.model .env.local
 ```
 
 Open `.env.local` and fill it with information as for a normal library usage. Then you are able to run:
@@ -212,7 +212,7 @@ A lot of tests are missing in the current version but you may find some that can
 npm run jest --- --ci --passWithNoTests "./src/features/document.spec.ts"
 ```
 
-It would be great while contributing to mimic what's done inside `document.spec.ts` with the input tree and the output tree to confirm what you are developing or fixing is working. Don't forget to share the Figma file you based your work on (either with a public link or with a Figma binary export), it allows us to reproduce it our own hand.
+It would be great while contributing to mimic what's done inside `document.spec.ts` with the input tree and the output tree to confirm what you are developing or fixing is working. Don't forget to share the Figma file you based your work on (either with a public link or with a Figma binary export), it allows us to reproduce it on own hand.
 
 ### Debugging
 

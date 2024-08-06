@@ -29,8 +29,8 @@ Prepare the minimal information:
 Make sure to have [Node.js](https://nodejs.org/) installed and simply run:
 
 ```shell
-npx figpot deps # required to have a 100% complete synchronization, if not wanted use `--no-hydrate` on the following command
-npx figpot document synchronize -d CptbnRHeDv3pzOai91abcd:3d04e89b-bff0-8115-8004-bc14b0d50123
+npx @betagouv/figpot deps # required to have a 100% complete synchronization, if not wanted use `--no-hydrate` on the following command
+npx @betagouv/figpot document synchronize -d CptbnRHeDv3pzOai91abcd:3d04e89b-bff0-8115-8004-bc14b0d50123
 ```
 
 The command will then ask you for tokens required to reach both Figma and Penpot. To avoid typing them each time, have a look at the `Usage > Advanced` section.
@@ -184,7 +184,7 @@ _If you feel confident that your Penpot file is not used as a dependency, you ma
 
 ## Contribute
 
-If you didn't face a specific issue but you are willing to help, please have a look at the reported issues https://github.com/sneko/figpot/issues. I will do my best to address your work, but keep in mind the maintenance of this project is in my spare time or on the time of other contributors.
+If you didn't face a specific issue but you are willing to help, please have a look at the reported issues https://github.com/betagouv/figpot/issues. I will do my best to address your work, but keep in mind the maintenance of this project is in my spare time or on the time of other contributors.
 
 ### Setup
 
@@ -226,14 +226,14 @@ If needed, you can reproduce a full `npm run cli document synchronize ...` comma
 4. `npm run cli document debug set ...`
 5. `npm run cli document hydrate ...`
 
-[build-img]: https://github.com/sneko/figpot/actions/workflows/ci.yml/badge.svg?branch=main
-[build-url]: https://github.com/sneko/figpot/actions/workflows/ci.yml
+[build-img]: https://github.com/betagouv/figpot/actions/workflows/ci.yml/badge.svg?branch=main
+[build-url]: https://github.com/betagouv/figpot/actions/workflows/ci.yml
 [downloads-img]: https://img.shields.io/npm/dt/figpot
 [downloads-url]: https://www.npmtrends.com/figpot
 [npm-img]: https://img.shields.io/npm/v/figpot
 [npm-url]: https://www.npmjs.com/package/figpot
-[issues-img]: https://img.shields.io/github/issues/sneko/figpot
-[issues-url]: https://github.com/sneko/figpot/issues
+[issues-img]: https://img.shields.io/github/issues/betagouv/figpot
+[issues-url]: https://github.com/betagouv/figpot/issues
 [semantic-release-img]: https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg
 [semantic-release-url]: https://github.com/semantic-release/semantic-release
 [commitizen-img]: https://img.shields.io/badge/commitizen-friendly-brightgreen.svg

@@ -1,12 +1,5 @@
 # figpot
 
-[![npm package][npm-img]][npm-url]
-[![Build Status][build-img]][build-url]
-[![Downloads][downloads-img]][downloads-url]
-[![Issues][issues-img]][issues-url]
-[![Commitizen Friendly][commitizen-img]][commitizen-url]
-[![Semantic Release][semantic-release-img]][semantic-release-url]
-
 > [!IMPORTANT]
 > The package is implemented and has been tested with a custom Penpot instance. To be widely used the Penpot SaaS must be patched... Be patient and follow the issue https://tree.taiga.io/project/penpot/us/8372 ⏱️🚀
 
@@ -16,6 +9,13 @@ This library is a Figma to Penpot converter and synchronizer, it will fit your n
 - To provide your design system onto Penpot while keeping Figma as a source of truth _(incremental transfers)_
   - It can be automated and requires no intervention
   - Across synchronizations any file element will keep its unique identifier, so users relying on your file won't have bindings broken
+
+[![npm package][npm-img]][npm-url]
+[![Build Status][build-img]][build-url]
+[![Downloads][downloads-img]][downloads-url]
+[![Issues][issues-img]][issues-url]
+[![Commitizen Friendly][commitizen-img]][commitizen-url]
+[![Semantic Release][semantic-release-img]][semantic-release-url]
 
 ## Usage
 

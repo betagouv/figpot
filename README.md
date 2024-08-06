@@ -1,12 +1,5 @@
 # figpot
 
-[![npm package][npm-img]][npm-url]
-[![Build Status][build-img]][build-url]
-[![Downloads][downloads-img]][downloads-url]
-[![Issues][issues-img]][issues-url]
-[![Commitizen Friendly][commitizen-img]][commitizen-url]
-[![Semantic Release][semantic-release-img]][semantic-release-url]
-
 > [!IMPORTANT]
 > The package is implemented and has been tested with a custom Penpot instance. To be widely used the Penpot SaaS must be patched... Be patient and follow the issue https://tree.taiga.io/project/penpot/us/8372 ⏱️🚀
 
@@ -16,6 +9,13 @@ This library is a Figma to Penpot converter and synchronizer, it will fit your n
 - To provide your design system onto Penpot while keeping Figma as a source of truth _(incremental transfers)_
   - It can be automated and requires no intervention
   - Across synchronizations any file element will keep its unique identifier, so users relying on your file won't have bindings broken
+
+[![npm package][npm-img]][npm-url]
+[![Build Status][build-img]][build-url]
+[![Downloads][downloads-img]][downloads-url]
+[![Issues][issues-img]][issues-url]
+[![Commitizen Friendly][commitizen-img]][commitizen-url]
+[![Semantic Release][semantic-release-img]][semantic-release-url]
 
 ## Usage
 
@@ -29,8 +29,8 @@ Prepare the minimal information:
 Make sure to have [Node.js](https://nodejs.org/) installed and simply run:
 
 ```shell
-npx figpot deps # required to have a 100% complete synchronization, if not wanted use `--no-hydrate` on the following command
-npx figpot document synchronize -d CptbnRHeDv3pzOai91abcd:3d04e89b-bff0-8115-8004-bc14b0d50123
+npx @betagouv/figpot deps # required to have a 100% complete synchronization, if not wanted use `--no-hydrate` on the following command
+npx @betagouv/figpot document synchronize -d CptbnRHeDv3pzOai91abcd:3d04e89b-bff0-8115-8004-bc14b0d50123
 ```
 
 The command will then ask you for tokens required to reach both Figma and Penpot. To avoid typing them each time, have a look at the `Usage > Advanced` section.
@@ -149,13 +149,13 @@ If you encounter issues like `JavaScript heap out of memory`, try to:
 
 ### How to synchronize multiple Figma files while keeping their components references between each other?
 
-Currently when you convert a Figma file with `figpot`, all instances of remote components will loose their "component definition link" since the dependencies files are maybe not what you want to synchronize. To ease the user experience, we decided tokeep this logic instead of assuming the library has to transfer all files (or almost all).
+Currently when you convert a Figma file with `figpot`, all instances of remote components will loose their "component definition link" since the dependencies files are maybe not what you want to synchronize. To ease the user experience, we decided to keep this logic instead of assuming the library has to transfer all files (or almost all).
 
 It may be implemented in the future, but it would require all expected files to be synchronized first, and the "binding operation" would appear after. This because Figma allows bidirectional dependencies ("file A" may rely on "file B" components, and "file B" may rely on "file A" components).
 
 ### How to set up a recurrent synchronization?
 
-This library is not intended to do real time synchronization, and usually almost real time synchronization it's not even needed.
+This library is not intended to do real time synchronization, and usually almost real time synchronization is not even needed.
 
 We advise you to run the synchronization twice a week. Trying to synchronize has no data integrity impact, but it consumes a lot of ressources for nothing if your file is quite stable (fetching, transforming, comparing...).
 
@@ -184,7 +184,7 @@ _If you feel confident that your Penpot file is not used as a dependency, you ma
 
 ## Contribute
 
-If you didn't face a specific issue but you are willing to help, please have a look at the reported issues https://github.com/sneko/figpot/issues. I will do my best to address your work, but keep in mind the maintenance of this project is in my spare time or on the time of other contributors.
+If you didn't face a specific issue but you are willing to help, please have a look at the reported issues https://github.com/betagouv/figpot/issues. I will do my best to address your work, but keep in mind the maintenance of this project is in my spare time or on the time of other contributors.
 
 ### Setup
 
@@ -193,7 +193,7 @@ Make sure to use a Node.js version aligned with one specified into `.nvmrc`. The
 ```shell
 npm install
 npm run setup # discard in Git changes produced in files `*/request.ts`, we have patch some for optimization. Note also we do not use fixed schema version since their SaaS API evolve all the time. We rely on types check to detect any breaking change so we can adjust our logic
-copy .env.model .env.local
+cp .env.model .env.local
 ```
 
 Open `.env.local` and fill it with information as for a normal library usage. Then you are able to run:
@@ -212,7 +212,7 @@ A lot of tests are missing in the current version but you may find some that can
 npm run jest --- --ci --passWithNoTests "./src/features/document.spec.ts"
 ```
 
-It would be great while contributing to mimic what's done inside `document.spec.ts` with the input tree and the output tree to confirm what you are developing or fixing is working. Don't forget to share the Figma file you based your work on (either with a public link or with a Figma binary export), it allows us to reproduce it our own hand.
+It would be great while contributing to mimic what's done inside `document.spec.ts` with the input tree and the output tree to confirm what you are developing or fixing is working. Don't forget to share the Figma file you based your work on (either with a public link or with a Figma binary export), it allows us to reproduce it on own hand.
 
 ### Debugging
 
@@ -226,14 +226,14 @@ If needed, you can reproduce a full `npm run cli document synchronize ...` comma
 4. `npm run cli document debug set ...`
 5. `npm run cli document hydrate ...`
 
-[build-img]: https://github.com/sneko/figpot/actions/workflows/ci.yml/badge.svg?branch=main
-[build-url]: https://github.com/sneko/figpot/actions/workflows/ci.yml
+[build-img]: https://github.com/betagouv/figpot/actions/workflows/ci.yml/badge.svg?branch=main
+[build-url]: https://github.com/betagouv/figpot/actions/workflows/ci.yml
 [downloads-img]: https://img.shields.io/npm/dt/figpot
 [downloads-url]: https://www.npmtrends.com/figpot
 [npm-img]: https://img.shields.io/npm/v/figpot
 [npm-url]: https://www.npmjs.com/package/figpot
-[issues-img]: https://img.shields.io/github/issues/sneko/figpot
-[issues-url]: https://github.com/sneko/figpot/issues
+[issues-img]: https://img.shields.io/github/issues/betagouv/figpot
+[issues-url]: https://github.com/betagouv/figpot/issues
 [semantic-release-img]: https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg
 [semantic-release-url]: https://github.com/semantic-release/semantic-release
 [commitizen-img]: https://img.shields.io/badge/commitizen-friendly-brightgreen.svg

@@ -21,7 +21,7 @@ import { ensureAccessTokens, ensureCredentials } from '@figpot/src/utils/environ
 
 export const program = new Command();
 
-program.name('figpot').description('CLI to perform actions between Figma and Penpot').version('0.0.0');
+program.name('@betagouv/figpot').description('CLI to perform actions between Figma and Penpot').version('0.0.0');
 
 const deps = program.command('deps').description('install required dependencies to use the package');
 const document = program.command('document').description('manage documents');

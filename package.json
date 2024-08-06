@@ -1,10 +1,10 @@
 {
-  "name": "figpot",
+  "name": "@betagouv/figpot",
   "version": "0.0.0",
   "private": false,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sneko/figpot.git"
+    "url": "git+https://github.com/betagouv/figpot.git"
   },
   "license": "MIT",
   "publishConfig": {
@@ -19,7 +19,7 @@
   "type": "module",
   "module": "./dist/index.js",
   "bin": {
-    "figpot": "./dist/cli/index.js"
+    "@betagouv/figpot": "./dist/cli/index.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

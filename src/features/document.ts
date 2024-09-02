@@ -538,19 +538,35 @@ export function pushOperationsWithOrderingLogic(
   if (operationToAddress.type === 'mod-obj') {
     // A shapes modification may fail with `referential-integrity` error, it needs to be performed once the children are set up
     // We have to deduplicate the logic by extracting this
-    const suboperationToSwitch = operationToAddress.operations.findIndex((suboperation) => {
-      return suboperation.type === 'set' && suboperation.attr === 'shapes' && (suboperation.val as string[]).length > 0;
+    const suboperationToMutate = operationToAddress.operations.findIndex((suboperation) => {
+      return suboperation.type === 'assign' && Array.isArray(suboperation.value.shapes) && (suboperation.value.shapes as string[]).length > 0;
     });
 
-    if (suboperationToSwitch !== -1) {
+    if (suboperationToMutate !== -1) {
+      const suboperationObject = operationToAddress.operations[suboperationToMutate];
+
+      assert(suboperationObject.type === 'assign');
+
       delayedForChildrenOperations.push({
         type: operationToAddress.type,
         id: operationToAddress.id,
         pageId: operationToAddress.pageId,
-        operations: [operationToAddress.operations[suboperationToSwitch]],
+        operations: [
+          {
+            type: 'assign',
+            value: {
+              shapes: suboperationObject.value.shapes,
+            },
+          },
+        ],
       });
 
-      operationToAddress.operations.splice(suboperationToSwitch, 1);
+      // Remove this from the current operation, or the current operation if only shapes were modified
+      if (Object.keys(suboperationObject.value).length > 1) {
+        delete suboperationObject.value.shapes;
+      } else {
+        operationToAddress.operations.splice(suboperationToMutate, 1);
+      }
     }
 
     // If no more operation for the original one we can skip it because if `pageId` has changed it would be handled by the second one
@@ -565,9 +581,10 @@ export function pushOperationsWithOrderingLogic(
         pageId: operationToAddress.pageId,
         operations: [
           {
-            type: 'set',
-            attr: 'shapes',
-            val: (operationToAddress.obj as any).shapes,
+            type: 'assign',
+            value: {
+              shapes: (operationToAddress.obj as any).shapes,
+            },
           },
         ],
       });
@@ -595,31 +612,33 @@ export function delayBindingOperation(
   // So we decided to delay all bindings to be sure locally all main component instances exist
   // Note: maybe it happens since we chunk operations for large documents
   // Note: we have to delay all component stuff otherwise the API invalidates the input
-  const delayedOperation: appCommonFilesChanges$change = {
-    type: 'mod-obj',
-    id: nodeId,
-    pageId: pageId,
-    operations: [],
-  };
+
+  // Since types are dynamic based on "type" property we cannot easily manipulate them once assigned elsewhere, so reusing the value type that is not totally defined
+  const delayedAssignValues: { [key: string]: unknown } = {};
 
   // A main instance has no `shapeRef`, and the API refuses it if `null/undefined` so using conditions to avoid triggering a backend calculation
   if (componentId !== undefined) {
-    delayedOperation.operations.push({ type: 'set', attr: kebabCase('componentId'), val: componentId });
+    delayedAssignValues[kebabCase('componentId')] = componentId;
   }
   if (componentFile !== undefined) {
-    delayedOperation.operations.push({ type: 'set', attr: kebabCase('componentFile'), val: componentFile });
+    delayedAssignValues[kebabCase('componentFile')] = componentFile;
   }
   if (componentRoot !== undefined) {
-    delayedOperation.operations.push({ type: 'set', attr: kebabCase('componentRoot'), val: componentRoot });
+    delayedAssignValues[kebabCase('componentRoot')] = componentRoot;
   }
   if (mainInstance !== undefined) {
-    delayedOperation.operations.push({ type: 'set', attr: kebabCase('mainInstance'), val: mainInstance });
+    delayedAssignValues[kebabCase('mainInstance')] = mainInstance;
   }
   if (shapeRef !== undefined) {
-    delayedOperation.operations.push({ type: 'set', attr: kebabCase('shapeRef'), val: shapeRef });
+    delayedAssignValues[kebabCase('shapeRef')] = shapeRef;
   }
 
-  delayedOperations.push(delayedOperation);
+  delayedOperations.push({
+    type: 'mod-obj',
+    id: nodeId,
+    pageId: pageId,
+    operations: [{ type: 'assign', value: delayedAssignValues }],
+  });
 }
 
 export function formatThumbnailId(documentId: string, pageId: string, objectId: string, objectType: 'component' | 'frame') {
@@ -960,22 +979,20 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
         if (isPageRootFrame(item.after)) {
           const { _apiType, _realPageParentId, _pageId, frameId, id, parentId, ...propertiesObj } = item.after; // Instruction to omit some properties
 
-          // The root frame is automatically created with its wrapping page (the iteration before this one normally)
-          // So we just need to apply modifications if needed
+          // The root frame is automatically created with its wrapping page (the iteration before this one normally), so we just need to apply modifications if needed
+          // Note: root frame can only have its colors customized
           const operation: appCommonFilesChanges$change = {
             type: 'mod-obj',
             id: rootFrameId,
             pageId: _pageId,
-            operations: (Object.keys(propertiesObj) as (keyof typeof propertiesObj)[])
-              // No need to have the whole node differences patch logic since root frame can only have its colors customized
-              .filter((p) => p === 'fills')
-              .map((property) => {
-                return {
-                  type: 'set',
-                  attr: kebabCase(property), // Since it's a value we make sure to respect backend keywords logic
-                  val: propertiesObj[property],
-                };
-              }),
+            operations: [
+              {
+                type: 'assign',
+                value: {
+                  [kebabCase('fills')]: propertiesObj.fills,
+                },
+              },
+            ],
           };
 
           pushOperationsWithOrderingLogic(operations, delayedOperations, nodeOperationsAfterChildrenAreProcessed, operation);
@@ -1087,24 +1104,21 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
             type: 'mod-obj',
             id: isPageRootFrameFromId(id) ? rootFrameId : id,
             pageId: _pageId,
-            operations: uniqueProperties.map((property) => {
-              // The `touched` property has a specific operation format
-              if (property === 'touched') {
-                return {
-                  type: 'set-touched',
-                  touched: propertiesObj.touched || null,
-                };
-              } else {
-                return {
-                  type: 'set',
-                  attr: kebabCase(property), // Since it's a value we make sure to respect backend keywords logic (otherwise we ended having 2 `transformInverse` (the initial one, and one from our update))
-                  val:
-                    (property === 'parentId' || property === 'frameId') && isPageRootFrameFromId(propertiesObj[property] as string)
-                      ? rootFrameId
-                      : propertiesObj[property],
-                };
-              }
-            }),
+            operations: [
+              {
+                type: 'assign',
+                value: Object.fromEntries(
+                  uniqueProperties.map((property) => {
+                    return [
+                      kebabCase(property), // Since it's a value we make sure to respect backend keywords logic (otherwise we ended having 2 `transformInverse` (the initial one, and one from our update))
+                      (property === 'parentId' || property === 'frameId') && isPageRootFrameFromId(propertiesObj[property] as string)
+                        ? rootFrameId
+                        : propertiesObj[property],
+                    ];
+                  })
+                ),
+              },
+            ],
           };
 
           pushOperationsWithOrderingLogic(operations, delayedOperations, nodeOperationsAfterChildrenAreProcessed, operation);
@@ -1414,6 +1428,7 @@ export async function processDifferences(
         body: formData,
         headers: {
           Accept: 'application/json',
+          'Content-Type': 'application/json',
           Authorization: (PenpotClientSettings.HEADERS as any)?.Authorization,
         },
       });

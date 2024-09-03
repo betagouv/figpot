@@ -16,8 +16,8 @@ export type LayoutChildAttributes = {
   layoutItemMinH?: number;
   layoutItemMaxW?: number;
   layoutItemMinW?: number;
-  layoutItemHSizing?: LayoutSizing;
-  layoutItemVSizing?: LayoutSizing;
+  'layoutItemH-Sizing'?: LayoutSizing;
+  'layoutItemV-Sizing'?: LayoutSizing;
   layoutItemAlignSelf?: LayoutAlignSelf;
   layoutItemAbsolute?: boolean;
   layoutItemZIndex?: number;

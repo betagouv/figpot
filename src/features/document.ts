@@ -664,6 +664,18 @@ export function performBasicNodeCreation(
   assert(itemAfter.parentId);
   assert(itemAfter.frameId);
 
+  // [WORKAROUND] If passing `layoutItemHSizing` the backend will return `layoutItemHsizing` and it will not be taken into account
+  // due to our backend JSON patch with kebab case transform
+  // So we need to use `layoutItemH-Sizing` to make it working (not it does not apply to `mod-obj` since operations are managed differently)
+  if ('layoutItemHSizing' in propertiesObj) {
+    (propertiesObj as any)['layoutItemH-Sizing'] = propertiesObj.layoutItemHSizing;
+    delete propertiesObj.layoutItemHSizing;
+  }
+  if ('layoutItemVSizing' in propertiesObj) {
+    (propertiesObj as any)['layoutItemV-Sizing'] = propertiesObj.layoutItemVSizing;
+    delete propertiesObj.layoutItemVSizing;
+  }
+
   const operation: appCommonFilesChanges$change = {
     type: 'add-obj',
     id: itemAfter.id, // Penpot allows forcing the ID at creation

@@ -1617,6 +1617,7 @@ export async function hydrate(options: HydrateOptionsType) {
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
+    redirect: 'manual',
   });
 
   if (response.status !== 200) {

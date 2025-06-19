@@ -62,7 +62,7 @@ export const mediasFolderPath = path.resolve(__root_dirname, './data/medias/');
 export const FigmaToPenpotMapping = z.map(z.string(), z.string());
 export type FigmaToPenpotMappingType = z.infer<typeof FigmaToPenpotMapping>;
 
-export type LitePageNode = Pick<PenpotDocument['data']['pagesIndex'][0], 'id' | 'name' | 'options'> & { _apiType: 'page' };
+export type LitePageNode = Pick<PenpotDocument['data']['pagesIndex'][0], 'id' | 'name' | 'background'> & { _apiType: 'page' };
 export type LiteNode = PenpotNode & {
   _apiType: 'node';
   _realPageParentId: string | null; // Needed since main frame inside a page has as parent itself (which complicates things for our graph usage)
@@ -728,7 +728,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
       _apiType: 'page',
       id: currentPageNode.id,
       name: currentPageNode.name,
-      options: currentPageNode.options,
+      background: currentPageNode.background,
     } as LitePageNode);
 
     for (const currentNode of Object.values(currentPageNode.objects)) {
@@ -781,7 +781,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
       _apiType: 'page',
       id: newPageNode.id,
       name: newPageNode.name,
-      options: newPageNode.options,
+      background: newPageNode.background,
     };
 
     flattenNewGlobalTree.set(litePageNode.id, litePageNode);
@@ -958,7 +958,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
       assert(item.after.id);
 
       if (item.after._apiType === 'page') {
-        const { _apiType, id, name, options } = item.after; // Instruction to omit some properties
+        const { _apiType, id, name, background } = item.after; // Instruction to omit some properties
 
         operations.push({
           type: 'add-page',
@@ -966,13 +966,12 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           name: name,
         });
 
-        // The API refuses to take the `page` property directly with `add-page`, so hacking a bit
-        for (const [optionKey, optionValue] of Object.entries(options)) {
+        // The background cannot be set at creation
+        if (background) {
           operations.push({
-            type: 'set-option',
-            pageId: id,
-            option: kebabCase(optionKey), // Since it's a value we make sure to respect backend keywords logic
-            value: optionValue,
+            type: 'mod-page',
+            id: id,
+            background: background,
           });
         }
       } else if (item.after._apiType === 'node') {
@@ -1006,24 +1005,8 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           type: 'mod-page',
           id: item.after.id,
           name: item.after.name,
+          background: item.after.background,
         });
-
-        const { _apiType, id, name, ...propertiesObj } = item.after; // Instruction to omit some properties
-
-        for (const difference of item.differences) {
-          if (difference.path.length > 1 && difference.path[0] === 'options') {
-            const optionKey = difference.path[1] as keyof PenpotPage['options'];
-
-            operations.push({
-              type: 'set-option',
-              pageId: item.after.id,
-              option: kebabCase(optionKey), // Since it's a value we make sure to respect backend keywords logic
-              value:
-                // Checking the property removal, also check the path length since an array item removal will produce a `REMOVE` too
-                difference.type === 'REMOVE' && difference.path.length === 2 ? null : propertiesObj.options[optionKey],
-            });
-          }
-        }
       } else if (item.after._apiType === 'node') {
         const { _apiType, _realPageParentId, _pageId, id, componentId, componentFile, componentRoot, mainInstance, shapeRef, ...propertiesObj } =
           item.after; // Instruction to omit some properties

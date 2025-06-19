@@ -55,7 +55,7 @@ describe('document comparaison', () => {
 
       expect(differences.newDocumentName).toBeUndefined();
       expect(differences.newTreeOperations.length).toBe(6);
-      expect(differences.newTreeOperations.map((op) => op.type)).toEqual(['add-page', 'set-option', 'mod-obj', 'del-page', 'del-obj', 'mov-page']);
+      expect(differences.newTreeOperations.map((op) => op.type)).toEqual(['add-page', 'mod-page', 'mod-obj', 'del-page', 'del-obj', 'mov-page']);
     });
   });
 
@@ -110,7 +110,7 @@ describe('document comparaison', () => {
       expect(differences.newTreeOperations.length).toBe(8);
       expect(differences.newTreeOperations.map((op) => op.type)).toEqual([
         'add-page',
-        'set-option',
+        'mod-page',
         'mod-obj',
         'add-obj',
         'del-page',

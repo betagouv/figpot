@@ -24,9 +24,7 @@ export function transformPageNode(registry: PageRegistry, figmaNode: CanvasNode)
   const page: PenpotPage = {
     id: penpotPageId,
     name: figmaNode.name,
-    options: {
-      background: rgbToHex(figmaNode.backgroundColor),
-    },
+    background: rgbToHex(figmaNode.backgroundColor),
     objects: {
       [translateUuidAsObjectKey(penpotRootFrameId)]: {
         id: penpotRootFrameId,

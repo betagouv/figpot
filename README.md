@@ -49,7 +49,7 @@ If you intend to perform synchronizations from a new machine, or from a server t
 
 It's possible to prefill some environment variables to avoid typing information each time:
 
-- `FIGMA_ACCESS_TOKEN` _(the token can be created from your account settings under `Personal access tokens` section)_
+- `FIGMA_ACCESS_TOKEN` _(the token can be created from your account settings under `Personal access tokens` section, with **read-only** scopes like `File content, File metadata, Library assets, Library content, Projects, Team library content`)_
 - `PENPOT_ACCESS_TOKEN` _(the token can be created from your account settings under `Access tokens` tab)_
 - `PENPOT_USER_EMAIL` _(email used for your account)_
 - `PENPOT_USER_PASSWORD` _(password used for your account)_

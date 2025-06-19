@@ -21,12 +21,12 @@ import { GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
 import { OpenAPI as PenpotClientSettings, postCommandGetFileObjectThumbnails, postCommandGetFontVariants } from '@figpot/src/clients/penpot';
 import {
   PostCommandGetFileResponse,
-  appCommonFilesChanges$change,
   appCommonTypesTypography$typography,
   postCommandGetFile,
   postCommandRenameFile,
   postCommandUpdateFile,
 } from '@figpot/src/clients/penpot';
+import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/workaround';
 import {
   FigmaDefinedColor,
   FigmaDefinedTypography,
@@ -524,16 +524,16 @@ export async function transform(options: TransformOptionsType) {
 
 export interface Differences {
   newDocumentName?: string;
-  newTreeOperations: appCommonFilesChanges$change[];
+  newTreeOperations: appCommonFilesChanges$changeWithoutUnknown[];
   newMedias: string[];
   oldThumbnails: string[];
 }
 
 export function pushOperationsWithOrderingLogic(
-  normalOperations: appCommonFilesChanges$change[],
-  delayedOperations: appCommonFilesChanges$change[],
-  delayedForChildrenOperations: appCommonFilesChanges$change[],
-  operationToAddress: appCommonFilesChanges$change
+  normalOperations: appCommonFilesChanges$changeWithoutUnknown[],
+  delayedOperations: appCommonFilesChanges$changeWithoutUnknown[],
+  delayedForChildrenOperations: appCommonFilesChanges$changeWithoutUnknown[],
+  operationToAddress: appCommonFilesChanges$changeWithoutUnknown
 ) {
   if (operationToAddress.type === 'mod-obj') {
     // A shapes modification may fail with `referential-integrity` error, it needs to be performed once the children are set up
@@ -599,7 +599,7 @@ export function pushOperationsWithOrderingLogic(
 }
 
 export function delayBindingOperation(
-  delayedOperations: appCommonFilesChanges$change[],
+  delayedOperations: appCommonFilesChanges$changeWithoutUnknown[],
   nodeId?: string,
   pageId?: string,
   componentId?: string,
@@ -658,9 +658,9 @@ export function markThumbnailToBeKept(
 }
 
 export function performBasicNodeCreation(
-  normalOperations: appCommonFilesChanges$change[],
-  delayedOperations: appCommonFilesChanges$change[],
-  delayedForChildrenOperations: appCommonFilesChanges$change[],
+  normalOperations: appCommonFilesChanges$changeWithoutUnknown[],
+  delayedOperations: appCommonFilesChanges$changeWithoutUnknown[],
+  delayedForChildrenOperations: appCommonFilesChanges$changeWithoutUnknown[],
   newMediasToUpload: string[],
   itemAfter: LiteNode,
   previousNodeIdBeforeMove?: string
@@ -683,7 +683,7 @@ export function performBasicNodeCreation(
   assert(itemAfter.parentId);
   assert(itemAfter.frameId);
 
-  const operation: appCommonFilesChanges$change = {
+  const operation: appCommonFilesChanges$changeWithoutUnknown = {
     type: 'add-obj',
     id: itemAfter.id, // Penpot allows forcing the ID at creation
     pageId: itemAfter._realPageParentId || _pageId,
@@ -844,7 +844,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 
   console.log(`[nodes differences] ${formatDiffResultLog(diffResult)}`);
 
-  const operations: appCommonFilesChanges$change[] = [];
+  const operations: appCommonFilesChanges$changeWithoutUnknown[] = [];
   const thumbnailsToKeep: Set<string> = new Set(); // Thumbails are only done on top frame for each tree branch (page deletion does not trigger thumbnail removal)
   const delayedOperations: typeof operations = [];
 
@@ -952,7 +952,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
       }
     }
 
-    const nodeOperationsAfterChildrenAreProcessed: appCommonFilesChanges$change[] = [];
+    const nodeOperationsAfterChildrenAreProcessed: appCommonFilesChanges$changeWithoutUnknown[] = [];
 
     if (item.state === 'added') {
       assert(item.after.id);
@@ -981,7 +981,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 
           // The root frame is automatically created with its wrapping page (the iteration before this one normally), so we just need to apply modifications if needed
           // Note: root frame can only have its colors customized
-          const operation: appCommonFilesChanges$change = {
+          const operation: appCommonFilesChanges$changeWithoutUnknown = {
             type: 'mod-obj',
             id: rootFrameId,
             pageId: _pageId,
@@ -1100,7 +1100,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 
           const uniqueProperties = [...new Set(changedFirstLevelProperties)];
 
-          const operation: appCommonFilesChanges$change = {
+          const operation: appCommonFilesChanges$changeWithoutUnknown = {
             type: 'mod-obj',
             id: isPageRootFrameFromId(id) ? rootFrameId : id,
             pageId: _pageId,
@@ -1304,7 +1304,7 @@ export async function processOperationsChunk(
   figmaDocumentId: string,
   penpotDocumentId: string,
   differences: Differences,
-  currentChunk: appCommonFilesChanges$change[],
+  currentChunk: appCommonFilesChanges$changeWithoutUnknown[],
   chunkNumber: number,
   succeededOperations: number,
   serverValidation: boolean = true
@@ -1467,7 +1467,7 @@ export async function processDifferences(
 
     let chunkNumber = 1;
     let currentChunkCount = 0;
-    let currentChunk: appCommonFilesChanges$change[] = [];
+    let currentChunk: appCommonFilesChanges$changeWithoutUnknown[] = [];
     let succeededOperations = 0;
     for (const operation of differences.newTreeOperations) {
       const encodedOperationLength = JSON.stringify(operation).length;

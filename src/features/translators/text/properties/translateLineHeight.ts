@@ -1,6 +1,5 @@
-import assert from 'assert';
-
 import { TypeStyle } from '@figpot/src/clients/figma';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 export function translateLineHeight(segment: Pick<TypeStyle, 'lineHeightPx' | 'lineHeightPercentFontSize' | 'lineHeightUnit' | 'fontSize'>): string {
   assert(segment.fontSize);

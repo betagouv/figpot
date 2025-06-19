@@ -1,10 +1,9 @@
-import assert from 'assert';
-
 import { CanvasNode } from '@figpot/src/clients/figma';
 import { transformChildrenWithParentId } from '@figpot/src/features/transformers/partials/transformChildren';
 import { formatPageRootFrameId, registerId, translateId, translateUuidAsObjectKey } from '@figpot/src/features/translators/translateId';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { rgbToHex } from '@figpot/src/utils/color';
 import { neutralTransform } from '@figpot/src/utils/matrix';
 

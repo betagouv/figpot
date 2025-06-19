@@ -1,5 +1,4 @@
 import { confirm } from '@inquirer/prompts';
-import assert from 'assert';
 import { kebabCase } from 'change-case';
 import { camelCase } from 'change-case/keys';
 import fsSync from 'fs';
@@ -48,6 +47,7 @@ import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot/src/utils/comparaison';
 import { config } from '@figpot/src/utils/environment';
 import { downloadFile, openAsBlob, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';

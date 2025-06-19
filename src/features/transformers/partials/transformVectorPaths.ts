@@ -1,4 +1,3 @@
-import assert from 'assert';
 import svgPathParser from 'svg-path-parser';
 
 import { Paint, PaintOverride, Path, Transform, VectorNode } from '@figpot/src/clients/figma';
@@ -13,6 +12,7 @@ import { translateCommands } from '@figpot/src/features/translators/vectors/tran
 import { translateWindingRule } from '@figpot/src/features/translators/vectors/translateWindingRule';
 import { PathShape } from '@figpot/src/models/entities/penpot/shapes/path';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 const { parseSVG } = svgPathParser;
 

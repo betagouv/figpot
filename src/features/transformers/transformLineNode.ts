@@ -1,5 +1,3 @@
-import assert from 'assert';
-
 import { LineNode, Transform } from '@figpot/src/clients/figma';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
@@ -13,6 +11,7 @@ import { transformStrokes } from '@figpot/src/features/transformers/partials/tra
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { PathShape, Segment } from '@figpot/src/models/entities/penpot/shapes/path';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 function translateLineNode(node: LineNode, figmaNodeTransform: Transform): Segment[] {
   assert(node.size);

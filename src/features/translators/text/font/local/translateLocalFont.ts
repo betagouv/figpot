@@ -1,10 +1,9 @@
-import assert from 'assert';
-
 import { TypeStyle } from '@figpot/src/clients/figma';
 import { LocalFont } from '@figpot/src/features/translators/text/font/local/localFont';
 import localFontsFile from '@figpot/src/features/translators/text/font/local/localFonts.json';
 import { translateFontVariantId } from '@figpot/src/features/translators/text/font/local/translateFontVariantId';
 import { TextTypography } from '@figpot/src/models/entities/penpot/shapes/text';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 const localFonts = localFontsFile.items;
 

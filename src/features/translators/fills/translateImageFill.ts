@@ -1,4 +1,3 @@
-import assert from 'assert';
 import { globSync } from 'glob';
 import sizeOf from 'image-size';
 
@@ -8,6 +7,7 @@ import { translateOpacityWithVisibility } from '@figpot/src/features/translators
 import { translateMediaId } from '@figpot/src/features/translators/translateId';
 import { Fill } from '@figpot/src/models/entities/penpot/traits/fill';
 import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 export function translateImageFill(registry: BoundVariableRegistry, fill: ImagePaint): Fill | undefined {
   // TODO: Figma supports multiple scale mode (see `scaleMode` type)

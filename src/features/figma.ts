@@ -1,5 +1,4 @@
 import { checkbox, input, select } from '@inquirer/prompts';
-import assert from 'assert';
 
 import {
   ErrorResponsePayloadWithErrorBoolean,
@@ -18,6 +17,7 @@ import {
   getTeamProjects,
 } from '@figpot/src/clients/figma';
 import { DocumentOptionsType, ExcludePatternsType, ReplaceFontPatternType } from '@figpot/src/features/document';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 export type FigmaDefinedTypography = {
   id: LocalVariable['id'];

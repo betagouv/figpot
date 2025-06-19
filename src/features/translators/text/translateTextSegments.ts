@@ -1,5 +1,3 @@
-import assert from 'assert';
-
 import { MinimalFillsTrait, TextNode, TypeStyle } from '@figpot/src/clients/figma';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
 import { translateFontName } from '@figpot/src/features/translators/text/font/translateFontName';
@@ -13,6 +11,7 @@ import { translateTextTransform } from '@figpot/src/features/translators/text/pr
 import { translateDocumentId, translateTypographyId } from '@figpot/src/features/translators/translateId';
 import { TextNode as PenpotTextNode, TextStyle } from '@figpot/src/models/entities/penpot/shapes/text';
 import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 export function translateTextSegments(registry: BoundVariableRegistry, node: TextNode, segments: TextSegment[]): PenpotTextNode[] {
   return segments.map((segment) => translateStyleTextSegment(registry, node, segment));

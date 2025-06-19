@@ -1,10 +1,9 @@
-import assert from 'assert';
-
 import { FigmaDefinedColor } from '@figpot/src/features/figma';
 import { translateFill } from '@figpot/src/features/translators/fills/translateFills';
 import { translateColorId } from '@figpot/src/features/translators/translateId';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { PageRegistry, Registry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 export function translateColor(registry: Registry | PageRegistry, color: FigmaDefinedColor): Color {
   // Clean each group level if any

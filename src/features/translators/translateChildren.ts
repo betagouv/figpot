@@ -1,5 +1,3 @@
-import assert from 'assert';
-
 import { HasLayoutTrait, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { transformGroupNodeLike } from '@figpot/src/features/transformers/transformGroupNode';
 import { transformSceneNode } from '@figpot/src/features/transformers/transformSceneNode';
@@ -7,6 +5,7 @@ import { translateId } from '@figpot/src/features/translators/translateId';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { Uuid } from '@figpot/src/models/entities/penpot/traits/uuid';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { cumulateNodeTransforms, isTransformedNode } from '@figpot/src/utils/matrix';
 
 export function translateChild(

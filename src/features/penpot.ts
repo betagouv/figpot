@@ -1,8 +1,7 @@
-import assert from 'assert';
-
 import { PostCommandGetFileResponse } from '@figpot/src/clients/penpot';
 import { formatPageRootFrameId, rootFrameId, translateUuidAsObjectKey } from '@figpot/src/features/translators/translateId';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): PenpotDocument {
   assert(hostedTree.data);

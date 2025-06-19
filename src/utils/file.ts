@@ -1,4 +1,3 @@
-import assert from 'assert';
 import contentType from 'content-type';
 import fsSync from 'fs';
 import type { openAsBlob as originalOpenAsBlob } from 'fs';
@@ -10,6 +9,8 @@ import { pipeline } from 'stream';
 import streamChain from 'stream-chain';
 import Asm from 'stream-json/Assembler.js';
 import streamJsonParser from 'stream-json/Parser.js';
+
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 const { chain } = streamChain;
 const { parser } = streamJsonParser;

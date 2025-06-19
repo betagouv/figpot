@@ -1,10 +1,9 @@
-import assert from 'assert';
-
 import { FigmaDefinedTypography } from '@figpot/src/features/figma';
 import { partialTransformTextStyle } from '@figpot/src/features/translators/text/translateTextSegments';
 import { translateTypographyId } from '@figpot/src/features/translators/translateId';
 import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { PageRegistry, Registry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 export function translateTypography(registry: Registry | PageRegistry, typography: FigmaDefinedTypography): LibraryTypography {
   // Clean each group level if any

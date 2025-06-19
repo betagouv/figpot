@@ -1301,6 +1301,7 @@ export async function processOperationsChunk(
       requestBody: {
         id: penpotDocumentId,
         revn: 0, // Required but does no block to use a default one
+        vern: 0, // Don't know what is it yet but it's required
         sessionId: '00000000-0000-0000-0000-000000000000', // It has to be UUID format, no matter the value for us
         changes: currentChunk,
         skipValidate: !serverValidation,

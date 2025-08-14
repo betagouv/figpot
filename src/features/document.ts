@@ -1422,7 +1422,6 @@ export async function processDifferences(
         body: formData,
         headers: {
           Accept: 'application/json',
-          'Content-Type': 'application/json',
           Authorization: (PenpotClientSettings.HEADERS as any)?.Authorization,
         },
       });

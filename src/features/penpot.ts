@@ -1,7 +1,13 @@
+import svgPathParser from 'svg-path-parser';
+
 import { PostCommandGetFileResponse } from '@figpot/src/clients/penpot';
 import { formatPageRootFrameId, rootFrameId, translateUuidAsObjectKey } from '@figpot/src/features/translators/translateId';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
+
+import { translateNonRotatedCommands } from './translators/vectors/translateNonRotatedCommands';
+
+const { parseSVG } = svgPathParser;
 
 export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): PenpotDocument {
   assert(hostedTree.data);
@@ -53,6 +59,15 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
             // Remove a random ID no provided at creation but present when fetching paragraph children (seems not important)
             delete textChild.key;
           }
+        }
+      } else if (object.type === 'path') {
+        // The new Penpot API is no longer returning an array of commands but instead the inline SVG path
+        // We cannot compare it directly with the inline Figma SVG path provided due to logic of calculation, so instead
+        // translating from here also to get same things for comparaison (transformed tree has to use commands, it cannot pushes inline path)
+        if (typeof object.content === 'string' && (object.content as string).length > 0 && (object.content as string)[0] === 'M') {
+          const normalizedPaths = parseSVG(object.content);
+
+          object.content = translateNonRotatedCommands(normalizedPaths, 0, 0);
         }
       }
     }

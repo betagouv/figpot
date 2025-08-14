@@ -1,5 +1,7 @@
 import { globSync } from 'glob';
+import { mimeData } from 'human-filetypes';
 import sizeOf from 'image-size';
+import path from 'path';
 
 import { ImagePaint } from '@figpot/src/clients/figma';
 import { getFigmaMediaPath } from '@figpot/src/features/document';
@@ -26,6 +28,20 @@ export function translateImageFill(registry: BoundVariableRegistry, fill: ImageP
   assert(dimensions.width);
   assert(dimensions.height);
 
+  // The new Penpot API requires specifying the MIME type even if it has been done at upload
+  // It's a bit weird but ok, to avoid complex things we infer this from the extension (since we did the reverse from `Content-Type` inside `downloadFile()` to set an extension)
+  const extension = path.extname(filesWithExtensionPaths[0]);
+
+  const mimeTypeResult = Object.entries(mimeData).find(([mimeType, mimeTypeMetadata]) => {
+    return mimeTypeMetadata.extensions?.includes(extension);
+  });
+
+  if (!mimeTypeResult) {
+    throw new Error(`the file ${filesWithExtensionPaths[0]} saved locally should have an extension allowing us to retrieve the MIME type`);
+  }
+
+  const mimeType = mimeTypeResult[0];
+
   return {
     fillOpacity: translateOpacityWithVisibility(fill),
     fillImage: {
@@ -33,9 +49,9 @@ export function translateImageFill(registry: BoundVariableRegistry, fill: ImageP
       width: dimensions.width,
       height: dimensions.height,
       keepAspectRatio: true,
+      mtype: mimeType,
       // At the end the backend does not pass in getters if undefined so leaving like this with no need to clean the hosted tree for comparaison
       name: undefined, // This should be the original filename but we don't have it (we only have the container name which is probably very different), relying on the upload step name
-      mtype: undefined, // The mime type is inferred at uploading step by the server so no need to complicate things here
     },
   };
 }

@@ -2,7 +2,9 @@ import diff, { Difference } from 'microdiff';
 
 export type DiffState = 'added' | 'removed' | 'updated' | 'unchanged';
 
-export const NUMBER_TOLERANCE: number = 0.0000000000001;
+// The number tolerance cannot be lower due to comparaison of SVG paths that are transformed from inline,
+// interpreted by the API with a little float variation it seems...
+export const NUMBER_TOLERANCE: number = 0.0001;
 
 export type GetDiffResult<Model> =
   | {

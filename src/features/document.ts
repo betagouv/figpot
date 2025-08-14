@@ -683,15 +683,24 @@ export function performBasicNodeCreation(
   assert(itemAfter.parentId);
   assert(itemAfter.frameId);
 
+  const objId = itemAfter.id; // Penpot allows forcing the ID at creation
+  const objPageId = itemAfter._realPageParentId || _pageId;
+  const objFrameId = isPageRootFrameFromId(itemAfter.frameId) ? rootFrameId : itemAfter.frameId;
+  const objParentId = isPageRootFrameFromId(itemAfter.parentId) ? rootFrameId : itemAfter.parentId;
+
   const operation: appCommonFilesChanges$changeWithoutUnknown = {
     type: 'add-obj',
-    id: itemAfter.id, // Penpot allows forcing the ID at creation
-    pageId: itemAfter._realPageParentId || _pageId,
-    frameId: isPageRootFrameFromId(itemAfter.frameId) ? rootFrameId : itemAfter.frameId,
-    parentId: isPageRootFrameFromId(itemAfter.parentId) ? rootFrameId : itemAfter.parentId,
+    id: objId,
+    pageId: objPageId,
+    frameId: objFrameId,
+    parentId: objParentId,
     obj: {
       ...propertiesObj,
       oldId: previousNodeIdBeforeMove, // Can be used by the Penpot internals, specific to operations when an object is moved across pages (with cut/paste)
+      // For whatever reason the new API requires setting again the following already specified above
+      id: objId,
+      frameId: objFrameId,
+      parentId: objParentId,
     },
   };
 
@@ -1337,6 +1346,7 @@ export async function processDifferences(
   serverValidation: boolean = true,
   prompting: boolean = true
 ) {
+  // Note: seeing the name change in the UI requires a browser page refresh
   if (differences.newDocumentName) {
     await postCommandRenameFile({
       requestBody: {

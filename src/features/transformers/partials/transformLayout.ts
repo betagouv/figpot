@@ -38,8 +38,8 @@ export function transformLayoutAttributes(
   node: HasLayoutTrait
 ): Pick<
   LayoutChildAttributes,
-  | 'layoutItemH-Sizing'
-  | 'layoutItemV-Sizing'
+  | 'layoutItemHSizing'
+  | 'layoutItemVSizing'
   | 'layoutItemAlignSelf'
   | 'layoutItemAbsolute'
   | 'layoutItemMaxH'
@@ -48,8 +48,8 @@ export function transformLayoutAttributes(
   | 'layoutItemMinW'
 > {
   return {
-    'layoutItemH-Sizing': node.layoutSizingHorizontal ? translateLayoutSizing(node.layoutSizingHorizontal) : undefined,
-    'layoutItemV-Sizing': node.layoutSizingVertical ? translateLayoutSizing(node.layoutSizingVertical) : undefined,
+    layoutItemHSizing: node.layoutSizingHorizontal ? translateLayoutSizing(node.layoutSizingHorizontal) : undefined,
+    layoutItemVSizing: node.layoutSizingVertical ? translateLayoutSizing(node.layoutSizingVertical) : undefined,
     layoutItemAlignSelf: node.layoutAlign ? translateLayoutItemAlignSelf(node.layoutAlign) : undefined,
     layoutItemAbsolute: node.layoutPositioning ? node.layoutPositioning === 'ABSOLUTE' : undefined,
     layoutItemMaxH: node.maxHeight ?? undefined,

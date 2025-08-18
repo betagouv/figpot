@@ -1,7 +1,7 @@
 import { CornerTrait } from '@figpot/src/clients/figma';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 
-export function transformCornerRadius(node: CornerTrait): Pick<ShapeAttributes, 'r1' | 'r2' | 'r3' | 'r4'> | Pick<ShapeAttributes, 'rx'> | undefined {
+export function transformCornerRadius(node: CornerTrait): Pick<ShapeAttributes, 'r1' | 'r2' | 'r3' | 'r4'> | undefined {
   if (node.rectangleCornerRadii) {
     return {
       r1: node.rectangleCornerRadii[0],
@@ -11,7 +11,10 @@ export function transformCornerRadius(node: CornerTrait): Pick<ShapeAttributes, 
     };
   } else if (node.cornerRadius !== undefined) {
     return {
-      rx: node.cornerRadius,
+      r1: node.cornerRadius,
+      r2: node.cornerRadius,
+      r3: node.cornerRadius,
+      r4: node.cornerRadius,
     };
   } else {
     return undefined;

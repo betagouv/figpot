@@ -61,8 +61,6 @@ export type ShapeAttributes = {
   constraintsH?: ConstraintH;
   constraintsV?: ConstraintV;
   fixedScroll?: boolean;
-  rx?: number;
-  ry?: number;
   r1?: number;
   r2?: number;
   r3?: number;

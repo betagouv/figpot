@@ -7,14 +7,14 @@ import { ReadableStream } from 'stream/web';
 import {
   appCommonGeomPoint$point,
   appCommonSchema$any,
-  appCommonSchema$inst,
+  appCommonSchema$safe_int,
   appCommonSchema$safe_number,
+  appCommonSchema$text,
   appCommonSchema$uuid,
-  appCommonTypesColor$color,
-  appCommonTypesColor$rgb_color,
-  appCommonTypesFile$media_object,
+  appCommonTime$inst,
   appCommonTypesPage$flow,
   appCommonTypesPage$guide,
+  appCommonTypesPlugins$plugin_data,
   appCommonTypesTypography$typography,
   appCommonTypesVariant$variant_property,
 } from '@figpot/src/clients/penpot';
@@ -146,7 +146,10 @@ export type appCommonFilesChanges$changeWithoutUnknown =
       params: {
         size?: appCommonSchema$safe_number | null;
         color: {
-          color: appCommonTypesColor$rgb_color;
+          /**
+           * HEX Color String
+           */
+          color: unknown;
           opacity: appCommonSchema$safe_number;
         };
       } | null;
@@ -157,7 +160,10 @@ export type appCommonFilesChanges$changeWithoutUnknown =
       gridType: 'column';
       params: {
         color: {
-          color: appCommonTypesColor$rgb_color;
+          /**
+           * HEX Color String
+           */
+          color: unknown;
           opacity: appCommonSchema$safe_number;
         };
         /**
@@ -176,7 +182,10 @@ export type appCommonFilesChanges$changeWithoutUnknown =
       gridType: 'row';
       params: {
         color: {
-          color: appCommonTypesColor$rgb_color;
+          /**
+           * HEX Color String
+           */
+          color: unknown;
           opacity: appCommonSchema$safe_number;
         };
         /**
@@ -205,7 +214,7 @@ export type appCommonFilesChanges$changeWithoutUnknown =
       shapes: appCommonSchema$any;
       index?: number | null;
       afterShape?: appCommonSchema$any;
-      componentSwap?: boolean;
+      allowAlteringCopies?: boolean;
     }
   | {
       type: 'reorder-children';
@@ -224,7 +233,7 @@ export type appCommonFilesChanges$changeWithoutUnknown =
   | {
       type: 'mod-page';
       id: appCommonSchema$uuid;
-      background?: appCommonTypesColor$rgb_color | null;
+      background?: unknown | null;
       name?: string;
     }
   | ({
@@ -256,11 +265,117 @@ export type appCommonFilesChanges$changeWithoutUnknown =
     }
   | {
       type: 'add-color';
-      color: appCommonTypesColor$color;
+      color: {
+        id: appCommonSchema$uuid;
+        name: appCommonSchema$text;
+        path?: string;
+        /**
+         * int
+         */
+        opacity?: unknown;
+        modifiedAt?: appCommonTime$inst;
+        pluginData?: appCommonTypesPlugins$plugin_data;
+        /**
+         * HEX Color String
+         */
+        color?: unknown;
+        gradient?: {
+          /**
+           * One of the Set
+           */
+          type: unknown;
+          startX: appCommonSchema$safe_number;
+          startY: appCommonSchema$safe_number;
+          endX: appCommonSchema$safe_number;
+          endY: appCommonSchema$safe_number;
+          width: appCommonSchema$safe_number;
+          stops: Array<{
+            /**
+             * HEX Color String
+             */
+            color: unknown;
+            /**
+             * int
+             */
+            opacity?: unknown;
+            /**
+             * int
+             */
+            offset: unknown;
+          }>;
+        };
+        image?: {
+          /**
+           * int
+           */
+          width: unknown;
+          /**
+           * int
+           */
+          height: unknown;
+          mtype: appCommonSchema$text;
+          id: appCommonSchema$uuid;
+          name?: appCommonSchema$text;
+          keepAspectRatio?: boolean;
+        };
+      } & unknown;
     }
   | {
       type: 'mod-color';
-      color: appCommonTypesColor$color;
+      color: {
+        id: appCommonSchema$uuid;
+        name: appCommonSchema$text;
+        path?: string;
+        /**
+         * int
+         */
+        opacity?: unknown;
+        modifiedAt?: appCommonTime$inst;
+        pluginData?: appCommonTypesPlugins$plugin_data;
+        /**
+         * HEX Color String
+         */
+        color?: unknown;
+        gradient?: {
+          /**
+           * One of the Set
+           */
+          type: unknown;
+          startX: appCommonSchema$safe_number;
+          startY: appCommonSchema$safe_number;
+          endX: appCommonSchema$safe_number;
+          endY: appCommonSchema$safe_number;
+          width: appCommonSchema$safe_number;
+          stops: Array<{
+            /**
+             * HEX Color String
+             */
+            color: unknown;
+            /**
+             * int
+             */
+            opacity?: unknown;
+            /**
+             * int
+             */
+            offset: unknown;
+          }>;
+        };
+        image?: {
+          /**
+           * int
+           */
+          width: unknown;
+          /**
+           * int
+           */
+          height: unknown;
+          mtype: appCommonSchema$text;
+          id: appCommonSchema$uuid;
+          name?: appCommonSchema$text;
+          keepAspectRatio?: boolean;
+        };
+      } & unknown;
     }
   | {
       type: 'del-color';
@@ -268,11 +383,35 @@ export type appCommonFilesChanges$changeWithoutUnknown =
     }
   | {
       type: 'add-media';
-      object: appCommonTypesFile$media_object;
+      object: {
+        id: appCommonSchema$uuid;
+        createdAt?: appCommonTime$inst;
+        deletedAt?: appCommonTime$inst;
+        name: string;
+        width: appCommonSchema$safe_int;
+        height: appCommonSchema$safe_int;
+        mtype: string;
+        mediaId: appCommonSchema$uuid;
+        fileId?: appCommonSchema$uuid;
+        thumbnailId?: appCommonSchema$uuid;
+        isLocal?: boolean;
+      };
     }
   | {
       type: 'mod-media';
-      object: appCommonTypesFile$media_object;
+      object: {
+        id: appCommonSchema$uuid;
+        createdAt?: appCommonTime$inst;
+        deletedAt?: appCommonTime$inst;
+        name: string;
+        width: appCommonSchema$safe_int;
+        height: appCommonSchema$safe_int;
+        mtype: string;
+        mediaId: appCommonSchema$uuid;
+        fileId?: appCommonSchema$uuid;
+        thumbnailId?: appCommonSchema$uuid;
+        isLocal?: boolean;
+      };
     }
   | {
       type: 'del-media';
@@ -322,7 +461,7 @@ export type appCommonFilesChanges$changeWithoutUnknown =
     }
   | {
       type: 'update-active-token-themes';
-      themeIds: Array<string>;
+      themePaths: Array<string>;
     }
   | {
       type: 'rename-token-set-group';
@@ -348,12 +487,13 @@ export type appCommonFilesChanges$changeWithoutUnknown =
       themeName: string;
       group: string;
       theme: {
+        id: appCommonSchema$uuid;
         name: string;
         group?: string;
         description?: string;
         isSource?: boolean;
-        id?: string;
-        modifiedAt?: appCommonSchema$inst;
+        externalId?: string;
+        modifiedAt?: appCommonTime$inst;
         sets?: Array<string>;
       } | null;
     }
@@ -365,29 +505,14 @@ export type appCommonFilesChanges$changeWithoutUnknown =
       type: 'set-token-set';
       setName: string;
       group: boolean;
-      tokenSet: {
-        name: string;
-        description?: string;
-        modifiedAt?: appCommonSchema$inst;
-        tokens?: {
-          [key: string]: {
-            name: string;
-            /**
-             * One of the Set
-             */
-            type: unknown;
-            value: appCommonSchema$any;
-            description: string;
-            modifiedAt: appCommonSchema$inst;
-          } & unknown;
-        } & unknown;
-      } | null;
+      tokenSet: unknown | null;
     }
   | {
       type: 'set-token';
       setName: string;
-      tokenName: string;
+      tokenId: appCommonSchema$uuid;
       token: {
+        id: appCommonSchema$uuid;
         name: string;
         /**
          * One of the Set
@@ -395,6 +520,10 @@ export type appCommonFilesChanges$changeWithoutUnknown =
         type: unknown;
         value: appCommonSchema$any;
         description?: string;
-        modifiedAt?: appCommonSchema$inst;
+        modifiedAt?: appCommonTime$inst;
       } | null;
+    }
+  | {
+      type: 'set-base-font-size';
+      baseFontSize: string;
     };

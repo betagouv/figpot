@@ -19,7 +19,7 @@ export function translateColor(registry: Registry | PageRegistry, color: FigmaDe
   return {
     id: translateColorId(color.id, registry.getMapping()),
     path: pathLevels.length > 0 ? pathLevels.join(' / ') : '', // We add spaces as normalized by Penpot
-    name: name,
+    name: name ?? 'unknown color name',
     color: penpotFill.fillColor,
     opacity: penpotFill.fillOpacity,
     gradient: penpotFill.fillColorGradient,

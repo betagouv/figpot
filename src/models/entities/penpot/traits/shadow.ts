@@ -11,5 +11,5 @@ export type Shadow = {
   blur: number;
   spread: number;
   hidden: boolean;
-  color: Color;
+  color: Pick<Color, 'color' | 'opacity' | 'refId' | 'refFile'>;
 };

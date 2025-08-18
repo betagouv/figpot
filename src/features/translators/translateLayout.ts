@@ -10,7 +10,7 @@ import {
   LayoutWrapType,
 } from '@figpot/src/models/entities/penpot/layout';
 
-type FigmaLayoutMode = 'NONE' | 'HORIZONTAL' | 'VERTICAL';
+type FigmaLayoutMode = 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID';
 
 type FigmaWrap = 'NO_WRAP' | 'WRAP';
 

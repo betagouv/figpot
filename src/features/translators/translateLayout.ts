@@ -1,11 +1,15 @@
-import { HasFramePropertiesTrait } from '@figpot/src/clients/figma';
+import { HasFramePropertiesTrait, HasLayoutTrait } from '@figpot/src/clients/figma';
 import {
+  GridTrack,
   JustifyAlignContent,
   JustifyAlignItems,
   LayoutAlignSelf,
   LayoutFlexDir,
   LayoutGap,
+  LayoutGapType,
+  LayoutGridDir,
   LayoutPadding,
+  LayoutPaddingType,
   LayoutSizing,
   LayoutWrapType,
 } from '@figpot/src/models/entities/penpot/layout';
@@ -27,6 +31,11 @@ export function translateLayoutFlexDir(layoutMode: FigmaLayoutMode): LayoutFlexD
     default:
       return;
   }
+}
+
+export function translateLayoutGapType(layoutMode: FigmaLayoutMode, itemSpacing: number, auto: boolean = false): LayoutGapType {
+  // TODO: when is it "simple"?
+  return 'multiple';
 }
 
 export function translateLayoutGap(layoutMode: FigmaLayoutMode, itemSpacing: number, auto: boolean = false): LayoutGap {
@@ -63,7 +72,7 @@ export function translateLayoutPadding(node: HasFramePropertiesTrait): LayoutPad
     : undefined;
 }
 
-export function translateLayoutPaddingType(node: HasFramePropertiesTrait): 'simple' | 'multiple' {
+export function translateLayoutPaddingType(node: HasFramePropertiesTrait): LayoutPaddingType {
   if (node.paddingTop === node.paddingBottom && node.paddingRight === node.paddingLeft) {
     return 'simple';
   }
@@ -147,4 +156,30 @@ export function translateLayoutItemAlignSelf(align: FigmaLayoutAlign): LayoutAli
     default:
       return 'stretch';
   }
+}
+
+export function translateLayoutGridDir(node: HasLayoutTrait): LayoutGridDir {
+  return 'row';
+}
+
+export function translateLayoutGridColumns(node: HasLayoutTrait): GridTrack[] {
+  // TODO: should be more complex, maybe parsed from
+  // `"gridColumnsSizing": "  fit-content(100%) fit-content(100%)",`
+  return Array.from({ length: node.gridColumnCount ?? 0 }, () => {
+    return {
+      type: 'flex',
+      value: 1,
+    };
+  });
+}
+
+export function translateLayoutGridRows(node: HasLayoutTrait): GridTrack[] {
+  // TODO: should be more complex, maybe parsed from
+  // `"gridRowsSizing": "  fit-content(100%) fit-content(100%)",`
+  return Array.from({ length: node.gridRowCount ?? 0 }, () => {
+    return {
+      type: 'flex',
+      value: 1,
+    };
+  });
 }

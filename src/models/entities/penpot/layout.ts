@@ -29,12 +29,16 @@ export type JustifyAlignItems = 'start' | 'end' | 'center' | 'stretch';
 
 export type LayoutFlexDir = 'row' | 'reverse-row' | 'row-reverse' | 'column' | 'reverse-column' | 'column-reverse';
 
+export type LayoutGapType = 'simple' | 'multiple';
+
 export type LayoutGap = {
   rowGap?: number;
   columnGap?: number;
 };
 
 export type LayoutWrapType = 'wrap' | 'nowrap' | 'no-wrap';
+
+export type LayoutPaddingType = 'simple' | 'multiple';
 
 export type LayoutPadding = {
   p1?: number;
@@ -43,25 +47,27 @@ export type LayoutPadding = {
   p4?: number;
 };
 
+export type LayoutGridDir = 'row' | 'column';
+
 export type LayoutAttributes = {
   layout?: 'flex' | 'grid';
   layoutFlexDir?: LayoutFlexDir;
   layoutGap?: LayoutGap;
-  layoutGapType?: 'simple' | 'multiple';
+  layoutGapType?: LayoutGapType;
   layoutWrapType?: LayoutWrapType;
-  layoutPaddingType?: 'simple' | 'multiple';
+  layoutPaddingType?: LayoutPaddingType;
   layoutPadding?: LayoutPadding;
   layoutJustifyContent?: JustifyAlignContent;
   layoutJustifyItems?: JustifyAlignItems;
   layoutAlignContent?: JustifyAlignContent;
   layoutAlignItems?: JustifyAlignItems;
-  layoutGridDir?: 'row' | 'column';
+  layoutGridDir?: LayoutGridDir;
   layoutGridRows?: GridTrack[];
   layoutGridColumns?: GridTrack[];
   layoutGridCells?: { [uuid: Uuid]: GridCell };
 };
 
-type GridTrack = {
+export type GridTrack = {
   type: 'percent' | 'flex' | 'auto' | 'fixed';
   value?: number;
 };

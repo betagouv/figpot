@@ -45,7 +45,7 @@ export function transformBooleanNode(
     type: 'bool',
     name: node.name,
     shapes: childrenShapes,
-    boolContent: translatePathNode(node, figmaNodeTransform),
+    content: translatePathNode(node, figmaNodeTransform),
     boolType: translateBoolType(node.booleanOperation),
     ...transformFills(registry, node),
     ...transformEffects(registry, node),

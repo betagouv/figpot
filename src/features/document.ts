@@ -120,6 +120,13 @@ export const RetrieveOptions = z.object({
 });
 export type RetrieveOptionsType = z.infer<typeof RetrieveOptions>;
 
+export type ChunkGroupMetadata = {
+  _groupId?: string;
+  _lastOfTheGroup?: boolean;
+};
+
+export type OperationWithChunkGroupMetadata = appCommonFilesChanges$changeWithoutUnknown & ChunkGroupMetadata;
+
 export function getFigmaDocumentPath(documentId: string) {
   return path.resolve(documentsFolderPath, `figma_${documentId}`);
 }
@@ -524,7 +531,7 @@ export async function transform(options: TransformOptionsType) {
 
 export interface Differences {
   newDocumentName?: string;
-  newTreeOperations: appCommonFilesChanges$changeWithoutUnknown[];
+  newTreeOperations: OperationWithChunkGroupMetadata[];
   newMedias: string[];
   oldThumbnails: string[];
 }
@@ -876,9 +883,15 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
     }
   }
 
+  const afterVariantsIds: string[] = [];
+
   if (newTree.data.components) {
     for (const newComponent of Object.values(newTree.data.components)) {
       assert(newComponent.id);
+
+      if (newComponent.variantId) {
+        afterVariantsIds.push(newComponent.variantId);
+      }
 
       flattenNewGlobalTree.set(newComponent.id, {
         _apiType: 'component',
@@ -891,7 +904,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 
   console.log(`[nodes differences] ${formatDiffResultLog(diffResult)}`);
 
-  const operations: appCommonFilesChanges$changeWithoutUnknown[] = [];
+  const operations: OperationWithChunkGroupMetadata[] = [];
   const thumbnailsToKeep: Set<string> = new Set(); // Thumbails are only done on top frame for each tree branch (page deletion does not trigger thumbnail removal)
   const delayedOperations: typeof operations = [];
 
@@ -1248,8 +1261,63 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 
   // The API expects some bindings to have all nodes created, so running them at the end
   // Note: cannot use `.push(...delayedOperations)` because for huge files it goes over JavaScript parameters length limit
+  //
+  // [IMPORTANT] Due to the Penpot variant validation on the entire tree, it requires some metadata to be set at the same time
+  // to have a valid tree. After manually testing what had to be grouped the strategy has been defined as:
+  // 1. List of variants IDS
+  // 2. Group by variant ID mandatory changes
+  //    * `mod-obj` with `variantId` being the variant ID (it's when we set `variantId` and `variantName`)
+  //    * `mod-obj` with `id` being the variant ID (it's when we set `isVariantContainer` on the variant wrapper (component set))
+  //    * `mod-component` with `variantId` being the variant ID (it's when we set `variantId` and `variantProperties` on the component definition)
+  // 3. A group cannot be splitted on more than a chunk
+  const variantOperations = new Map<string, typeof operations>();
+
   for (const delayedOperation of delayedOperations) {
-    operations.push(delayedOperation);
+    let foundVariantId: string | null = null;
+
+    // We browse this loop just once to at first separate what does not matter and what is
+    if (delayedOperation.type === 'mod-obj') {
+      const assignOperation = delayedOperation.operations.find((operation) => operation.type === 'assign');
+
+      if (assignOperation) {
+        assert(assignOperation.type === 'assign');
+
+        if (assignOperation.value.variantId && afterVariantsIds.includes(assignOperation.value.variantId as string)) {
+          foundVariantId = assignOperation.value.variantId as string;
+        } else if (delayedOperation.id && afterVariantsIds.includes(delayedOperation.id as string)) {
+          foundVariantId = delayedOperation.id as string;
+        }
+      }
+    } else if (
+      delayedOperation.type === 'mod-component' &&
+      (delayedOperation.variantId || delayedOperation.variantProperties) && // It should be safe since `variantProperties` won't be set without `variantId`
+      afterVariantsIds.includes(delayedOperation.variantId as string)
+    ) {
+      foundVariantId = delayedOperation.variantId as string;
+    }
+
+    if (foundVariantId) {
+      const registeredVariantOperations = variantOperations.get(foundVariantId);
+
+      if (!registeredVariantOperations) {
+        variantOperations.set(foundVariantId, [delayedOperation]);
+      } else {
+        registeredVariantOperations.push(delayedOperation);
+      }
+    } else {
+      operations.push(delayedOperation);
+    }
+  }
+
+  // Those grouped operations must be marked so the chunk logic knows when it's allowed to start a new chunk
+  for (const [variantId, currentVariantOperations] of variantOperations) {
+    for (const [operationIndex, operation] of currentVariantOperations.entries()) {
+      operations.push({
+        ...operation,
+        _groupId: variantId,
+        _lastOfTheGroup: operationIndex === currentVariantOperations.length - 1,
+      });
+    }
   }
 
   // Delete others (those should be orphan into the document now)
@@ -1543,12 +1611,26 @@ export async function processDifferences(
     let chunkNumber = 1;
     let currentChunkCount = 0;
     let currentChunk: appCommonFilesChanges$changeWithoutUnknown[] = [];
+    let currentGroupId: string | null = null;
+    let currentGroupCount: number = 0;
     let succeededOperations = 0;
     for (const operation of differences.newTreeOperations) {
       const encodedOperationLength = JSON.stringify(operation).length;
 
+      // Needed to avoid splitting operations that must be processed at the same time by the Penpot backend
+      currentGroupId = operation._groupId && operation._lastOfTheGroup !== undefined ? operation._groupId : null;
+
       // Take into account the `,` delimiter
       if (currentChunkCount + Math.max(currentChunk.length - 1, 0) + encodedOperationLength > remainingBodyBytes) {
+        let forwardedOperationsOnNextChunk: typeof currentChunk = [];
+
+        // If currently into a group that cannot be separated, we remove the ongoing ones to set them on the next chunk
+        // (being on the last item of the group is fine)
+        // Note: it's unlikely a group size would be bigger than the allowed chunk size
+        if (currentGroupId && operation._lastOfTheGroup === false) {
+          forwardedOperationsOnNextChunk = currentChunk.splice(-currentChunkCount);
+        }
+
         // Directly process the chunk to not calculate all of them
         await processOperationsChunk(
           figmaDocumentId,
@@ -1562,13 +1644,15 @@ export async function processDifferences(
 
         succeededOperations += currentChunk.length;
 
-        currentChunk = [];
-        currentChunkCount = 0;
+        // Starting a new chunk
+        currentChunk = [...forwardedOperationsOnNextChunk];
+        currentChunkCount = currentChunk.length;
         chunkNumber++;
       }
 
       currentChunk.push(operation);
       currentChunkCount += encodedOperationLength;
+      currentGroupCount = currentGroupId ? currentGroupCount + 1 : 0;
     }
 
     // The last chunk must be processed

@@ -20,7 +20,7 @@ export type LibraryComponent = {
   modifiedAt?: string;
   mainInstancePage: Uuid | null;
   mainInstanceId: Uuid;
-  variantId?: string | null;
+  variantId?: string;
   variantProperties?: {
     name: string;
     value: string;

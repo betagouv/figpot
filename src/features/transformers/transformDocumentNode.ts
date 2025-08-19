@@ -104,8 +104,6 @@ export function transformDocumentNode(
       name: name,
       mainInstanceId: penpotComponentInstanceId,
       mainInstancePage: null, // Will be set after, once we have browsed the normal tree
-      variantId: null,
-      variantProperties: [], // If appropriate, will be set after, once we have browsed the normal tree
     };
 
     if (component.componentSetId) {

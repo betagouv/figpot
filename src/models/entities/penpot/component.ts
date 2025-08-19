@@ -16,9 +16,14 @@ export type ComponentInstance = ShapeGeomAttributes &
 export type LibraryComponent = {
   id: string;
   path: string;
-  name?: string;
+  name: string;
   modifiedAt?: string;
   mainInstancePage?: Uuid | null;
   mainInstanceId?: Uuid;
+  variantId?: string | null;
+  variantProperties?: {
+    name: string;
+    value: string;
+  }[];
   deleted?: boolean;
 };

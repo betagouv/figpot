@@ -898,7 +898,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 
         operations.push({
           type: 'add-component',
-          ...(propertiesObj as any), // Types do not match due to OpenAPI schema, which is also missing `mainInstancePage/mainInstanceId`
+          ...propertiesObj,
         });
       }
     } else if (item.state === 'updated') {
@@ -925,12 +925,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 
         operations.push({
           type: 'mod-component',
-          id: item.after.id,
-          name: item.after.name,
-          ...{
-            // Needed due to missing type property
-            path: item.after.path,
-          },
+          ...propertiesObj,
         });
       }
     }

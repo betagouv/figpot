@@ -8,6 +8,7 @@ import { translateTypography } from '@figpot/src/features/translators/translateT
 import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { Registry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 export function detectLocalFigmaComponents(foundComponentsIds: string[], figmaNode: SubcanvasNode) {
   if (figmaNode.type === 'COMPONENT') {
@@ -91,19 +92,51 @@ export function transformDocumentNode(
     const penpotComponentId = translateComponentId(`${componentId}_component`, mapping);
     const penpotComponentInstanceId = translateId(componentId, mapping);
 
-    // In case of a components group since there is no equivalent into Penpot, we prepend the group name so it's under a group
-    const componentName = component.componentSetId ? `${figmaNode.componentSets[component.componentSetId].name} / ${component.name}` : component.name;
+    // In case of a components group the component (being a variant) must have the name of the component (not the variation)
+    const componentName = component.componentSetId ? figmaNode.componentSets[component.componentSetId].name : component.name;
 
     const pathLevels = componentName.split('/').map((pathLevel) => pathLevel.trim());
-    const name = pathLevels.pop();
+    const name = pathLevels.pop() ?? 'unknown name';
 
     const penpotComponent: LibraryComponent = {
       id: penpotComponentId,
       path: pathLevels.length > 0 ? pathLevels.join(' / ') : '', // We add spaces as normalized by Penpot
       name: name,
-      mainInstancePage: null, // Will be set after, once we have browsed the normal tree
       mainInstanceId: penpotComponentInstanceId,
+      mainInstancePage: null, // Will be set after, once we have browsed the normal tree
+      variantId: null,
+      variantProperties: [], // If appropriate, will be set after, once we have browsed the normal tree
     };
+
+    if (component.componentSetId) {
+      // The `variantId` corresponds into Penpot to the component wrapping all variants
+      penpotComponent.variantId = translateId(component.componentSetId, mapping);
+
+      // The exact properties for this variant can be extracted from the encoded Figma node name
+      const properties: LibraryComponent['variantProperties'] = [];
+
+      const propertiesPairs = component.name.split(',');
+
+      for (const propertyPair of propertiesPairs) {
+        const parts = propertyPair.split('=').map(
+          (part) => part.trim() // We trim the input since the separation are not strict (can be ` = ` or  `=` or ` =`, same for `,`)
+        );
+
+        // In case the parsing gives a weird result, just skip the property
+        if (parts.length !== 2) {
+          continue;
+        }
+
+        const [name, value] = parts;
+
+        properties.push({
+          name: name,
+          value: value,
+        });
+      }
+
+      penpotComponent.variantProperties = properties;
+    }
 
     registry.addComponent(penpotComponent);
   }
@@ -126,6 +159,19 @@ export function transformDocumentNode(
           // so for the ease of usage into Penpot we reproduce this UI effect even if it implies "hardcoding" the prefix into the `path`
           // TODO: it won't work for components not inside the tree (those with instance excluded by a CLI pattern, or remote components), maybe we should try to get this information to patch them too... (tried `/v1/components/$COMPONENT_KEY` but it returns 404)
           component.path = component.path !== '' ? `${pageIndex.name} / ${component.path}` : pageIndex.name;
+
+          // We also need to specify the variant wrapper (component set) at the component definition
+          if (component.variantId) {
+            assert(component.variantProperties, 'variant properties must be filled at that time');
+
+            object.name = component.name; // The node has the name of the variant wrapper (component set)
+            object.variantId = component.variantId;
+            object.variantName = component.variantProperties.map((property) => property.value).join(', '); // By default it uses the concatenation of properties values
+
+            // [WORKAROUND] They added a validation comparing variant name and component name + its path
+            // so to prevent setting the path onto the tree node too, we consider an empty path for variant components
+            component.path = '';
+          }
 
           break pagesLoop;
         }

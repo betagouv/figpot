@@ -45,6 +45,9 @@ export type ShapeAttributes = {
   componentFile?: string;
   componentRoot?: boolean;
   mainInstance?: boolean;
+  isVariantContainer?: boolean;
+  variantId?: string;
+  variantName?: string;
   remoteSynced?: boolean;
   shapeRef?: string;
   selrect?: Selrect;

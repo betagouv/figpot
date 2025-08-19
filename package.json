@@ -51,7 +51,6 @@
     "@types/graphlib": "^2.1.12",
     "@types/set-cookie-parser": "^2.4.10",
     "chalk": "^5.3.0",
-    "change-case": "^5.4.4",
     "content-type": "^1.0.5",
     "execa": "^9.3.0",
     "glob": "^10.4.2",

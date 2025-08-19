@@ -1,7 +1,7 @@
 import svgPathParser from 'svg-path-parser';
 
 import { PostCommandGetFileResponse } from '@figpot/src/clients/penpot';
-import { formatPageRootFrameId, rootFrameId, translateUuidAsObjectKey } from '@figpot/src/features/translators/translateId';
+import { formatPageRootFrameId, rootFrameId } from '@figpot/src/features/translators/translateId';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
@@ -24,7 +24,7 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
   for (const [, page] of Object.entries(pagesIndex)) {
     // To avoid collission about Penpot fixed root frame IDs for each page we adjust
     // the name here so it will match the transformation done from Figma
-    const rootFrameKey = translateUuidAsObjectKey(rootFrameId);
+    const rootFrameKey = rootFrameId;
     const rootFrameNode = page.objects[rootFrameKey];
 
     assert(rootFrameNode); // Not having the root frame for this page would be abnormal
@@ -36,7 +36,7 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
     rootFrameNode.frameId = newRootFrameNodeId;
 
     // To go fully with this logic, also change the object key
-    page.objects[translateUuidAsObjectKey(newRootFrameNodeId)] = rootFrameNode;
+    page.objects[newRootFrameNodeId] = rootFrameNode;
     delete page.objects[rootFrameKey];
 
     // Then manage the rest of the logic

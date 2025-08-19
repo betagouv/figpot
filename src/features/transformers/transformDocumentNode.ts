@@ -3,7 +3,7 @@ import { MappingType } from '@figpot/src/features/document';
 import { FigmaDefinedColor, FigmaDefinedTypography } from '@figpot/src/features/figma';
 import { transformPageNode } from '@figpot/src/features/transformers/transformPageNode';
 import { translateColor } from '@figpot/src/features/translators/translateColor';
-import { translateComponentId, translateId, translateUuidAsObjectKey } from '@figpot/src/features/translators/translateId';
+import { translateComponentId, translateId } from '@figpot/src/features/translators/translateId';
 import { translateTypography } from '@figpot/src/features/translators/translateTypography';
 import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
@@ -196,20 +196,20 @@ export function transformDocumentNode(
     name: figmaNode.name,
     data: {
       pages: figmaNode.document.children.map((child) => translateId(child.id, registry.getMapping())),
-      pagesIndex: Object.fromEntries(penpotPagesNodes.map((penpotPageNode) => [translateUuidAsObjectKey(penpotPageNode.id), penpotPageNode])),
+      pagesIndex: Object.fromEntries(penpotPagesNodes.map((penpotPageNode) => [penpotPageNode.id, penpotPageNode])),
       colors: Object.fromEntries(
         Array.from(registry.getColors()).map(([penpotColorId, penpotColor]) => {
-          return [translateUuidAsObjectKey(penpotColorId), penpotColor];
+          return [penpotColorId, penpotColor];
         })
       ),
       typographies: Object.fromEntries(
         Array.from(registry.getTypographies()).map(([penpotTypographyId, penpotTypography]) => {
-          return [translateUuidAsObjectKey(penpotTypographyId), penpotTypography];
+          return [penpotTypographyId, penpotTypography];
         })
       ),
       components: Object.fromEntries(
         Array.from(registry.getComponents()).map(([penpotComponentId, penpotComponent]) => {
-          return [translateUuidAsObjectKey(penpotComponentId), penpotComponent];
+          return [penpotComponentId, penpotComponent];
         })
       ),
     },

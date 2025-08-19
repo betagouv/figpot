@@ -1,6 +1,4 @@
 import { confirm } from '@inquirer/prompts';
-import { kebabCase } from 'change-case';
-import { camelCase } from 'change-case/keys';
 import fsSync from 'fs';
 import fs from 'fs/promises';
 import { glob } from 'glob';
@@ -628,28 +626,28 @@ export function delayBindingOperation(
 
   // A main instance has no `shapeRef`, and the API refuses it if `null/undefined` so using conditions to avoid triggering a backend calculation
   if (componentId !== undefined) {
-    delayedAssignValues[kebabCase('componentId')] = componentId;
+    delayedAssignValues.componentId = componentId;
   }
   if (componentFile !== undefined) {
-    delayedAssignValues[kebabCase('componentFile')] = componentFile;
+    delayedAssignValues.componentFile = componentFile;
   }
   if (componentRoot !== undefined) {
-    delayedAssignValues[kebabCase('componentRoot')] = componentRoot;
+    delayedAssignValues.componentRoot = componentRoot;
   }
   if (mainInstance !== undefined) {
-    delayedAssignValues[kebabCase('mainInstance')] = mainInstance;
+    delayedAssignValues.mainInstance = mainInstance;
   }
   if (isVariantContainer !== undefined) {
-    delayedAssignValues[kebabCase('isVariantContainer')] = isVariantContainer;
+    delayedAssignValues.isVariantContainer = isVariantContainer;
   }
   if (variantId !== undefined) {
-    delayedAssignValues[kebabCase('variantId')] = variantId;
+    delayedAssignValues.variantId = variantId;
   }
   if (variantName !== undefined) {
-    delayedAssignValues[kebabCase('variantName')] = variantName;
+    delayedAssignValues.variantName = variantName;
   }
   if (shapeRef !== undefined) {
-    delayedAssignValues[kebabCase('shapeRef')] = shapeRef;
+    delayedAssignValues.shapeRef = shapeRef;
   }
 
   delayedOperations.push({
@@ -1064,7 +1062,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
               {
                 type: 'assign',
                 value: {
-                  [kebabCase('fills')]: propertiesObj.fills,
+                  fills: propertiesObj.fills,
                 },
               },
             ],
@@ -1182,7 +1180,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
                 value: Object.fromEntries(
                   uniqueProperties.map((property) => {
                     return [
-                      kebabCase(property), // Since it's a value we make sure to respect backend keywords logic (otherwise we ended having 2 `transformInverse` (the initial one, and one from our update))
+                      property,
                       (property === 'parentId' || property === 'frameId') && isPageRootFrameFromId(propertiesObj[property] as string)
                         ? rootFrameId
                         : propertiesObj[property],
@@ -1415,9 +1413,6 @@ export async function compare(options: CompareOptionsType) {
         id: document.penpotDocument,
       },
     });
-
-    // TODO: for now the response is kebab-case despite types, so forcing the conversion (ref: https://github.com/penpot/penpot/pull/4760#pullrequestreview-2125984653)
-    hostedDocument = camelCase(hostedDocument, Number.MAX_SAFE_INTEGER) as PostCommandGetFileResponse;
 
     const penpotDocumentFolderPath = getPenpotDocumentPath(document.figmaDocument, document.penpotDocument);
     await fs.mkdir(penpotDocumentFolderPath, { recursive: true });

@@ -149,6 +149,9 @@ export function transformDocumentNode(
 
   // Patch components with information gotten while browing the entire tree
   for (const component of registry.getComponents().values()) {
+    let skipMainInstanceSearch = false;
+    let skipVariantSearch = !component.variantId; // If it's not for a variant it can be skipped by default
+
     pagesLoop: for (const pageIndex of penpotPagesNodes) {
       for (const object of Object.values(pageIndex.objects)) {
         if (object.id === component.mainInstanceId) {
@@ -168,11 +171,23 @@ export function transformDocumentNode(
             object.variantId = component.variantId;
             object.variantName = component.variantProperties.map((property) => property.value).join(', '); // By default it uses the concatenation of properties values
 
-            // [WORKAROUND] They added a validation comparing variant name and component name + its path
-            // so to prevent setting the path onto the tree node too, we consider an empty path for variant components
-            component.path = '';
+            // [WORKAROUND] They added a validation comparing paths and names while expecting exact match
+            // So for the ease we just reuse the component metadata to directly patch tree nodes
+            object.name = component.path !== '' ? `${component.path} / ${component.name}` : component.name;
           }
 
+          skipMainInstanceSearch = true;
+        }
+
+        if (component.variantId && object.id === component.variantId) {
+          // [WORKAROUND] They added a validation comparing paths and names while expecting exact match
+          // So for the ease we just reuse the component metadata to directly patch tree nodes
+          object.name = component.path !== '' ? `${component.path} / ${component.name}` : component.name;
+
+          skipVariantSearch = true;
+        }
+
+        if (skipMainInstanceSearch && skipVariantSearch) {
           break pagesLoop;
         }
       }

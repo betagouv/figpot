@@ -606,6 +606,9 @@ export function delayBindingOperation(
   componentFile?: string,
   componentRoot?: boolean,
   mainInstance?: boolean,
+  isVariantContainer?: boolean,
+  variantId?: string,
+  variantName?: string,
   shapeRef?: string
 ) {
   // Sometimes the API requires the targeted node by `shapeRef` to be created before (sometimes not)
@@ -628,6 +631,15 @@ export function delayBindingOperation(
   }
   if (mainInstance !== undefined) {
     delayedAssignValues[kebabCase('mainInstance')] = mainInstance;
+  }
+  if (isVariantContainer !== undefined) {
+    delayedAssignValues[kebabCase('isVariantContainer')] = isVariantContainer;
+  }
+  if (variantId !== undefined) {
+    delayedAssignValues[kebabCase('variantId')] = variantId;
+  }
+  if (variantName !== undefined) {
+    delayedAssignValues[kebabCase('variantName')] = variantName;
   }
   if (shapeRef !== undefined) {
     delayedAssignValues[kebabCase('shapeRef')] = shapeRef;
@@ -676,6 +688,9 @@ export function performBasicNodeCreation(
     componentFile,
     componentRoot,
     mainInstance,
+    isVariantContainer,
+    variantId,
+    variantName,
     shapeRef,
     ...propertiesObj
   } = itemAfter; // Instruction to omit some properties
@@ -708,8 +723,29 @@ export function performBasicNodeCreation(
 
   pushOperationsWithOrderingLogic(normalOperations, delayedOperations, delayedForChildrenOperations, operation);
 
-  if (componentId || componentFile || componentRoot || mainInstance || shapeRef) {
-    delayBindingOperation(delayedOperations, id, _pageId, componentId, componentFile, componentRoot, mainInstance, shapeRef);
+  if (
+    componentId ||
+    componentFile ||
+    componentRoot !== undefined ||
+    mainInstance !== undefined ||
+    isVariantContainer !== undefined ||
+    variantId ||
+    variantName ||
+    shapeRef
+  ) {
+    delayBindingOperation(
+      delayedOperations,
+      id,
+      _pageId,
+      componentId,
+      componentFile,
+      componentRoot,
+      mainInstance,
+      isVariantContainer,
+      variantId,
+      variantName,
+      shapeRef
+    );
   }
 
   // Detect new images
@@ -896,12 +932,23 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           } as appCommonTypesTypography$typography, // Other types are unknown, we are fine here if the API triggers an error
         });
       } else if (item.after._apiType === 'component') {
-        const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
+        const { _apiType, variantId, variantProperties, ...propertiesObj } = item.after; // Instruction to omit some properties
 
         operations.push({
           type: 'add-component',
           ...propertiesObj,
         });
+
+        // `component` changes have priority over all `obj` changes
+        // but for variants the node has to exist before binding it, so we delay this binding
+        if (variantId || variantProperties) {
+          delayedOperations.push({
+            type: 'mod-component',
+            id: propertiesObj.id,
+            variantId: variantId,
+            variantProperties: variantProperties,
+          });
+        }
       }
     } else if (item.state === 'updated') {
       if (item.after._apiType === 'color') {
@@ -923,12 +970,22 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           } as appCommonTypesTypography$typography, // Other types are unknown, we are fine here if the API triggers an error
         });
       } else if (item.after._apiType === 'component') {
-        const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
+        const { _apiType, variantId, variantProperties, ...propertiesObj } = item.after; // Instruction to omit some properties
 
         operations.push({
           type: 'mod-component',
           ...propertiesObj,
         });
+
+        // As for the `add-component` change we have to delay the bindings since variant node has to exist first
+        if (variantId || variantProperties) {
+          delayedOperations.push({
+            type: 'mod-component',
+            id: propertiesObj.id,
+            variantId: variantId,
+            variantProperties: variantProperties,
+          });
+        }
       }
     }
   }
@@ -1014,8 +1071,21 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           background: item.after.background,
         });
       } else if (item.after._apiType === 'node') {
-        const { _apiType, _realPageParentId, _pageId, id, componentId, componentFile, componentRoot, mainInstance, shapeRef, ...propertiesObj } =
-          item.after; // Instruction to omit some properties
+        const {
+          _apiType,
+          _realPageParentId,
+          _pageId,
+          id,
+          componentId,
+          componentFile,
+          componentRoot,
+          mainInstance,
+          isVariantContainer,
+          variantId,
+          variantName,
+          shapeRef,
+          ...propertiesObj
+        } = item.after; // Instruction to omit some properties
 
         assert(id);
 
@@ -1118,9 +1188,24 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
               item.before.componentFile !== item.after.componentFile ||
               item.before.componentRoot !== item.after.componentRoot ||
               item.before.mainInstance !== item.after.mainInstance ||
+              item.before.isVariantContainer !== item.after.isVariantContainer ||
+              item.before.variantId !== item.after.variantId ||
+              item.before.variantName !== item.after.variantName ||
               item.before.shapeRef !== item.after.shapeRef)
           ) {
-            delayBindingOperation(delayedOperations, id, _pageId, componentId, componentFile, componentRoot, mainInstance, shapeRef);
+            delayBindingOperation(
+              delayedOperations,
+              id,
+              _pageId,
+              componentId,
+              componentFile,
+              componentRoot,
+              mainInstance,
+              isVariantContainer,
+              variantId,
+              variantName,
+              shapeRef
+            );
           }
         }
       }

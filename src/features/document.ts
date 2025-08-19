@@ -696,7 +696,9 @@ export function performBasicNodeCreation(
     parentId: objParentId,
     obj: {
       ...propertiesObj,
-      oldId: previousNodeIdBeforeMove, // Can be used by the Penpot internals, specific to operations when an object is moved across pages (with cut/paste)
+      ...({
+        oldId: previousNodeIdBeforeMove, // Can be used by the Penpot internals, specific to operations when an object is moved across pages (with cut/paste)
+      } as any), // TODO: it was used before API types update, not sure it should be removed now
       // For whatever reason the new API requires setting again the following already specified above
       id: objId,
       frameId: objFrameId,

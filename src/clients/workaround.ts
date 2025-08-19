@@ -5,16 +5,24 @@ import streamJsonParser from 'stream-json/Parser.js';
 import { ReadableStream } from 'stream/web';
 
 import {
+  appCommonGeomMatrix$matrix,
   appCommonGeomPoint$point,
+  appCommonGeomRect$rect,
   appCommonSchema$any,
+  appCommonSchema$inst,
+  appCommonSchema$int,
   appCommonSchema$safe_int,
   appCommonSchema$safe_number,
   appCommonSchema$text,
   appCommonSchema$uuid,
-  appCommonTime$inst,
+  appCommonTypesGrid$grid,
   appCommonTypesPage$flow,
   appCommonTypesPage$guide,
   appCommonTypesPlugins$plugin_data,
+  appCommonTypesShapeBlur$blur,
+  appCommonTypesShapeExport$export,
+  appCommonTypesShapeInteractions$interaction,
+  appCommonTypesShapeText$content,
   appCommonTypesTypography$typography,
   appCommonTypesVariant$variant_property,
 } from '@figpot/src/clients/penpot';
@@ -72,16 +80,2183 @@ export async function getJsonResponseBody(response: Response): Promise<any> {
 //
 // We even exclude the one for comments since not used yet
 export type appCommonFilesChanges$changeWithoutUnknown =
-  // | {
+  // {
   //     commentThreadId: appCommonSchema$uuid;
   //     pageId: appCommonSchema$uuid;
   //     frameId: appCommonSchema$uuid | null;
   //     position: appCommonGeomPoint$point | null;
-  //   }
+  // } |
   | {
       type: 'add-obj';
       id: appCommonSchema$uuid;
-      obj: unknown;
+      obj:
+        | (unknown & {
+            /**
+             * One of the Set
+             */
+            layoutItemMarginType?: unknown;
+            layoutItemMargin?: {
+              m1?: appCommonSchema$safe_number;
+              m2?: appCommonSchema$safe_number;
+              m3?: appCommonSchema$safe_number;
+              m4?: appCommonSchema$safe_number;
+            };
+            layoutItemMaxH?: appCommonSchema$safe_number;
+            layoutItemMinH?: appCommonSchema$safe_number;
+            layoutItemMaxW?: appCommonSchema$safe_number;
+            layoutItemMinW?: appCommonSchema$safe_number;
+            /**
+             * One of the Set
+             */
+            layoutItemHSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemVSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemAlignSelf?: unknown;
+            layoutItemAbsolute?: boolean;
+            layoutItemZIndex?: appCommonSchema$safe_number;
+            shapes: Array<appCommonSchema$uuid>;
+            pageId?: appCommonSchema$uuid;
+            componentId?: appCommonSchema$uuid;
+            componentFile?: appCommonSchema$uuid;
+            componentRoot?: boolean;
+            mainInstance?: boolean;
+            remoteSynced?: boolean;
+            shapeRef?: appCommonSchema$uuid;
+            touched?: Array<string> | null;
+            blocked?: boolean;
+            collapsed?: boolean;
+            locked?: boolean;
+            hidden?: boolean;
+            maskedGroup?: boolean;
+            fills?: Array<
+              {
+                fillColorRefFile?: appCommonSchema$uuid;
+                fillColorRefId?: appCommonSchema$uuid;
+                /**
+                 * int
+                 */
+                fillOpacity?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                fillColor?: unknown;
+                fillColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                fillImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            proportion?: appCommonSchema$safe_number;
+            proportionLock?: boolean;
+            /**
+             * One of the Set
+             */
+            constraintsH?: unknown;
+            /**
+             * One of the Set
+             */
+            constraintsV?: unknown;
+            fixedScroll?: boolean;
+            r1?: appCommonSchema$safe_number;
+            r2?: appCommonSchema$safe_number;
+            r3?: appCommonSchema$safe_number;
+            r4?: appCommonSchema$safe_number;
+            opacity?: appCommonSchema$safe_number;
+            grids?: Array<appCommonTypesGrid$grid>;
+            exports?: Array<appCommonTypesShapeExport$export>;
+            strokes?: Array<
+              {
+                strokeColorRefFile?: appCommonSchema$uuid;
+                strokeColorRefId?: appCommonSchema$uuid;
+                strokeOpacity?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeStyle?: unknown;
+                strokeWidth?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeAlignment?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapStart?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapEnd?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                strokeColor?: unknown;
+                strokeColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                strokeImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            /**
+             * One of the Set
+             */
+            blendMode?: unknown;
+            interactions?: Array<appCommonTypesShapeInteractions$interaction>;
+            shadow?: Array<{
+              id: appCommonSchema$uuid | null;
+              style: string & unknown;
+              offsetX: appCommonSchema$safe_number;
+              offsetY: appCommonSchema$safe_number;
+              blur: appCommonSchema$safe_number;
+              spread: appCommonSchema$safe_number;
+              hidden: boolean;
+              color: {
+                /**
+                 * int
+                 */
+                opacity?: unknown;
+                refId?: appCommonSchema$uuid;
+                refFile?: appCommonSchema$uuid;
+                /**
+                 * HEX Color String
+                 */
+                color?: unknown;
+                gradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                image?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown;
+            }>;
+            blur?: appCommonTypesShapeBlur$blur;
+            /**
+             * One of the Set
+             */
+            growType?: unknown;
+            appliedTokens?: {
+              r1?: string;
+              r2?: string;
+              r3?: string;
+              r4?: string;
+              width?: string;
+              height?: string;
+              layoutItemMinW?: string;
+              layoutItemMaxW?: string;
+              layoutItemMinH?: string;
+              layoutItemMaxH?: string;
+              rowGap?: string;
+              columnGap?: string;
+              p1?: string;
+              p2?: string;
+              p3?: string;
+              p4?: string;
+              m1?: string;
+              m2?: string;
+              m3?: string;
+              m4?: string;
+              rotation?: string;
+              lineHeight?: string;
+              fontSize?: string;
+              letterSpacing?: string;
+              strokeWidth?: string;
+            };
+            pluginData?: appCommonTypesPlugins$plugin_data;
+            x: appCommonSchema$safe_number;
+            y: appCommonSchema$safe_number;
+            width: appCommonSchema$safe_number;
+            height: appCommonSchema$safe_number;
+            id: appCommonSchema$uuid;
+            name: string;
+            /**
+             * One of the Set
+             */
+            type: unknown;
+            selrect: appCommonGeomRect$rect;
+            points: Array<appCommonGeomPoint$point>;
+            transform: appCommonGeomMatrix$matrix;
+            transformInverse: appCommonGeomMatrix$matrix;
+            parentId: appCommonSchema$uuid;
+            frameId: appCommonSchema$uuid;
+          })
+        | {
+            /**
+             * One of the Set
+             */
+            layoutItemMarginType?: unknown;
+            layoutItemMargin?: {
+              m1?: appCommonSchema$safe_number;
+              m2?: appCommonSchema$safe_number;
+              m3?: appCommonSchema$safe_number;
+              m4?: appCommonSchema$safe_number;
+            };
+            layoutItemMaxH?: appCommonSchema$safe_number;
+            layoutItemMinH?: appCommonSchema$safe_number;
+            layoutItemMaxW?: appCommonSchema$safe_number;
+            layoutItemMinW?: appCommonSchema$safe_number;
+            /**
+             * One of the Set
+             */
+            layoutItemHSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemVSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemAlignSelf?: unknown;
+            layoutItemAbsolute?: boolean;
+            layoutItemZIndex?: appCommonSchema$safe_number;
+            /**
+             * One of the Set
+             */
+            layout?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutFlexDir?: unknown;
+            layoutGap?: {
+              rowGap?: appCommonSchema$safe_number;
+              columnGap?: appCommonSchema$safe_number;
+            };
+            /**
+             * One of the Set
+             */
+            layoutGapType?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutWrapType?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutPaddingType?: unknown;
+            layoutPadding?: {
+              p1: appCommonSchema$safe_number;
+              p2: appCommonSchema$safe_number;
+              p3: appCommonSchema$safe_number;
+              p4: appCommonSchema$safe_number;
+            };
+            /**
+             * One of the Set
+             */
+            layoutJustifyContent?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutJustifyItems?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutAlignContent?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutAlignItems?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutGridDir?: unknown;
+            layoutGridRows?: Array<{
+              /**
+               * One of the Set
+               */
+              type: unknown;
+              value?: appCommonSchema$safe_number | null;
+            }>;
+            layoutGridColumns?: Array<{
+              /**
+               * One of the Set
+               */
+              type: unknown;
+              value?: appCommonSchema$safe_number | null;
+            }>;
+            layoutGridCells?: {
+              [key: string]: {
+                id: appCommonSchema$uuid;
+                areaName?: string;
+                row: appCommonSchema$safe_int;
+                rowSpan: appCommonSchema$safe_int;
+                column: appCommonSchema$safe_int;
+                columnSpan: appCommonSchema$safe_int;
+                /**
+                 * One of the Set
+                 */
+                position?: unknown;
+                /**
+                 * One of the Set
+                 */
+                alignSelf?: unknown;
+                /**
+                 * One of the Set
+                 */
+                justifySelf?: unknown;
+                shapes: Array<appCommonSchema$uuid>;
+              };
+            };
+            shapes: Array<appCommonSchema$uuid>;
+            hideFillOnExport?: boolean;
+            showContent?: boolean;
+            hideInViewer?: boolean;
+            pageId?: appCommonSchema$uuid;
+            componentId?: appCommonSchema$uuid;
+            componentFile?: appCommonSchema$uuid;
+            componentRoot?: boolean;
+            mainInstance?: boolean;
+            remoteSynced?: boolean;
+            shapeRef?: appCommonSchema$uuid;
+            touched?: Array<string> | null;
+            blocked?: boolean;
+            collapsed?: boolean;
+            locked?: boolean;
+            hidden?: boolean;
+            maskedGroup?: boolean;
+            fills?: Array<
+              {
+                fillColorRefFile?: appCommonSchema$uuid;
+                fillColorRefId?: appCommonSchema$uuid;
+                /**
+                 * int
+                 */
+                fillOpacity?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                fillColor?: unknown;
+                fillColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                fillImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            proportion?: appCommonSchema$safe_number;
+            proportionLock?: boolean;
+            /**
+             * One of the Set
+             */
+            constraintsH?: unknown;
+            /**
+             * One of the Set
+             */
+            constraintsV?: unknown;
+            fixedScroll?: boolean;
+            r1?: appCommonSchema$safe_number;
+            r2?: appCommonSchema$safe_number;
+            r3?: appCommonSchema$safe_number;
+            r4?: appCommonSchema$safe_number;
+            opacity?: appCommonSchema$safe_number;
+            grids?: Array<appCommonTypesGrid$grid>;
+            exports?: Array<appCommonTypesShapeExport$export>;
+            strokes?: Array<
+              {
+                strokeColorRefFile?: appCommonSchema$uuid;
+                strokeColorRefId?: appCommonSchema$uuid;
+                strokeOpacity?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeStyle?: unknown;
+                strokeWidth?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeAlignment?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapStart?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapEnd?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                strokeColor?: unknown;
+                strokeColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                strokeImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            /**
+             * One of the Set
+             */
+            blendMode?: unknown;
+            interactions?: Array<appCommonTypesShapeInteractions$interaction>;
+            shadow?: Array<{
+              id: appCommonSchema$uuid | null;
+              style: string & unknown;
+              offsetX: appCommonSchema$safe_number;
+              offsetY: appCommonSchema$safe_number;
+              blur: appCommonSchema$safe_number;
+              spread: appCommonSchema$safe_number;
+              hidden: boolean;
+              color: {
+                /**
+                 * int
+                 */
+                opacity?: unknown;
+                refId?: appCommonSchema$uuid;
+                refFile?: appCommonSchema$uuid;
+                /**
+                 * HEX Color String
+                 */
+                color?: unknown;
+                gradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                image?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown;
+            }>;
+            blur?: appCommonTypesShapeBlur$blur;
+            /**
+             * One of the Set
+             */
+            growType?: unknown;
+            appliedTokens?: {
+              r1?: string;
+              r2?: string;
+              r3?: string;
+              r4?: string;
+              width?: string;
+              height?: string;
+              layoutItemMinW?: string;
+              layoutItemMaxW?: string;
+              layoutItemMinH?: string;
+              layoutItemMaxH?: string;
+              rowGap?: string;
+              columnGap?: string;
+              p1?: string;
+              p2?: string;
+              p3?: string;
+              p4?: string;
+              m1?: string;
+              m2?: string;
+              m3?: string;
+              m4?: string;
+              rotation?: string;
+              lineHeight?: string;
+              fontSize?: string;
+              letterSpacing?: string;
+              strokeWidth?: string;
+            };
+            pluginData?: appCommonTypesPlugins$plugin_data;
+            x: appCommonSchema$safe_number;
+            y: appCommonSchema$safe_number;
+            width: appCommonSchema$safe_number;
+            height: appCommonSchema$safe_number;
+            id: appCommonSchema$uuid;
+            name: string;
+            /**
+             * One of the Set
+             */
+            type: unknown;
+            selrect: appCommonGeomRect$rect;
+            points: Array<appCommonGeomPoint$point>;
+            transform: appCommonGeomMatrix$matrix;
+            transformInverse: appCommonGeomMatrix$matrix;
+            parentId: appCommonSchema$uuid;
+            frameId: appCommonSchema$uuid;
+            variantId?: appCommonSchema$uuid;
+            variantName?: string;
+            variantError?: string;
+            isVariantContainer?: boolean;
+          }
+        | {
+            /**
+             * One of the Set
+             */
+            layoutItemMarginType?: unknown;
+            layoutItemMargin?: {
+              m1?: appCommonSchema$safe_number;
+              m2?: appCommonSchema$safe_number;
+              m3?: appCommonSchema$safe_number;
+              m4?: appCommonSchema$safe_number;
+            };
+            layoutItemMaxH?: appCommonSchema$safe_number;
+            layoutItemMinH?: appCommonSchema$safe_number;
+            layoutItemMaxW?: appCommonSchema$safe_number;
+            layoutItemMinW?: appCommonSchema$safe_number;
+            /**
+             * One of the Set
+             */
+            layoutItemHSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemVSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemAlignSelf?: unknown;
+            layoutItemAbsolute?: boolean;
+            layoutItemZIndex?: appCommonSchema$safe_number;
+            shapes: Array<appCommonSchema$uuid>;
+            /**
+             * One of the Set
+             */
+            boolType: unknown;
+            content: unknown;
+            pageId?: appCommonSchema$uuid;
+            componentId?: appCommonSchema$uuid;
+            componentFile?: appCommonSchema$uuid;
+            componentRoot?: boolean;
+            mainInstance?: boolean;
+            remoteSynced?: boolean;
+            shapeRef?: appCommonSchema$uuid;
+            touched?: Array<string> | null;
+            blocked?: boolean;
+            collapsed?: boolean;
+            locked?: boolean;
+            hidden?: boolean;
+            maskedGroup?: boolean;
+            fills?: Array<
+              {
+                fillColorRefFile?: appCommonSchema$uuid;
+                fillColorRefId?: appCommonSchema$uuid;
+                /**
+                 * int
+                 */
+                fillOpacity?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                fillColor?: unknown;
+                fillColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                fillImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            proportion?: appCommonSchema$safe_number;
+            proportionLock?: boolean;
+            /**
+             * One of the Set
+             */
+            constraintsH?: unknown;
+            /**
+             * One of the Set
+             */
+            constraintsV?: unknown;
+            fixedScroll?: boolean;
+            r1?: appCommonSchema$safe_number;
+            r2?: appCommonSchema$safe_number;
+            r3?: appCommonSchema$safe_number;
+            r4?: appCommonSchema$safe_number;
+            opacity?: appCommonSchema$safe_number;
+            grids?: Array<appCommonTypesGrid$grid>;
+            exports?: Array<appCommonTypesShapeExport$export>;
+            strokes?: Array<
+              {
+                strokeColorRefFile?: appCommonSchema$uuid;
+                strokeColorRefId?: appCommonSchema$uuid;
+                strokeOpacity?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeStyle?: unknown;
+                strokeWidth?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeAlignment?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapStart?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapEnd?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                strokeColor?: unknown;
+                strokeColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                strokeImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            /**
+             * One of the Set
+             */
+            blendMode?: unknown;
+            interactions?: Array<appCommonTypesShapeInteractions$interaction>;
+            shadow?: Array<{
+              id: appCommonSchema$uuid | null;
+              style: string & unknown;
+              offsetX: appCommonSchema$safe_number;
+              offsetY: appCommonSchema$safe_number;
+              blur: appCommonSchema$safe_number;
+              spread: appCommonSchema$safe_number;
+              hidden: boolean;
+              color: {
+                /**
+                 * int
+                 */
+                opacity?: unknown;
+                refId?: appCommonSchema$uuid;
+                refFile?: appCommonSchema$uuid;
+                /**
+                 * HEX Color String
+                 */
+                color?: unknown;
+                gradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                image?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown;
+            }>;
+            blur?: appCommonTypesShapeBlur$blur;
+            /**
+             * One of the Set
+             */
+            growType?: unknown;
+            appliedTokens?: {
+              r1?: string;
+              r2?: string;
+              r3?: string;
+              r4?: string;
+              width?: string;
+              height?: string;
+              layoutItemMinW?: string;
+              layoutItemMaxW?: string;
+              layoutItemMinH?: string;
+              layoutItemMaxH?: string;
+              rowGap?: string;
+              columnGap?: string;
+              p1?: string;
+              p2?: string;
+              p3?: string;
+              p4?: string;
+              m1?: string;
+              m2?: string;
+              m3?: string;
+              m4?: string;
+              rotation?: string;
+              lineHeight?: string;
+              fontSize?: string;
+              letterSpacing?: string;
+              strokeWidth?: string;
+            };
+            pluginData?: appCommonTypesPlugins$plugin_data;
+            id: appCommonSchema$uuid;
+            name: string;
+            /**
+             * One of the Set
+             */
+            type: unknown;
+            selrect: appCommonGeomRect$rect;
+            points: Array<appCommonGeomPoint$point>;
+            transform: appCommonGeomMatrix$matrix;
+            transformInverse: appCommonGeomMatrix$matrix;
+            parentId: appCommonSchema$uuid;
+            frameId: appCommonSchema$uuid;
+          }
+        | {
+            /**
+             * One of the Set
+             */
+            layoutItemMarginType?: unknown;
+            layoutItemMargin?: {
+              m1?: appCommonSchema$safe_number;
+              m2?: appCommonSchema$safe_number;
+              m3?: appCommonSchema$safe_number;
+              m4?: appCommonSchema$safe_number;
+            };
+            layoutItemMaxH?: appCommonSchema$safe_number;
+            layoutItemMinH?: appCommonSchema$safe_number;
+            layoutItemMaxW?: appCommonSchema$safe_number;
+            layoutItemMinW?: appCommonSchema$safe_number;
+            /**
+             * One of the Set
+             */
+            layoutItemHSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemVSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemAlignSelf?: unknown;
+            layoutItemAbsolute?: boolean;
+            layoutItemZIndex?: appCommonSchema$safe_number;
+            pageId?: appCommonSchema$uuid;
+            componentId?: appCommonSchema$uuid;
+            componentFile?: appCommonSchema$uuid;
+            componentRoot?: boolean;
+            mainInstance?: boolean;
+            remoteSynced?: boolean;
+            shapeRef?: appCommonSchema$uuid;
+            touched?: Array<string> | null;
+            blocked?: boolean;
+            collapsed?: boolean;
+            locked?: boolean;
+            hidden?: boolean;
+            maskedGroup?: boolean;
+            fills?: Array<
+              {
+                fillColorRefFile?: appCommonSchema$uuid;
+                fillColorRefId?: appCommonSchema$uuid;
+                /**
+                 * int
+                 */
+                fillOpacity?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                fillColor?: unknown;
+                fillColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                fillImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            proportion?: appCommonSchema$safe_number;
+            proportionLock?: boolean;
+            /**
+             * One of the Set
+             */
+            constraintsH?: unknown;
+            /**
+             * One of the Set
+             */
+            constraintsV?: unknown;
+            fixedScroll?: boolean;
+            r1?: appCommonSchema$safe_number;
+            r2?: appCommonSchema$safe_number;
+            r3?: appCommonSchema$safe_number;
+            r4?: appCommonSchema$safe_number;
+            opacity?: appCommonSchema$safe_number;
+            grids?: Array<appCommonTypesGrid$grid>;
+            exports?: Array<appCommonTypesShapeExport$export>;
+            strokes?: Array<
+              {
+                strokeColorRefFile?: appCommonSchema$uuid;
+                strokeColorRefId?: appCommonSchema$uuid;
+                strokeOpacity?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeStyle?: unknown;
+                strokeWidth?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeAlignment?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapStart?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapEnd?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                strokeColor?: unknown;
+                strokeColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                strokeImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            /**
+             * One of the Set
+             */
+            blendMode?: unknown;
+            interactions?: Array<appCommonTypesShapeInteractions$interaction>;
+            shadow?: Array<{
+              id: appCommonSchema$uuid | null;
+              style: string & unknown;
+              offsetX: appCommonSchema$safe_number;
+              offsetY: appCommonSchema$safe_number;
+              blur: appCommonSchema$safe_number;
+              spread: appCommonSchema$safe_number;
+              hidden: boolean;
+              color: {
+                /**
+                 * int
+                 */
+                opacity?: unknown;
+                refId?: appCommonSchema$uuid;
+                refFile?: appCommonSchema$uuid;
+                /**
+                 * HEX Color String
+                 */
+                color?: unknown;
+                gradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                image?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown;
+            }>;
+            blur?: appCommonTypesShapeBlur$blur;
+            /**
+             * One of the Set
+             */
+            growType?: unknown;
+            appliedTokens?: {
+              r1?: string;
+              r2?: string;
+              r3?: string;
+              r4?: string;
+              width?: string;
+              height?: string;
+              layoutItemMinW?: string;
+              layoutItemMaxW?: string;
+              layoutItemMinH?: string;
+              layoutItemMaxH?: string;
+              rowGap?: string;
+              columnGap?: string;
+              p1?: string;
+              p2?: string;
+              p3?: string;
+              p4?: string;
+              m1?: string;
+              m2?: string;
+              m3?: string;
+              m4?: string;
+              rotation?: string;
+              lineHeight?: string;
+              fontSize?: string;
+              letterSpacing?: string;
+              strokeWidth?: string;
+            };
+            pluginData?: appCommonTypesPlugins$plugin_data;
+            x: appCommonSchema$safe_number;
+            y: appCommonSchema$safe_number;
+            width: appCommonSchema$safe_number;
+            height: appCommonSchema$safe_number;
+            id: appCommonSchema$uuid;
+            name: string;
+            /**
+             * One of the Set
+             */
+            type: unknown;
+            selrect: appCommonGeomRect$rect;
+            points: Array<appCommonGeomPoint$point>;
+            transform: appCommonGeomMatrix$matrix;
+            transformInverse: appCommonGeomMatrix$matrix;
+            parentId: appCommonSchema$uuid;
+            frameId: appCommonSchema$uuid;
+          }
+        | {
+            /**
+             * One of the Set
+             */
+            layoutItemMarginType?: unknown;
+            layoutItemMargin?: {
+              m1?: appCommonSchema$safe_number;
+              m2?: appCommonSchema$safe_number;
+              m3?: appCommonSchema$safe_number;
+              m4?: appCommonSchema$safe_number;
+            };
+            layoutItemMaxH?: appCommonSchema$safe_number;
+            layoutItemMinH?: appCommonSchema$safe_number;
+            layoutItemMaxW?: appCommonSchema$safe_number;
+            layoutItemMinW?: appCommonSchema$safe_number;
+            /**
+             * One of the Set
+             */
+            layoutItemHSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemVSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemAlignSelf?: unknown;
+            layoutItemAbsolute?: boolean;
+            layoutItemZIndex?: appCommonSchema$safe_number;
+            metadata: {
+              width: appCommonSchema$int;
+              height: appCommonSchema$int;
+              mtype?: string | null;
+              id: appCommonSchema$uuid;
+            };
+            pageId?: appCommonSchema$uuid;
+            componentId?: appCommonSchema$uuid;
+            componentFile?: appCommonSchema$uuid;
+            componentRoot?: boolean;
+            mainInstance?: boolean;
+            remoteSynced?: boolean;
+            shapeRef?: appCommonSchema$uuid;
+            touched?: Array<string> | null;
+            blocked?: boolean;
+            collapsed?: boolean;
+            locked?: boolean;
+            hidden?: boolean;
+            maskedGroup?: boolean;
+            fills?: Array<
+              {
+                fillColorRefFile?: appCommonSchema$uuid;
+                fillColorRefId?: appCommonSchema$uuid;
+                /**
+                 * int
+                 */
+                fillOpacity?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                fillColor?: unknown;
+                fillColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                fillImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            proportion?: appCommonSchema$safe_number;
+            proportionLock?: boolean;
+            /**
+             * One of the Set
+             */
+            constraintsH?: unknown;
+            /**
+             * One of the Set
+             */
+            constraintsV?: unknown;
+            fixedScroll?: boolean;
+            r1?: appCommonSchema$safe_number;
+            r2?: appCommonSchema$safe_number;
+            r3?: appCommonSchema$safe_number;
+            r4?: appCommonSchema$safe_number;
+            opacity?: appCommonSchema$safe_number;
+            grids?: Array<appCommonTypesGrid$grid>;
+            exports?: Array<appCommonTypesShapeExport$export>;
+            strokes?: Array<
+              {
+                strokeColorRefFile?: appCommonSchema$uuid;
+                strokeColorRefId?: appCommonSchema$uuid;
+                strokeOpacity?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeStyle?: unknown;
+                strokeWidth?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeAlignment?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapStart?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapEnd?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                strokeColor?: unknown;
+                strokeColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                strokeImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            /**
+             * One of the Set
+             */
+            blendMode?: unknown;
+            interactions?: Array<appCommonTypesShapeInteractions$interaction>;
+            shadow?: Array<{
+              id: appCommonSchema$uuid | null;
+              style: string & unknown;
+              offsetX: appCommonSchema$safe_number;
+              offsetY: appCommonSchema$safe_number;
+              blur: appCommonSchema$safe_number;
+              spread: appCommonSchema$safe_number;
+              hidden: boolean;
+              color: {
+                /**
+                 * int
+                 */
+                opacity?: unknown;
+                refId?: appCommonSchema$uuid;
+                refFile?: appCommonSchema$uuid;
+                /**
+                 * HEX Color String
+                 */
+                color?: unknown;
+                gradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                image?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown;
+            }>;
+            blur?: appCommonTypesShapeBlur$blur;
+            /**
+             * One of the Set
+             */
+            growType?: unknown;
+            appliedTokens?: {
+              r1?: string;
+              r2?: string;
+              r3?: string;
+              r4?: string;
+              width?: string;
+              height?: string;
+              layoutItemMinW?: string;
+              layoutItemMaxW?: string;
+              layoutItemMinH?: string;
+              layoutItemMaxH?: string;
+              rowGap?: string;
+              columnGap?: string;
+              p1?: string;
+              p2?: string;
+              p3?: string;
+              p4?: string;
+              m1?: string;
+              m2?: string;
+              m3?: string;
+              m4?: string;
+              rotation?: string;
+              lineHeight?: string;
+              fontSize?: string;
+              letterSpacing?: string;
+              strokeWidth?: string;
+            };
+            pluginData?: appCommonTypesPlugins$plugin_data;
+            x: appCommonSchema$safe_number;
+            y: appCommonSchema$safe_number;
+            width: appCommonSchema$safe_number;
+            height: appCommonSchema$safe_number;
+            id: appCommonSchema$uuid;
+            name: string;
+            /**
+             * One of the Set
+             */
+            type: unknown;
+            selrect: appCommonGeomRect$rect;
+            points: Array<appCommonGeomPoint$point>;
+            transform: appCommonGeomMatrix$matrix;
+            transformInverse: appCommonGeomMatrix$matrix;
+            parentId: appCommonSchema$uuid;
+            frameId: appCommonSchema$uuid;
+          }
+        | {
+            /**
+             * One of the Set
+             */
+            layoutItemMarginType?: unknown;
+            layoutItemMargin?: {
+              m1?: appCommonSchema$safe_number;
+              m2?: appCommonSchema$safe_number;
+              m3?: appCommonSchema$safe_number;
+              m4?: appCommonSchema$safe_number;
+            };
+            layoutItemMaxH?: appCommonSchema$safe_number;
+            layoutItemMinH?: appCommonSchema$safe_number;
+            layoutItemMaxW?: appCommonSchema$safe_number;
+            layoutItemMinW?: appCommonSchema$safe_number;
+            /**
+             * One of the Set
+             */
+            layoutItemHSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemVSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemAlignSelf?: unknown;
+            layoutItemAbsolute?: boolean;
+            layoutItemZIndex?: appCommonSchema$safe_number;
+            content: unknown;
+            pageId?: appCommonSchema$uuid;
+            componentId?: appCommonSchema$uuid;
+            componentFile?: appCommonSchema$uuid;
+            componentRoot?: boolean;
+            mainInstance?: boolean;
+            remoteSynced?: boolean;
+            shapeRef?: appCommonSchema$uuid;
+            touched?: Array<string> | null;
+            blocked?: boolean;
+            collapsed?: boolean;
+            locked?: boolean;
+            hidden?: boolean;
+            maskedGroup?: boolean;
+            fills?: Array<
+              {
+                fillColorRefFile?: appCommonSchema$uuid;
+                fillColorRefId?: appCommonSchema$uuid;
+                /**
+                 * int
+                 */
+                fillOpacity?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                fillColor?: unknown;
+                fillColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                fillImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            proportion?: appCommonSchema$safe_number;
+            proportionLock?: boolean;
+            /**
+             * One of the Set
+             */
+            constraintsH?: unknown;
+            /**
+             * One of the Set
+             */
+            constraintsV?: unknown;
+            fixedScroll?: boolean;
+            r1?: appCommonSchema$safe_number;
+            r2?: appCommonSchema$safe_number;
+            r3?: appCommonSchema$safe_number;
+            r4?: appCommonSchema$safe_number;
+            opacity?: appCommonSchema$safe_number;
+            grids?: Array<appCommonTypesGrid$grid>;
+            exports?: Array<appCommonTypesShapeExport$export>;
+            strokes?: Array<
+              {
+                strokeColorRefFile?: appCommonSchema$uuid;
+                strokeColorRefId?: appCommonSchema$uuid;
+                strokeOpacity?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeStyle?: unknown;
+                strokeWidth?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeAlignment?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapStart?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapEnd?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                strokeColor?: unknown;
+                strokeColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                strokeImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            /**
+             * One of the Set
+             */
+            blendMode?: unknown;
+            interactions?: Array<appCommonTypesShapeInteractions$interaction>;
+            shadow?: Array<{
+              id: appCommonSchema$uuid | null;
+              style: string & unknown;
+              offsetX: appCommonSchema$safe_number;
+              offsetY: appCommonSchema$safe_number;
+              blur: appCommonSchema$safe_number;
+              spread: appCommonSchema$safe_number;
+              hidden: boolean;
+              color: {
+                /**
+                 * int
+                 */
+                opacity?: unknown;
+                refId?: appCommonSchema$uuid;
+                refFile?: appCommonSchema$uuid;
+                /**
+                 * HEX Color String
+                 */
+                color?: unknown;
+                gradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                image?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown;
+            }>;
+            blur?: appCommonTypesShapeBlur$blur;
+            /**
+             * One of the Set
+             */
+            growType?: unknown;
+            appliedTokens?: {
+              r1?: string;
+              r2?: string;
+              r3?: string;
+              r4?: string;
+              width?: string;
+              height?: string;
+              layoutItemMinW?: string;
+              layoutItemMaxW?: string;
+              layoutItemMinH?: string;
+              layoutItemMaxH?: string;
+              rowGap?: string;
+              columnGap?: string;
+              p1?: string;
+              p2?: string;
+              p3?: string;
+              p4?: string;
+              m1?: string;
+              m2?: string;
+              m3?: string;
+              m4?: string;
+              rotation?: string;
+              lineHeight?: string;
+              fontSize?: string;
+              letterSpacing?: string;
+              strokeWidth?: string;
+            };
+            pluginData?: appCommonTypesPlugins$plugin_data;
+            id: appCommonSchema$uuid;
+            name: string;
+            /**
+             * One of the Set
+             */
+            type: unknown;
+            selrect: appCommonGeomRect$rect;
+            points: Array<appCommonGeomPoint$point>;
+            transform: appCommonGeomMatrix$matrix;
+            transformInverse: appCommonGeomMatrix$matrix;
+            parentId: appCommonSchema$uuid;
+            frameId: appCommonSchema$uuid;
+          }
+        | {
+            /**
+             * One of the Set
+             */
+            layoutItemMarginType?: unknown;
+            layoutItemMargin?: {
+              m1?: appCommonSchema$safe_number;
+              m2?: appCommonSchema$safe_number;
+              m3?: appCommonSchema$safe_number;
+              m4?: appCommonSchema$safe_number;
+            };
+            layoutItemMaxH?: appCommonSchema$safe_number;
+            layoutItemMinH?: appCommonSchema$safe_number;
+            layoutItemMaxW?: appCommonSchema$safe_number;
+            layoutItemMinW?: appCommonSchema$safe_number;
+            /**
+             * One of the Set
+             */
+            layoutItemHSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemVSizing?: unknown;
+            /**
+             * One of the Set
+             */
+            layoutItemAlignSelf?: unknown;
+            layoutItemAbsolute?: boolean;
+            layoutItemZIndex?: appCommonSchema$safe_number;
+            content?: appCommonTypesShapeText$content | null;
+            pageId?: appCommonSchema$uuid;
+            componentId?: appCommonSchema$uuid;
+            componentFile?: appCommonSchema$uuid;
+            componentRoot?: boolean;
+            mainInstance?: boolean;
+            remoteSynced?: boolean;
+            shapeRef?: appCommonSchema$uuid;
+            touched?: Array<string> | null;
+            blocked?: boolean;
+            collapsed?: boolean;
+            locked?: boolean;
+            hidden?: boolean;
+            maskedGroup?: boolean;
+            fills?: Array<
+              {
+                fillColorRefFile?: appCommonSchema$uuid;
+                fillColorRefId?: appCommonSchema$uuid;
+                /**
+                 * int
+                 */
+                fillOpacity?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                fillColor?: unknown;
+                fillColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                fillImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            proportion?: appCommonSchema$safe_number;
+            proportionLock?: boolean;
+            /**
+             * One of the Set
+             */
+            constraintsH?: unknown;
+            /**
+             * One of the Set
+             */
+            constraintsV?: unknown;
+            fixedScroll?: boolean;
+            r1?: appCommonSchema$safe_number;
+            r2?: appCommonSchema$safe_number;
+            r3?: appCommonSchema$safe_number;
+            r4?: appCommonSchema$safe_number;
+            opacity?: appCommonSchema$safe_number;
+            grids?: Array<appCommonTypesGrid$grid>;
+            exports?: Array<appCommonTypesShapeExport$export>;
+            strokes?: Array<
+              {
+                strokeColorRefFile?: appCommonSchema$uuid;
+                strokeColorRefId?: appCommonSchema$uuid;
+                strokeOpacity?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeStyle?: unknown;
+                strokeWidth?: appCommonSchema$safe_number;
+                /**
+                 * One of the Set
+                 */
+                strokeAlignment?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapStart?: unknown;
+                /**
+                 * One of the Set
+                 */
+                strokeCapEnd?: unknown;
+                /**
+                 * HEX Color String
+                 */
+                strokeColor?: unknown;
+                strokeColorGradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                strokeImage?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown
+            >;
+            /**
+             * One of the Set
+             */
+            blendMode?: unknown;
+            interactions?: Array<appCommonTypesShapeInteractions$interaction>;
+            shadow?: Array<{
+              id: appCommonSchema$uuid | null;
+              style: string & unknown;
+              offsetX: appCommonSchema$safe_number;
+              offsetY: appCommonSchema$safe_number;
+              blur: appCommonSchema$safe_number;
+              spread: appCommonSchema$safe_number;
+              hidden: boolean;
+              color: {
+                /**
+                 * int
+                 */
+                opacity?: unknown;
+                refId?: appCommonSchema$uuid;
+                refFile?: appCommonSchema$uuid;
+                /**
+                 * HEX Color String
+                 */
+                color?: unknown;
+                gradient?: {
+                  /**
+                   * One of the Set
+                   */
+                  type: unknown;
+                  startX: appCommonSchema$safe_number;
+                  startY: appCommonSchema$safe_number;
+                  endX: appCommonSchema$safe_number;
+                  endY: appCommonSchema$safe_number;
+                  width: appCommonSchema$safe_number;
+                  stops: Array<{
+                    /**
+                     * HEX Color String
+                     */
+                    color: unknown;
+                    /**
+                     * int
+                     */
+                    opacity?: unknown;
+                    /**
+                     * int
+                     */
+                    offset: unknown;
+                  }>;
+                };
+                image?: {
+                  /**
+                   * int
+                   */
+                  width: unknown;
+                  /**
+                   * int
+                   */
+                  height: unknown;
+                  mtype: appCommonSchema$text;
+                  id: appCommonSchema$uuid;
+                  name?: appCommonSchema$text;
+                  keepAspectRatio?: boolean;
+                };
+              } & unknown;
+            }>;
+            blur?: appCommonTypesShapeBlur$blur;
+            /**
+             * One of the Set
+             */
+            growType?: unknown;
+            appliedTokens?: {
+              r1?: string;
+              r2?: string;
+              r3?: string;
+              r4?: string;
+              width?: string;
+              height?: string;
+              layoutItemMinW?: string;
+              layoutItemMaxW?: string;
+              layoutItemMinH?: string;
+              layoutItemMaxH?: string;
+              rowGap?: string;
+              columnGap?: string;
+              p1?: string;
+              p2?: string;
+              p3?: string;
+              p4?: string;
+              m1?: string;
+              m2?: string;
+              m3?: string;
+              m4?: string;
+              rotation?: string;
+              lineHeight?: string;
+              fontSize?: string;
+              letterSpacing?: string;
+              strokeWidth?: string;
+            };
+            pluginData?: appCommonTypesPlugins$plugin_data;
+            x: appCommonSchema$safe_number;
+            y: appCommonSchema$safe_number;
+            width: appCommonSchema$safe_number;
+            height: appCommonSchema$safe_number;
+            id: appCommonSchema$uuid;
+            name: string;
+            /**
+             * One of the Set
+             */
+            type: unknown;
+            selrect: appCommonGeomRect$rect;
+            points: Array<appCommonGeomPoint$point>;
+            transform: appCommonGeomMatrix$matrix;
+            transformInverse: appCommonGeomMatrix$matrix;
+            parentId: appCommonSchema$uuid;
+            frameId: appCommonSchema$uuid;
+          };
       pageId?: appCommonSchema$uuid;
       componentId?: appCommonSchema$uuid;
       frameId: appCommonSchema$uuid;
@@ -273,7 +2448,7 @@ export type appCommonFilesChanges$changeWithoutUnknown =
          * int
          */
         opacity?: unknown;
-        modifiedAt?: appCommonTime$inst;
+        modifiedAt?: appCommonSchema$inst;
         pluginData?: appCommonTypesPlugins$plugin_data;
         /**
          * HEX Color String
@@ -330,7 +2505,7 @@ export type appCommonFilesChanges$changeWithoutUnknown =
          * int
          */
         opacity?: unknown;
-        modifiedAt?: appCommonTime$inst;
+        modifiedAt?: appCommonSchema$inst;
         pluginData?: appCommonTypesPlugins$plugin_data;
         /**
          * HEX Color String
@@ -381,12 +2556,13 @@ export type appCommonFilesChanges$changeWithoutUnknown =
       type: 'del-color';
       id: appCommonSchema$uuid;
     }
+  // | unknown
   | {
       type: 'add-media';
       object: {
         id: appCommonSchema$uuid;
-        createdAt?: appCommonTime$inst;
-        deletedAt?: appCommonTime$inst;
+        createdAt?: appCommonSchema$inst;
+        deletedAt?: appCommonSchema$inst;
         name: string;
         width: appCommonSchema$safe_int;
         height: appCommonSchema$safe_int;
@@ -401,8 +2577,8 @@ export type appCommonFilesChanges$changeWithoutUnknown =
       type: 'mod-media';
       object: {
         id: appCommonSchema$uuid;
-        createdAt?: appCommonTime$inst;
-        deletedAt?: appCommonTime$inst;
+        createdAt?: appCommonSchema$inst;
+        deletedAt?: appCommonSchema$inst;
         name: string;
         width: appCommonSchema$safe_int;
         height: appCommonSchema$safe_int;
@@ -423,6 +2599,8 @@ export type appCommonFilesChanges$changeWithoutUnknown =
       name: string;
       shapes?: Array<appCommonSchema$any>;
       path?: string;
+      mainInstanceId: appCommonSchema$uuid;
+      mainInstancePage: appCommonSchema$uuid;
     }
   | {
       type: 'mod-component';
@@ -493,7 +2671,7 @@ export type appCommonFilesChanges$changeWithoutUnknown =
         description?: string;
         isSource?: boolean;
         externalId?: string;
-        modifiedAt?: appCommonTime$inst;
+        modifiedAt?: appCommonSchema$inst;
         sets?: Array<string>;
       } | null;
     }
@@ -510,7 +2688,7 @@ export type appCommonFilesChanges$changeWithoutUnknown =
   | {
       type: 'set-token';
       setName: string;
-      tokenId: appCommonSchema$uuid;
+      tokenName: string;
       token: {
         id: appCommonSchema$uuid;
         name: string;
@@ -520,7 +2698,7 @@ export type appCommonFilesChanges$changeWithoutUnknown =
         type: unknown;
         value: appCommonSchema$any;
         description?: string;
-        modifiedAt?: appCommonTime$inst;
+        modifiedAt?: appCommonSchema$inst;
       } | null;
     }
   | {

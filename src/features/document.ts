@@ -1603,11 +1603,11 @@ export async function processDifferences(
     let currentGroupId: string | null = null;
     let currentGroupCount: number = 0;
     let succeededOperations = 0;
-    for (const operation of differences.newTreeOperations) {
+    for (const { _groupId, _lastOfTheGroup, ...operation } of differences.newTreeOperations) {
       const encodedOperationLength = JSON.stringify(operation).length;
 
       // Needed to avoid splitting operations that must be processed at the same time by the Penpot backend
-      currentGroupId = operation._groupId && operation._lastOfTheGroup !== undefined ? operation._groupId : null;
+      currentGroupId = _groupId && _lastOfTheGroup !== undefined ? _groupId : null;
 
       // Take into account the `,` delimiter
       if (currentChunkCount + Math.max(currentChunk.length - 1, 0) + encodedOperationLength > remainingBodyBytes) {
@@ -1616,7 +1616,7 @@ export async function processDifferences(
         // If currently into a group that cannot be separated, we remove the ongoing ones to set them on the next chunk
         // (being on the last item of the group is fine)
         // Note: it's unlikely a group size would be bigger than the allowed chunk size
-        if (currentGroupId && operation._lastOfTheGroup === false) {
+        if (currentGroupId && _lastOfTheGroup === false) {
           forwardedOperationsOnNextChunk = currentChunk.splice(-currentChunkCount);
         }
 

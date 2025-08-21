@@ -91,7 +91,7 @@ export function translateLayoutJustifyContent(node: HasFramePropertiesTrait): Ju
     case 'SPACE_BETWEEN':
       return 'space-between';
     default:
-      return 'stretch';
+      return 'start';
   }
 }
 
@@ -104,7 +104,7 @@ export function translateLayoutJustifyItems(node: HasFramePropertiesTrait): Just
     case 'MAX':
       return 'end';
     default:
-      return 'stretch';
+      return 'start';
   }
 }
 
@@ -130,7 +130,7 @@ export function translateLayoutAlignItems(node: HasFramePropertiesTrait): Justif
     case 'MAX':
       return 'end';
     default:
-      return 'stretch';
+      return 'start';
   }
 }
 

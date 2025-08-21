@@ -1,4 +1,4 @@
-import { HasFramePropertiesTrait, HasLayoutTrait } from '@figpot/src/clients/figma';
+import { HasChildrenTrait, HasFramePropertiesTrait, HasLayoutTrait } from '@figpot/src/clients/figma';
 import {
   translateLayoutAlignContent,
   translateLayoutAlignItems,
@@ -57,7 +57,7 @@ export function transformAutoLayout(node: HasFramePropertiesTrait & HasLayoutTra
 }
 
 export function transformLayoutAttributes(
-  node: HasLayoutTrait
+  node: HasLayoutTrait & Partial<HasChildrenTrait>
 ): Pick<
   LayoutChildAttributes,
   | 'layoutItemHSizing'
@@ -70,8 +70,8 @@ export function transformLayoutAttributes(
   | 'layoutItemMinW'
 > {
   return {
-    layoutItemHSizing: node.layoutSizingHorizontal ? translateLayoutSizing(node.layoutSizingHorizontal) : undefined,
-    layoutItemVSizing: node.layoutSizingVertical ? translateLayoutSizing(node.layoutSizingVertical) : undefined,
+    layoutItemHSizing: translateLayoutSizing(node, 'layoutSizingHorizontal'),
+    layoutItemVSizing: translateLayoutSizing(node, 'layoutSizingVertical'),
     layoutItemAlignSelf: node.layoutAlign ? translateLayoutItemAlignSelf(node.layoutAlign) : undefined,
     layoutItemAbsolute: node.layoutPositioning ? node.layoutPositioning === 'ABSOLUTE' : undefined,
     layoutItemMaxH: node.maxHeight ?? undefined,

@@ -1,4 +1,4 @@
-import { HasFramePropertiesTrait, HasLayoutTrait } from '@figpot/src/clients/figma';
+import { HasChildrenTrait, HasFramePropertiesTrait, HasLayoutTrait, SubcanvasNode } from '@figpot/src/clients/figma';
 import {
   GridTrack,
   JustifyAlignContent,
@@ -134,14 +134,44 @@ export function translateLayoutAlignItems(node: HasFramePropertiesTrait): Justif
   }
 }
 
-export function translateLayoutSizing(sizing: FigmaLayoutSizing, isFrame: boolean = false): LayoutSizing {
-  switch (sizing) {
+export function translateLayoutSizing<A extends 'layoutSizingHorizontal' | 'layoutSizingVertical'>(
+  node: Pick<HasLayoutTrait, A> & Partial<HasChildrenTrait>,
+  axis: A
+): LayoutSizing | undefined {
+  switch (node[axis]) {
     case 'FIXED':
       return 'fix';
     case 'HUG':
+      // [WORKAROUND] Figma allows setting for the same exis on parent frame "fit content" and on the child frame "take 100%"
+      // But Penpot does not. It's accepted by the API but will be overriden when hydrated with a browser instanciating the shape
+      //
+      // It seems the more common use case is the adjustability to depend on movement on parent frame (like for a component), so we
+      // set it as fixed while keeping adjustibility in its nested children (ref: https://github.com/penpot/penpot/discussions/7163)
+      //
+      // Note: in Figma if there is multiple direct children, setting "take 100%" on one will automatically set "fixed size" on the parent frame
+      // So it makes more sense to choose to mimic this behavior in Penpot when there is just one child
+      if (
+        node.children &&
+        node.children.some((childNode) => {
+          // We make sure it's not a type not having the `HasLayoutTrait`
+          // (did try a type guard to set `HasLayoutTrait` but it was messing due `SubcanvasNode` having too many combination)
+          return (
+            childNode.type !== 'EMBED' &&
+            childNode.type !== 'LINK_UNFURL' &&
+            childNode.type !== 'SLICE' &&
+            childNode.type !== 'WIDGET' &&
+            childNode[axis] === 'FILL'
+          );
+        })
+      ) {
+        return 'fix';
+      }
+
       return 'auto';
     case 'FILL':
       return 'fill';
+    default:
+      return undefined;
   }
 }
 

@@ -16,7 +16,7 @@ export function transformEllipseNode(
   registry: AbstractRegistry,
   node: EllipseNode & Pick<SubcanvasNode, 'id'>,
   figmaNodeTransform: Transform
-): CircleShape {
+): Omit<CircleShape, 'id'> {
   return {
     type: 'circle',
     name: node.name,

@@ -38,7 +38,7 @@ export function transformBooleanNode(
   node: BooleanOperationNode,
   closestFigmaFrameId: string,
   figmaNodeTransform: Transform
-): BoolShape {
+): Omit<BoolShape, 'id'> {
   const childrenShapes = transformChildren(registry, node, closestFigmaFrameId, figmaNodeTransform);
 
   return {

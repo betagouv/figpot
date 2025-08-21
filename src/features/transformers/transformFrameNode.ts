@@ -23,7 +23,7 @@ export function transformFrameNode(
   registry: AbstractRegistry,
   node: (FrameNode | SectionNode | ComponentNode | ComponentSetNode | InstanceNode) & Pick<SubcanvasNode, 'id'>,
   figmaNodeTransform: Transform
-): FrameShape {
+): Omit<FrameShape, 'id'> {
   let frameSpecificAttributes: Partial<FrameShape> = {};
 
   if (!isSectionNode(node)) {

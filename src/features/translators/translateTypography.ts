@@ -16,6 +16,22 @@ export function translateTypography(registry: Registry | PageRegistry, typograph
 
   assert(penpotTextStyle);
 
+  // TODO: our logic was for now allowing returning partial properties for node information about its typography
+  // settings... but since reusing types for a defined typography it errors on type (Penpot endpoint expects all of them)
+  // In the future maybe investigate to better split types instead of this hacky condition
+  assert(
+    name &&
+      penpotTextStyle.fontFamily !== undefined &&
+      penpotTextStyle.fontId !== undefined &&
+      penpotTextStyle.fontVariantId !== undefined &&
+      penpotTextStyle.fontSize !== undefined &&
+      penpotTextStyle.lineHeight !== undefined &&
+      penpotTextStyle.fontWeight !== undefined &&
+      penpotTextStyle.fontStyle !== undefined &&
+      penpotTextStyle.letterSpacing !== undefined &&
+      penpotTextStyle.textTransform !== undefined
+  );
+
   return {
     id: translateTypographyId(typography.id, registry.getMapping()),
     path: pathLevels.length > 0 ? pathLevels.join(' / ') : '', // We add spaces as normalized by Penpot

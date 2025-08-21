@@ -18,7 +18,7 @@ export type LibraryComponent = {
   path: string;
   name: string;
   modifiedAt?: string;
-  mainInstancePage: Uuid | null;
+  mainInstancePage: Uuid;
   mainInstanceId: Uuid;
   variantId?: string;
   variantProperties?: {

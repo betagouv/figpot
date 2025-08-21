@@ -5,7 +5,7 @@ import { syncAttributes } from '@figpot/src/features/translators/translateTouche
 import { FrameShape } from '@figpot/src/models/entities/penpot/shapes/frame';
 import { AbstractRegistry, PageRegistry } from '@figpot/src/models/entities/registry';
 
-export function transformInstanceNode(registry: AbstractRegistry, node: InstanceNode, figmaNodeTransform: Transform): FrameShape {
+export function transformInstanceNode(registry: AbstractRegistry, node: InstanceNode, figmaNodeTransform: Transform): Omit<FrameShape, 'id'> {
   let componentRoot: true | undefined = undefined;
   if (registry instanceof PageRegistry) {
     // If the first instance from a page registry it means that's the root

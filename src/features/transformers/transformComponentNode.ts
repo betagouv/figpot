@@ -4,7 +4,7 @@ import { translateComponentId, translateDocumentId } from '@figpot/src/features/
 import { FrameShape } from '@figpot/src/models/entities/penpot/shapes/frame';
 import { AbstractRegistry, ComponentRegistry } from '@figpot/src/models/entities/registry';
 
-export function transformComponentNode(registry: AbstractRegistry, node: ComponentNode, figmaNodeTransform: Transform): FrameShape {
+export function transformComponentNode(registry: AbstractRegistry, node: ComponentNode, figmaNodeTransform: Transform): Omit<FrameShape, 'id'> {
   let componentRoot: true | undefined = undefined;
   if (!(registry instanceof ComponentRegistry)) {
     // That's the root if not already into a component

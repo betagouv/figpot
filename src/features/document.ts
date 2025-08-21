@@ -16,13 +16,7 @@ import { z } from 'zod';
 
 import { GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
 import { OpenAPI as PenpotClientSettings, postCommandGetFileObjectThumbnails, postCommandGetFontVariants } from '@figpot/src/clients/penpot';
-import {
-  PostCommandGetFileResponse,
-  appCommonTypesTypography$typography,
-  postCommandGetFile,
-  postCommandRenameFile,
-  postCommandUpdateFile,
-} from '@figpot/src/clients/penpot';
+import { PostCommandGetFileResponse, postCommandGetFile, postCommandRenameFile, postCommandUpdateFile } from '@figpot/src/clients/penpot';
 import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/workaround';
 import {
   FigmaDefinedColor,
@@ -579,7 +573,7 @@ export function pushOperationsWithOrderingLogic(
       normalOperations.push(operationToAddress);
     }
   } else if (operationToAddress.type === 'add-obj') {
-    if ((operationToAddress.obj as any).shapes && (operationToAddress.obj as any).shapes.length > 0) {
+    if ('shapes' in operationToAddress.obj && operationToAddress.obj.shapes && operationToAddress.obj.shapes.length > 0) {
       delayedForChildrenOperations.push({
         type: 'mod-obj',
         id: operationToAddress.id,
@@ -588,13 +582,13 @@ export function pushOperationsWithOrderingLogic(
           {
             type: 'assign',
             value: {
-              shapes: (operationToAddress.obj as any).shapes,
+              shapes: operationToAddress.obj.shapes,
             },
           },
         ],
       });
 
-      (operationToAddress.obj as any).shapes = []; // Set the initial one sinc erequired
+      operationToAddress.obj.shapes = []; // Set the initial one since required
     }
 
     normalOperations.push(operationToAddress);
@@ -605,7 +599,7 @@ export function pushOperationsWithOrderingLogic(
 
 export function delayBindingOperation(
   delayedOperations: appCommonFilesChanges$changeWithoutUnknown[],
-  nodeId?: string,
+  nodeId: string,
   pageId?: string,
   componentId?: string,
   componentFile?: string,
@@ -940,7 +934,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           type: 'add-typography',
           typography: {
             ...propertiesObj,
-          } as appCommonTypesTypography$typography, // Other types are unknown, we are fine here if the API triggers an error
+          },
         });
       } else if (item.after._apiType === 'component') {
         const { _apiType, variantId, variantProperties, ...propertiesObj } = item.after; // Instruction to omit some properties
@@ -978,7 +972,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           type: 'mod-typography',
           typography: {
             ...propertiesObj,
-          } as appCommonTypesTypography$typography, // Other types are unknown, we are fine here if the API triggers an error
+          },
         });
       } else if (item.after._apiType === 'component') {
         const { _apiType, variantId, variantProperties, ...propertiesObj } = item.after; // Instruction to omit some properties
@@ -1020,7 +1014,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
         node = item.after;
       }
 
-      if (node && node._apiType === 'node' && node.type === 'frame' && !isPageRootFrameFromId(node.id as string)) {
+      if (node && node._apiType === 'node' && node.type === 'frame' && !isPageRootFrameFromId(node.id)) {
         foundTopBranchFrame = true;
         topBranchFrame = node;
       }
@@ -1429,10 +1423,10 @@ export async function compare(options: CompareOptionsType) {
     // Use metadata for future usage
     // Note: `lastModified` and `pages` may have not much value since they are retrieved because the modifications are pushed
     // [WORKAROUND] We use transformed pages to fill the value so hydratation is based on pages after updates (otherwise it would work only after 2 stable synchronizations, which has no sense)
-    meta.penpotProjectId = hostedDocument.projectId as string;
-    meta.penpotDocumentId = hostedDocument.id as string;
-    meta.penpotLastModified = hostedDocument.modifiedAt as Date;
-    meta.penpotPages = (transformedDocument.data as PenpotDocument['data']).pages;
+    meta.penpotProjectId = hostedDocument.projectId;
+    meta.penpotDocumentId = hostedDocument.id;
+    meta.penpotLastModified = new Date(hostedDocument.modifiedAt);
+    meta.penpotPages = transformedDocument.data.pages;
     await saveMeta(document.figmaDocument, document.penpotDocument, meta);
   }
 }
@@ -1451,7 +1445,7 @@ export async function processOperationsChunk(
       `processing the modifications chunk [${chunkNumber}] containing ${currentChunk.length} operations (previously ${succeededOperations} done over a total of ${differences.newTreeOperations.length})`
     );
 
-    (await postCommandUpdateFile({
+    await postCommandUpdateFile({
       requestBody: {
         id: penpotDocumentId,
         revn: 0, // Required but does no block to use a default one
@@ -1460,7 +1454,7 @@ export async function processOperationsChunk(
         changes: currentChunk,
         skipValidate: !serverValidation,
       },
-    })) as unknown; // We patched the response to avoid some processing
+    });
   } catch (error) {
     console.error(`it has failed while being processing the chunk [${chunkNumber}]`);
 

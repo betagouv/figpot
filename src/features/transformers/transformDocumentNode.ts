@@ -103,7 +103,7 @@ export function transformDocumentNode(
       path: pathLevels.length > 0 ? pathLevels.join(' / ') : '', // We add spaces as normalized by Penpot
       name: name,
       mainInstanceId: penpotComponentInstanceId,
-      mainInstancePage: null, // Will be set after, once we have browsed the normal tree
+      mainInstancePage: 'to_replace', // Will be set after, once we have browsed the normal tree
     };
 
     if (component.componentSetId) {

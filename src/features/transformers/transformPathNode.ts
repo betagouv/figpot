@@ -24,7 +24,11 @@ function translatePathNode(node: StarNode | RegularPolygonNode, figmaNodeTransfo
   return translateCommands(node, figmaNodeTransform, parseSVG(node.fillGeometry[0].path));
 }
 
-export function transformPathNode(registry: AbstractRegistry, node: StarNode | RegularPolygonNode, figmaNodeTransform: Transform): PathShape {
+export function transformPathNode(
+  registry: AbstractRegistry,
+  node: StarNode | RegularPolygonNode,
+  figmaNodeTransform: Transform
+): Omit<PathShape, 'id'> {
   return {
     type: 'path',
     name: node.name,

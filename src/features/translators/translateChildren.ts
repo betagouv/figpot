@@ -23,11 +23,12 @@ export function translateChild(
   const penpotNode = transformSceneNode(registry, figmaChild, closestFigmaFrameId, childNodeTransform);
   const penpotNodeId = translateId(figmaChild.id, registry.getMapping());
 
-  penpotNode.id = penpotNodeId;
-  penpotNode.parentId = translateId(figmaParentId, registry.getMapping());
-  penpotNode.frameId = translateId(closestFigmaFrameId, registry.getMapping());
-
-  return penpotNode;
+  return {
+    ...penpotNode,
+    id: penpotNodeId,
+    parentId: translateId(figmaParentId, registry.getMapping()),
+    frameId: translateId(closestFigmaFrameId, registry.getMapping()),
+  } as PenpotNode; // Have to cast due to all unions
 }
 
 export function translateChildren(

@@ -25,7 +25,7 @@ export type ShapeGeomAttributes = {
 };
 
 export type ShapeBaseAttributes = {
-  id?: Uuid;
+  id: Uuid;
   name?: string;
   type?: 'frame' | 'group' | 'bool' | 'rect' | 'path' | 'text' | 'circle' | 'svg-raw' | 'image' | 'component' | 'instance';
   selrect?: Selrect;

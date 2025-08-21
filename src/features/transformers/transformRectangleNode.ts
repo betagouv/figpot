@@ -18,7 +18,7 @@ export function transformRectangleNode(
   registry: AbstractRegistry,
   node: RectangleNode & Pick<SubcanvasNode, 'id'>,
   figmaNodeTransform: Transform
-): RectShape {
+): Omit<RectShape, 'id'> {
   return {
     type: 'rect',
     name: node.name,

@@ -24,21 +24,21 @@ export type TextNode = {
 } & TextStyle;
 
 export type FontId = {
-  fontId?: string;
-  fontVariantId?: string;
+  fontId: string;
+  fontVariantId: string;
 };
 
 export type TextTypography = FontId & {
-  fontFamily?: string;
-  fontSize?: string;
-  fontWeight?: string;
-  fontStyle?: TextFontStyle;
-  lineHeight?: string;
-  letterSpacing?: string;
-  textTransform?: string;
+  fontFamily: string;
+  fontSize: string;
+  fontWeight: string;
+  fontStyle: TextFontStyle;
+  lineHeight: string;
+  letterSpacing: string;
+  textTransform: string;
 };
 
-export type TextStyle = TextTypography & {
+export type TextStyle = Partial<TextTypography> & {
   textDecoration?: string;
   direction?: string;
   typographyRefId?: string | null;
@@ -51,7 +51,11 @@ export type TextStyle = TextTypography & {
 export type LibraryTypography = TextTypography & {
   id: string;
   path: string;
-  name?: string;
+  name: string;
+  fontFamily: string;
+  fontSize: string;
+  fontId: string;
+  fontVariantId: string;
   modifiedAt?: string;
 };
 

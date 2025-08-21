@@ -38,7 +38,7 @@ function translateLineNode(node: LineNode, figmaNodeTransform: Transform): Segme
  *
  * To represent the line rotated we do take into account the rotation of the line, but only in its content.
  */
-export function transformLineNode(registry: AbstractRegistry, node: LineNode, figmaNodeTransform: Transform): PathShape {
+export function transformLineNode(registry: AbstractRegistry, node: LineNode, figmaNodeTransform: Transform): Omit<PathShape, 'id'> {
   return {
     type: 'path',
     name: node.name,

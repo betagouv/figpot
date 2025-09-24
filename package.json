@@ -102,7 +102,7 @@
     "jest-environment-node": "^29.4.1",
     "jest-environment-node-single-context": "^29.4.0",
     "semantic-release": "24.0.0",
-    "testcontainers": "^9.6.0",
+    "testcontainers": "^11.6.0",
     "ts-jest": "^29.0.3",
     "ts-node": "^10.9.1",
     "tsup": "^8.1.0",

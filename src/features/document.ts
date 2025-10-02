@@ -1803,8 +1803,12 @@ export async function hydrate(options: HydrateOptionsType) {
 
   try {
     const browserContext = await browser.newContext();
-    const baseUrl = process.env.PENPOT_BASE_URL || 'https://design.penpot.app/';
+    const baseUrl = process.env.PENPOT_BASE_URL || 'https://design.penpot.app';
     const domain = new URL(baseUrl).host;
+
+    if (baseUrl.endsWith('/')) {
+      throw new Error(`the penpot base url must not end with "/" to avoid hydratation navigation issues`);
+    }
 
     await browserContext.addCookies(
       cookiesToSet.map((cookie) => {

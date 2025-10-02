@@ -92,6 +92,7 @@ export type ServerValidationType = z.infer<typeof ServerValidation>;
 export const Metadata = z.object({
   figmaDocumentId: z.string(),
   figmaLastModified: z.string().pipe(z.coerce.date()),
+  penpotTeamId: z.string(),
   penpotProjectId: z.string(),
   penpotDocumentId: z.string(),
   penpotLastModified: z.string().pipe(z.coerce.date()),
@@ -236,6 +237,7 @@ export async function restoreMeta(figmaDocumentId: string, penpotDocumentId: str
     meta = {
       figmaDocumentId: figmaDocumentId,
       figmaLastModified: new Date(0),
+      penpotTeamId: 'not_known_yet',
       penpotProjectId: 'not_known_yet',
       penpotDocumentId: 'not_known_yet',
       penpotLastModified: new Date(0),
@@ -1423,6 +1425,7 @@ export async function compare(options: CompareOptionsType) {
     // Use metadata for future usage
     // Note: `lastModified` and `pages` may have not much value since they are retrieved because the modifications are pushed
     // [WORKAROUND] We use transformed pages to fill the value so hydratation is based on pages after updates (otherwise it would work only after 2 stable synchronizations, which has no sense)
+    meta.penpotTeamId = (hostedDocument as any).teamId;
     meta.penpotProjectId = hostedDocument.projectId;
     meta.penpotDocumentId = hostedDocument.id;
     meta.penpotLastModified = new Date(hostedDocument.modifiedAt);
@@ -1745,8 +1748,8 @@ export async function synchronize(options: SynchronizeOptionsType) {
   });
 }
 
-export function formatPenpotPageUrl(baseUrl: string, projectId: string, documentId: string, pageId: string): string {
-  return `${baseUrl}/#/workspace/${projectId}/${documentId}?page-id=${pageId}`;
+export function formatPenpotPageUrl(baseUrl: string, teamId: string, documentId: string, pageId: string): string {
+  return `${baseUrl}/#/workspace?team-id=${teamId}&file-id=${documentId}&page-id=${pageId}`;
 }
 
 export const HydrateOptions = z.object({
@@ -1821,7 +1824,7 @@ export async function hydrate(options: HydrateOptionsType) {
       const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
 
       // Check we have the needed information into the `meta.json`
-      if (meta.penpotProjectId === 'not_known_yet') {
+      if (meta.penpotTeamId === 'not_known_yet') {
         throw new Error(`to run hydratation you must first run the synchronization on this document on this machine`);
       }
 
@@ -1857,7 +1860,7 @@ export async function hydrate(options: HydrateOptionsType) {
             successTimerId = setTimeout(() => {
               if (pagesToWatch.length > 0) {
                 const pageToWatch = pagesToWatch.shift() as string;
-                const pageUrl = formatPenpotPageUrl(baseUrl, meta.penpotProjectId, document.penpotDocument, pageToWatch);
+                const pageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, pageToWatch);
 
                 page
                   .evaluate((newUrl) => {
@@ -1924,7 +1927,7 @@ export async function hydrate(options: HydrateOptionsType) {
             }
           });
 
-          const firstPageUrl = formatPenpotPageUrl(baseUrl, meta.penpotProjectId, document.penpotDocument, firstPageToWatch);
+          const firstPageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, firstPageToWatch);
 
           page
             .goto(firstPageUrl, {

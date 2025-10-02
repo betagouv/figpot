@@ -7,7 +7,7 @@ import { mimeData } from 'human-filetypes';
 import { parse, toSeconds } from 'iso8601-duration';
 import arrayDiff from 'microdiff';
 import path from 'path';
-import { Request, chromium } from 'playwright';
+import { Request, chromium } from 'patchright';
 import setCookieParser from 'set-cookie-parser';
 import { parser } from 'stream-json';
 import { Digraph, toDot } from 'ts-graphviz';

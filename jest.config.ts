@@ -33,9 +33,16 @@ const customJestConfig: Config = {
       'ts-jest',
       {
         useESM: true,
+        isolatedModules: true, // It disables type checking to make it faster (note it's not taken by default from the `tsconfig.json`)
       },
     ],
   },
 };
+
+// Used to specify the default cache directory in our CI/CD environment
+// Note: it cannot be set to undefined directly into the config object because Jest would take it due to the object key existing, so using a separate condition
+if (typeof process.env.JEST_CACHE_PATH === 'string') {
+  customJestConfig.cacheDirectory = process.env.JEST_CACHE_PATH;
+}
 
 export default customJestConfig;

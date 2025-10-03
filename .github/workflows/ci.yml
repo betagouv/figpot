@@ -9,6 +9,8 @@ env:
   APP_NAME: figpot
   NODE_OPTIONS: --max_old_space_size=4096
   NODE_VERSION: 20.15.0
+  PLAYWRIGHT_BROWSERS_CACHE_FOLDER_SUFFIX: .cache/ms-playwright
+  JEST_CACHE_FOLDER_SUFFIX: .cache/jest
 concurrency:
   # Prevent parallel builds of the same branch
   group: cicd-${{ github.ref }}
@@ -46,9 +48,13 @@ jobs:
             ${{ runner.os }}-npm-store-
 
       - name: Install dependencies
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.STORE_PATH }}/${{ env.PLAYWRIGHT_BROWSERS_CACHE_FOLDER_SUFFIX }}
         run: npm install
 
       - name: Setup API clients
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.STORE_PATH }}/${{ env.PLAYWRIGHT_BROWSERS_CACHE_FOLDER_SUFFIX }}
         run: npm run setup
 
       - name: Lint
@@ -63,8 +69,14 @@ jobs:
         with:
           version: '2.14.2'
 
+      - name: Get number of CPU cores for the following test step
+        uses: SimenB/github-actions-cpu-cores@v2
+        id: cpu-cores
+
       - name: Test unit
-        run: npm run test:unit
+        env:
+          JEST_CACHE_PATH: ${{ env.STORE_PATH }}/${{ env.JEST_CACHE_FOLDER_SUFFIX }}
+        run: npm run test:unit --- --max-workers ${{ steps.cpu-cores.outputs.count }}
 
       - name: Build
         run: npm run build

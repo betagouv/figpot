@@ -1798,11 +1798,17 @@ export async function hydrate(options: HydrateOptionsType) {
 
   const browser = await chromium.launch({
     executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
-    // headless: false, // Can help debugging
+    // [IMPORTANT] It has to be headful otherwise it won't pass the Cloudflare protection on their SaaS production
+    headless: false,
+    args: [
+      '--window-size=1,1', // It does not work as expected, `viewport` in the browser context must also be set (note there is no working way to minimize the window)
+    ],
   });
 
   try {
-    const browserContext = await browser.newContext();
+    const browserContext = await browser.newContext({
+      viewport: { width: 1, height: 1 }, // Since the window size won't take 1x1px, we make sure the viewport is, like that the user should not be tempted to interact with the page whereas nothing must be touched
+    });
     const baseUrl = process.env.PENPOT_BASE_URL || 'https://design.penpot.app';
     const domain = new URL(baseUrl).host;
 
@@ -1823,7 +1829,12 @@ export async function hydrate(options: HydrateOptionsType) {
 
     for (const document of options.documents) {
       console.log(`start hydratation for the penpot document ${document.penpotDocument}`);
-      console.log(`it may take from seconds to minutes depending on the document size and if this one is synchronized for the first time`);
+      console.log(
+        `it may take from 30 seconds to minutes depending on the document size and if this one is synchronized for the first time (the first time roughly N minutes for N file pages)`
+      );
+      console.warn(
+        `a chomium window will open to perform the hydratation, please do not close it or change url (note it has to be visible otherwise it would not pass the cloudflare protection on the penpot production)`
+      );
 
       const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
 

@@ -24,7 +24,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "postinstall": "patch-package",
-    "setup": "npm run client:figma:generate && npm run client:penpot:generate && npm run cli deps",
+    "setup": "npm run client:generate && npm run cli deps",
     "build": "tsup",
     "dev": "tsup --watch",
     "cli": "dotenv-run-script .env.test -- cli:unsecure",
@@ -37,6 +37,7 @@
     "lint:ts": "tsc --noEmit --incremental false",
     "test:unit": "npm run jest --- --ci --passWithNoTests",
     "test:unit:watch": "npm run jest --- --watch",
+    "client:generate": "npm run client:figma:generate && npm run client:penpot:generate",
     "client:figma:generate": "openapi-ts -i https://raw.githubusercontent.com/figma/rest-api-spec/main/openapi/openapi.yaml -o src/clients/figma",
     "client:penpot:generate": "openapi-ts -i https://design.penpot.app/api/openapi.json -o src/clients/penpot",
     "clean": "rm -rf dist && rm -rf node_modules",

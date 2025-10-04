@@ -9,7 +9,6 @@ env:
   APP_NAME: figpot
   NODE_OPTIONS: --max_old_space_size=4096
   NODE_VERSION: 20.15.0
-  PLAYWRIGHT_BROWSERS_CACHE_FOLDER_SUFFIX: .cache/ms-playwright
   JEST_CACHE_FOLDER_SUFFIX: .cache/jest
 concurrency:
   # Prevent parallel builds of the same branch
@@ -48,14 +47,10 @@ jobs:
             ${{ runner.os }}-npm-store-
 
       - name: Install dependencies
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: ${{ env.STORE_PATH }}/${{ env.PLAYWRIGHT_BROWSERS_CACHE_FOLDER_SUFFIX }}
         run: npm install
 
       - name: Setup API clients
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: ${{ env.STORE_PATH }}/${{ env.PLAYWRIGHT_BROWSERS_CACHE_FOLDER_SUFFIX }}
-        run: npm run setup
+        run: npm run client:generate
 
       - name: Lint
         run: npm run lint

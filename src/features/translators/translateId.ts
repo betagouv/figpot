@@ -112,10 +112,6 @@ export function translateComponentId(figmaComponentId: string, mapping: MappingT
   return penpotComponentId;
 }
 
-export function translateUuidAsObjectKey(uuid: string): string {
-  return uuid.replaceAll('-', '_');
-}
-
 export function formatPageRootFrameId(pageId: string) {
   return `${pageId}${rootFrameIdSuffix}`;
 }

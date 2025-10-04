@@ -2,7 +2,7 @@ import { TypeStyle } from '@figpot/src/clients/figma';
 import { LocalFont } from '@figpot/src/features/translators/text/font/local/localFont';
 import { extractFontFamilySuffix } from '@figpot/src/features/translators/text/properties/translateFontFamily';
 
-export function translateFontVariantId(localFont: LocalFont, fontName: TypeStyle, fontWeight: string): string | undefined {
+export function translateFontVariantId(localFont: LocalFont, fontName: TypeStyle, fontWeight: string): string {
   // check match by style and weight
   const style = fontName.italic ? 'italic' : 'normal';
   const variantWithStyleWeight = localFont.variants?.find((variant) => variant.weight === fontWeight && style);
@@ -26,4 +26,6 @@ export function translateFontVariantId(localFont: LocalFont, fontName: TypeStyle
   if (variantById !== undefined) {
     return variantById.id;
   }
+
+  return 'regular'; // Seems this default would be acceptable
 }

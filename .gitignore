@@ -36,6 +36,4 @@ yarn-error.log*
 !/src/clients/penpot/core/request.ts
 
 # local env files
-.env.local
-.env.test.local
-.env.jest.local
+*.local

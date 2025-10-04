@@ -1,5 +1,3 @@
-import assert from 'assert';
-
 import { HasLayoutTrait, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { transformGroupNodeLike } from '@figpot/src/features/transformers/transformGroupNode';
 import { transformSceneNode } from '@figpot/src/features/transformers/transformSceneNode';
@@ -7,6 +5,7 @@ import { translateId } from '@figpot/src/features/translators/translateId';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { Uuid } from '@figpot/src/models/entities/penpot/traits/uuid';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { cumulateNodeTransforms, isTransformedNode } from '@figpot/src/utils/matrix';
 
 export function translateChild(
@@ -24,11 +23,12 @@ export function translateChild(
   const penpotNode = transformSceneNode(registry, figmaChild, closestFigmaFrameId, childNodeTransform);
   const penpotNodeId = translateId(figmaChild.id, registry.getMapping());
 
-  penpotNode.id = penpotNodeId;
-  penpotNode.parentId = translateId(figmaParentId, registry.getMapping());
-  penpotNode.frameId = translateId(closestFigmaFrameId, registry.getMapping());
-
-  return penpotNode;
+  return {
+    ...penpotNode,
+    id: penpotNodeId,
+    parentId: translateId(figmaParentId, registry.getMapping()),
+    frameId: translateId(closestFigmaFrameId, registry.getMapping()),
+  } as PenpotNode; // Have to cast due to all unions
 }
 
 export function translateChildren(

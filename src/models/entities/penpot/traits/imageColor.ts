@@ -4,8 +4,8 @@ export type ImageColor = {
   name?: string;
   width: number;
   height: number;
-  mtype?: string;
-  id?: Uuid;
+  mtype: string;
+  id: Uuid;
   keepAspectRatio?: boolean;
   dataUri?: string;
 };

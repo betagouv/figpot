@@ -1,5 +1,3 @@
-import assert from 'assert';
-
 import { Overrides } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
@@ -7,6 +5,7 @@ import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { SyncGroups } from '@figpot/src/models/entities/penpot/traits/syncGroups';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 export interface BoundVariableRegistry {
   getColors(): Map<string, Color>;

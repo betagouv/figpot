@@ -1,10 +1,9 @@
-import assert from 'assert';
-
 import { CanvasNode } from '@figpot/src/clients/figma';
 import { transformChildrenWithParentId } from '@figpot/src/features/transformers/partials/transformChildren';
-import { formatPageRootFrameId, registerId, translateId, translateUuidAsObjectKey } from '@figpot/src/features/translators/translateId';
+import { formatPageRootFrameId, registerId, translateId } from '@figpot/src/features/translators/translateId';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { PageRegistry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { rgbToHex } from '@figpot/src/utils/color';
 import { neutralTransform } from '@figpot/src/utils/matrix';
 
@@ -25,11 +24,9 @@ export function transformPageNode(registry: PageRegistry, figmaNode: CanvasNode)
   const page: PenpotPage = {
     id: penpotPageId,
     name: figmaNode.name,
-    options: {
-      background: rgbToHex(figmaNode.backgroundColor),
-    },
+    background: rgbToHex(figmaNode.backgroundColor),
     objects: {
-      [translateUuidAsObjectKey(penpotRootFrameId)]: {
+      [penpotRootFrameId]: {
         id: penpotRootFrameId,
         parentId: penpotRootFrameId,
         frameId: penpotRootFrameId,
@@ -104,7 +101,7 @@ export function transformPageNode(registry: PageRegistry, figmaNode: CanvasNode)
   for (const [_, penpotPageNode] of registry.getNodes()) {
     assert(penpotPageNode.id); // It would mean we forget to translate it in a specific node type
 
-    page.objects[translateUuidAsObjectKey(penpotPageNode.id)] = penpotPageNode;
+    page.objects[penpotPageNode.id] = penpotPageNode;
   }
 
   return page;

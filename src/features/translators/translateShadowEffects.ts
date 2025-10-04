@@ -1,10 +1,9 @@
-import assert from 'assert';
-
 import { DropShadowEffect, Effect, InnerShadowEffect } from '@figpot/src/clients/figma';
 import { translateBoundVariables } from '@figpot/src/features/translators/translateBoundVariables';
 import { translateId } from '@figpot/src/features/translators/translateId';
 import { Shadow, ShadowStyle } from '@figpot/src/models/entities/penpot/traits/shadow';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { rgbToHex } from '@figpot/src/utils/color';
 
 export function translateShadowEffect(registry: AbstractRegistry, effect: Effect): Shadow | undefined {

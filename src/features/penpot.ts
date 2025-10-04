@@ -1,8 +1,13 @@
-import assert from 'assert';
+import svgPathParser from 'svg-path-parser';
 
 import { PostCommandGetFileResponse } from '@figpot/src/clients/penpot';
-import { formatPageRootFrameId, rootFrameId, translateUuidAsObjectKey } from '@figpot/src/features/translators/translateId';
+import { formatPageRootFrameId, rootFrameId } from '@figpot/src/features/translators/translateId';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
+
+import { translateNonRotatedCommands } from './translators/vectors/translateNonRotatedCommands';
+
+const { parseSVG } = svgPathParser;
 
 export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): PenpotDocument {
   assert(hostedTree.data);
@@ -19,7 +24,7 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
   for (const [, page] of Object.entries(pagesIndex)) {
     // To avoid collission about Penpot fixed root frame IDs for each page we adjust
     // the name here so it will match the transformation done from Figma
-    const rootFrameKey = translateUuidAsObjectKey(rootFrameId);
+    const rootFrameKey = rootFrameId;
     const rootFrameNode = page.objects[rootFrameKey];
 
     assert(rootFrameNode); // Not having the root frame for this page would be abnormal
@@ -31,7 +36,7 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
     rootFrameNode.frameId = newRootFrameNodeId;
 
     // To go fully with this logic, also change the object key
-    page.objects[translateUuidAsObjectKey(newRootFrameNodeId)] = rootFrameNode;
+    page.objects[newRootFrameNodeId] = rootFrameNode;
     delete page.objects[rootFrameKey];
 
     // Then manage the rest of the logic
@@ -44,16 +49,6 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
         object.touched = object.touched.sort();
       }
 
-      // There is an issue when getting layout properties from the backend, there is a wrong case formatting due to close uppercases
-      if ('layoutItemHsizing' in object) {
-        (object as any).layoutItemHSizing = object.layoutItemHsizing;
-        delete object.layoutItemHsizing;
-      }
-      if ('layoutItemVsizing' in object) {
-        (object as any).layoutItemVSizing = object.layoutItemVsizing;
-        delete object.layoutItemVsizing;
-      }
-
       if (object.type === 'text') {
         // From the UI this is passed with all position for each texts, it would be really difficult to calculate it
         // on our own. Hopefully they are not required for the text to be correctly created, so ignoring it :)
@@ -64,6 +59,15 @@ export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): Pen
             // Remove a random ID no provided at creation but present when fetching paragraph children (seems not important)
             delete textChild.key;
           }
+        }
+      } else if (object.type === 'path') {
+        // The new Penpot API is no longer returning an array of commands but instead the inline SVG path
+        // We cannot compare it directly with the inline Figma SVG path provided due to logic of calculation, so instead
+        // translating from here also to get same things for comparaison (transformed tree has to use commands, it cannot pushes inline path)
+        if (typeof object.content === 'string' && (object.content as string).length > 0 && (object.content as string)[0] === 'M') {
+          const normalizedPaths = parseSVG(object.content);
+
+          object.content = translateNonRotatedCommands(normalizedPaths, 0, 0);
         }
       }
     }

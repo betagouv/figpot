@@ -1,6 +1,5 @@
-import assert from 'assert';
-
 import { TypeStyle } from '@figpot/src/clients/figma';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 // Extract `ExtraLight` from `OpenSans-ExtraLight` or `Open Sans-Extra Light` for example
 export function extractFontFamilySuffix(fontName: Pick<TypeStyle, 'fontPostScriptName' | 'fontFamily'>): string {

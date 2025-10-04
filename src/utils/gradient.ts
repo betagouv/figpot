@@ -1,6 +1,5 @@
-import assert from 'assert';
-
 import { Transform, Vector } from '@figpot/src/clients/figma';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { applyMatrixToPoint, matrixInvert } from '@figpot/src/utils/matrix';
 
 function calculateRadialGradientEndPoint(rotation: number, center: number[], radius: number[]): [number, number] {

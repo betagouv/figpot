@@ -1,5 +1,4 @@
 import { checkbox, input, select } from '@inquirer/prompts';
-import assert from 'assert';
 
 import {
   ErrorResponsePayloadWithErrorBoolean,
@@ -18,6 +17,7 @@ import {
   getTeamProjects,
 } from '@figpot/src/clients/figma';
 import { DocumentOptionsType, ExcludePatternsType, ReplaceFontPatternType } from '@figpot/src/features/document';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 export type FigmaDefinedTypography = {
   id: LocalVariable['id'];
@@ -132,7 +132,7 @@ export async function retrieveColors(documentId: string): Promise<FigmaDefinedCo
   } catch (error) {
     const body = (error as unknown as any).body as ErrorResponsePayloadWithErrorBoolean;
 
-    if (body.status === 403 && body.message.includes('files:read')) {
+    if (body.status === 403 && body.message.includes('file_variables:read')) {
       console.warn(
         `exact color variables names won't be transferred since Figma requires the most expensive plan just to get variables you defined (Enterprise plan you seem to not have)...`
       );

@@ -23,8 +23,8 @@ This library is a Figma to Penpot converter and synchronizer, it will fit your n
 
 Prepare the minimal information:
 
-1. Open your [Figma](https://www.figma.com/files/) document inside the browser and copy its identifier. _(For `https://www.figma.com/design/CptbnRHeDv3pzOai91abcd/` the ID is `CptbnRHeDv3pzOai91abcd`)_
-2. Open [Penpot](https://design.penpot.app/) and create an empty file, and copy its identifier. _(For `https://design.penpot.app/#/workspace/xxxxx/3d04e89b-bff0-8115-8004-bc14b0d50123?page-id=yyyyy` the ID is `3d04e89b-bff0-8115-8004-bc14b0d50123`)_
+1. Open your [Figma](https://www.figma.com/files/) document inside the browser and copy its identifier _(for `https://www.figma.com/design/CptbnRHeDv3pzOai91abcd/` the ID is `CptbnRHeDv3pzOai91abcd`)_
+2. Open [Penpot](https://design.penpot.app/) and create an empty file, and copy its identifier _(for `https://design.penpot.app/#/workspace/xxxxx/3d04e89b-bff0-8115-8004-bc14b0d50123?page-id=yyyyy` the ID is `3d04e89b-bff0-8115-8004-bc14b0d50123`)_
 
 Make sure to have [Node.js](https://nodejs.org/) installed and simply run:
 
@@ -49,14 +49,14 @@ If you intend to perform synchronizations from a new machine, or from a server t
 
 It's possible to prefill some environment variables to avoid typing information each time:
 
-- `FIGMA_ACCESS_TOKEN` _(the token can be created from your account settings under `Personal access tokens` section)_
+- `FIGMA_ACCESS_TOKEN` _(the token can be created from your account settings under `Personal access tokens` section, with **read-only** scopes like `File content, File metadata, Library assets, Library content, Projects, Team library content`)_
 - `PENPOT_ACCESS_TOKEN` _(the token can be created from your account settings under `Access tokens` tab)_
 - `PENPOT_USER_EMAIL` _(email used for your account)_
 - `PENPOT_USER_PASSWORD` _(password used for your account)_
 
 Optional ones:
 
-- `PENPOT_BASE_URL` _(by default it's `https://design.penpot.app/` but it has to be changed in case you use a custom Penpot instance)_
+- `PENPOT_BASE_URL` _(by default it's `https://design.penpot.app` but it has to be changed in case you use a custom Penpot instance)_
 
 #### Warnings
 
@@ -153,6 +153,14 @@ Currently when you convert a Figma file with `figpot`, all instances of remote c
 
 It may be implemented in the future, but it would require all expected files to be synchronized first, and the "binding operation" would appear after. This because Figma allows bidirectional dependencies ("file A" may rely on "file B" components, and "file B" may rely on "file A" components).
 
+### How to manage Penpot error `referential-integrity`?
+
+When pushing modifications to Penpot we have to chunk them in multiple requests due to their server maximum constraints. For each request Penpot servers will take the entire file state and check its validity (which makes sense), but unfortunately since the release of variants inside Penpot, we have operations in a chunk that may need some other in a following chunk. For this, the server will throw an error about integrity issue.
+
+We did not find for now an ordering of operations that is passing for huge files with variants. So if you are also facing this, we provide the parameter `--no-server-validation` to ask the Penpot server to not check for integrity. Since the file is new, there is no risk using it.
+
+Note you can omit using this parameter after a first complete synchronization, because probably your next differences to push won't trigger integrity failure due to interconnected operations.
+
 ### How to set up a recurrent synchronization?
 
 This library is not intended to do real time synchronization, and usually almost real time synchronization is not even needed.
@@ -204,7 +212,7 @@ npm run cli document synchronize --- -d CptbnRHeDv3pzOai91abcd:3d04e89b-bff0-811
 
 **Do not use the default Penpot production instance (`https://design.penpot.app/`) while developing!** It would consume their resources whereas they allow anyone to play inside their staging environment `https://design.penpot.dev/` (this can be configured through the environment variable `PENPOT_BASE_URL`). _Also it's possible to use your own local Penpot instance but I feel it's overkill if you are not facing a mysterious issue you have to debug (see https://help.penpot.app/technical-guide/getting-started/#install-with-docker)._
 
-### Testing
+### Unit testing
 
 A lot of tests are missing in the current version but you may find some that can be run with:
 
@@ -213,6 +221,13 @@ npm run jest --- --ci --passWithNoTests "./src/features/document.spec.ts"
 ```
 
 It would be great while contributing to mimic what's done inside `document.spec.ts` with the input tree and the output tree to confirm what you are developing or fixing is working. Don't forget to share the Figma file you based your work on (either with a public link or with a Figma binary export), it allows us to reproduce it on own hand.
+
+### Local testing in another folder
+
+If you want to improve `figpot` and test it in a specific folder of your computer the easiest is:
+
+1. In your local `figpot` repository, run: `npm link`
+2. Wherever you want on your computer you should be able to run `figpot document synchronize...` _(if `figpot` command if not found, maybe you are missing the Node.js binaries folder in your `PATH` environment variable)_
 
 ### Debugging
 

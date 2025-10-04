@@ -19,8 +19,8 @@ export function transformSceneNode(
   figmaNode: SubcanvasNode,
   closestFigmaFrameId: string,
   figmaNodeTransform: Transform
-): PenpotNode {
-  let penpotNode: PenpotNode | undefined;
+): Omit<PenpotNode, 'id'> {
+  let penpotNode: Omit<PenpotNode, 'id'> | undefined;
 
   switch (figmaNode.type) {
     case 'RECTANGLE':

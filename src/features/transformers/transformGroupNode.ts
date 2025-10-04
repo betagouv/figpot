@@ -13,7 +13,7 @@ export function transformGroupNode(
   node: GroupNode,
   closestFigmaFrameId: string,
   figmaNodeTransform: Transform
-): GroupShape {
+): Omit<GroupShape, 'id'> {
   const childrenShapes = transformChildren(registry, node, closestFigmaFrameId, figmaNodeTransform);
 
   return {
@@ -24,7 +24,11 @@ export function transformGroupNode(
   };
 }
 
-export function transformGroupNodeLike(registry: AbstractRegistry, node: HasLayoutTrait & IsLayerTrait, figmaNodeTransform: Transform): GroupShape {
+export function transformGroupNodeLike(
+  registry: AbstractRegistry,
+  node: HasLayoutTrait & IsLayerTrait,
+  figmaNodeTransform: Transform
+): Omit<GroupShape, 'id'> {
   return {
     type: 'group',
     name: node.name,

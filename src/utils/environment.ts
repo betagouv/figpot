@@ -21,7 +21,10 @@ export async function ensureAccessTokens(prompting: boolean = true) {
 
   if (!result.success) {
     if (prompting) {
-      const figmaAccessToken = await password({ message: 'What is your Figma access token (can be created from your Figma account)?' });
+      const figmaAccessToken = await password({
+        message:
+          'What is your Figma access token (can be created from your Figma account, with read-only scopes `File content, File metadata, Library assets, Library content, Projects, Team library content`)?',
+      });
       const penpotAccessToken = await password({ message: 'What is your Penpot access token (can be created from your Penpot account)?' });
 
       config.figmaAccessToken = figmaAccessToken;

@@ -25,7 +25,7 @@ export type ShapeGeomAttributes = {
 };
 
 export type ShapeBaseAttributes = {
-  id?: Uuid;
+  id: Uuid;
   name?: string;
   type?: 'frame' | 'group' | 'bool' | 'rect' | 'path' | 'text' | 'circle' | 'svg-raw' | 'image' | 'component' | 'instance';
   selrect?: Selrect;
@@ -45,6 +45,9 @@ export type ShapeAttributes = {
   componentFile?: string;
   componentRoot?: boolean;
   mainInstance?: boolean;
+  isVariantContainer?: boolean;
+  variantId?: string;
+  variantName?: string;
   remoteSynced?: boolean;
   shapeRef?: string;
   selrect?: Selrect;
@@ -61,8 +64,6 @@ export type ShapeAttributes = {
   constraintsH?: ConstraintH;
   constraintsV?: ConstraintV;
   fixedScroll?: boolean;
-  rx?: number;
-  ry?: number;
   r1?: number;
   r2?: number;
   r3?: number;

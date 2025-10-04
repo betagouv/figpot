@@ -1,7 +1,4 @@
 import { confirm } from '@inquirer/prompts';
-import assert from 'assert';
-import { kebabCase } from 'change-case';
-import { camelCase } from 'change-case/keys';
 import fsSync from 'fs';
 import fs from 'fs/promises';
 import { glob } from 'glob';
@@ -9,8 +6,8 @@ import graphlib, { Graph } from 'graphlib';
 import { mimeData } from 'human-filetypes';
 import { parse, toSeconds } from 'iso8601-duration';
 import arrayDiff from 'microdiff';
+import { Request, chromium } from 'patchright';
 import path from 'path';
-import { Request, chromium } from 'playwright';
 import setCookieParser from 'set-cookie-parser';
 import { parser } from 'stream-json';
 import { Digraph, toDot } from 'ts-graphviz';
@@ -19,14 +16,8 @@ import { z } from 'zod';
 
 import { GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
 import { OpenAPI as PenpotClientSettings, postCommandGetFileObjectThumbnails, postCommandGetFontVariants } from '@figpot/src/clients/penpot';
-import {
-  PostCommandGetFileResponse,
-  appCommonFilesChanges$change,
-  appCommonTypesTypography$typography,
-  postCommandGetFile,
-  postCommandRenameFile,
-  postCommandUpdateFile,
-} from '@figpot/src/clients/penpot';
+import { PostCommandGetFileResponse, postCommandGetFile, postCommandRenameFile, postCommandUpdateFile } from '@figpot/src/clients/penpot';
+import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/workaround';
 import {
   FigmaDefinedColor,
   FigmaDefinedTypography,
@@ -48,6 +39,7 @@ import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot/src/utils/comparaison';
 import { config } from '@figpot/src/utils/environment';
 import { downloadFile, openAsBlob, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
@@ -62,7 +54,7 @@ export const mediasFolderPath = path.resolve(__root_dirname, './data/medias/');
 export const FigmaToPenpotMapping = z.map(z.string(), z.string());
 export type FigmaToPenpotMappingType = z.infer<typeof FigmaToPenpotMapping>;
 
-export type LitePageNode = Pick<PenpotDocument['data']['pagesIndex'][0], 'id' | 'name' | 'options'> & { _apiType: 'page' };
+export type LitePageNode = Pick<PenpotDocument['data']['pagesIndex'][0], 'id' | 'name' | 'background'> & { _apiType: 'page' };
 export type LiteNode = PenpotNode & {
   _apiType: 'node';
   _realPageParentId: string | null; // Needed since main frame inside a page has as parent itself (which complicates things for our graph usage)
@@ -100,6 +92,7 @@ export type ServerValidationType = z.infer<typeof ServerValidation>;
 export const Metadata = z.object({
   figmaDocumentId: z.string(),
   figmaLastModified: z.string().pipe(z.coerce.date()),
+  penpotTeamId: z.string(),
   penpotProjectId: z.string(),
   penpotDocumentId: z.string(),
   penpotLastModified: z.string().pipe(z.coerce.date()),
@@ -119,6 +112,13 @@ export const RetrieveOptions = z.object({
   syncMappingWithGit: z.boolean(),
 });
 export type RetrieveOptionsType = z.infer<typeof RetrieveOptions>;
+
+export type ChunkGroupMetadata = {
+  _groupId?: string;
+  _lastOfTheGroup?: boolean;
+};
+
+export type OperationWithChunkGroupMetadata = appCommonFilesChanges$changeWithoutUnknown & ChunkGroupMetadata;
 
 export function getFigmaDocumentPath(documentId: string) {
   return path.resolve(documentsFolderPath, `figma_${documentId}`);
@@ -237,6 +237,7 @@ export async function restoreMeta(figmaDocumentId: string, penpotDocumentId: str
     meta = {
       figmaDocumentId: figmaDocumentId,
       figmaLastModified: new Date(0),
+      penpotTeamId: 'not_known_yet',
       penpotProjectId: 'not_known_yet',
       penpotDocumentId: 'not_known_yet',
       penpotLastModified: new Date(0),
@@ -524,33 +525,49 @@ export async function transform(options: TransformOptionsType) {
 
 export interface Differences {
   newDocumentName?: string;
-  newTreeOperations: appCommonFilesChanges$change[];
+  newTreeOperations: OperationWithChunkGroupMetadata[];
   newMedias: string[];
   oldThumbnails: string[];
 }
 
 export function pushOperationsWithOrderingLogic(
-  normalOperations: appCommonFilesChanges$change[],
-  delayedOperations: appCommonFilesChanges$change[],
-  delayedForChildrenOperations: appCommonFilesChanges$change[],
-  operationToAddress: appCommonFilesChanges$change
+  normalOperations: appCommonFilesChanges$changeWithoutUnknown[],
+  delayedOperations: appCommonFilesChanges$changeWithoutUnknown[],
+  delayedForChildrenOperations: appCommonFilesChanges$changeWithoutUnknown[],
+  operationToAddress: appCommonFilesChanges$changeWithoutUnknown
 ) {
   if (operationToAddress.type === 'mod-obj') {
     // A shapes modification may fail with `referential-integrity` error, it needs to be performed once the children are set up
     // We have to deduplicate the logic by extracting this
-    const suboperationToSwitch = operationToAddress.operations.findIndex((suboperation) => {
-      return suboperation.type === 'set' && suboperation.attr === 'shapes' && (suboperation.val as string[]).length > 0;
+    const suboperationToMutate = operationToAddress.operations.findIndex((suboperation) => {
+      return suboperation.type === 'assign' && Array.isArray(suboperation.value.shapes) && (suboperation.value.shapes as string[]).length > 0;
     });
 
-    if (suboperationToSwitch !== -1) {
+    if (suboperationToMutate !== -1) {
+      const suboperationObject = operationToAddress.operations[suboperationToMutate];
+
+      assert(suboperationObject.type === 'assign');
+
       delayedForChildrenOperations.push({
         type: operationToAddress.type,
         id: operationToAddress.id,
         pageId: operationToAddress.pageId,
-        operations: [operationToAddress.operations[suboperationToSwitch]],
+        operations: [
+          {
+            type: 'assign',
+            value: {
+              shapes: suboperationObject.value.shapes,
+            },
+          },
+        ],
       });
 
-      operationToAddress.operations.splice(suboperationToSwitch, 1);
+      // Remove this from the current operation, or the current operation if only shapes were modified
+      if (Object.keys(suboperationObject.value).length > 1) {
+        delete suboperationObject.value.shapes;
+      } else {
+        operationToAddress.operations.splice(suboperationToMutate, 1);
+      }
     }
 
     // If no more operation for the original one we can skip it because if `pageId` has changed it would be handled by the second one
@@ -558,21 +575,22 @@ export function pushOperationsWithOrderingLogic(
       normalOperations.push(operationToAddress);
     }
   } else if (operationToAddress.type === 'add-obj') {
-    if ((operationToAddress.obj as any).shapes && (operationToAddress.obj as any).shapes.length > 0) {
+    if ('shapes' in operationToAddress.obj && operationToAddress.obj.shapes && operationToAddress.obj.shapes.length > 0) {
       delayedForChildrenOperations.push({
         type: 'mod-obj',
         id: operationToAddress.id,
         pageId: operationToAddress.pageId,
         operations: [
           {
-            type: 'set',
-            attr: 'shapes',
-            val: (operationToAddress.obj as any).shapes,
+            type: 'assign',
+            value: {
+              shapes: operationToAddress.obj.shapes,
+            },
           },
         ],
       });
 
-      (operationToAddress.obj as any).shapes = []; // Set the initial one sinc erequired
+      operationToAddress.obj.shapes = []; // Set the initial one since required
     }
 
     normalOperations.push(operationToAddress);
@@ -582,44 +600,58 @@ export function pushOperationsWithOrderingLogic(
 }
 
 export function delayBindingOperation(
-  delayedOperations: appCommonFilesChanges$change[],
-  nodeId?: string,
+  delayedOperations: appCommonFilesChanges$changeWithoutUnknown[],
+  nodeId: string,
   pageId?: string,
   componentId?: string,
   componentFile?: string,
   componentRoot?: boolean,
   mainInstance?: boolean,
+  isVariantContainer?: boolean,
+  variantId?: string,
+  variantName?: string,
   shapeRef?: string
 ) {
   // Sometimes the API requires the targeted node by `shapeRef` to be created before (sometimes not)
   // So we decided to delay all bindings to be sure locally all main component instances exist
   // Note: maybe it happens since we chunk operations for large documents
   // Note: we have to delay all component stuff otherwise the API invalidates the input
-  const delayedOperation: appCommonFilesChanges$change = {
-    type: 'mod-obj',
-    id: nodeId,
-    pageId: pageId,
-    operations: [],
-  };
+
+  // Since types are dynamic based on "type" property we cannot easily manipulate them once assigned elsewhere, so reusing the value type that is not totally defined
+  const delayedAssignValues: { [key: string]: unknown } = {};
 
   // A main instance has no `shapeRef`, and the API refuses it if `null/undefined` so using conditions to avoid triggering a backend calculation
   if (componentId !== undefined) {
-    delayedOperation.operations.push({ type: 'set', attr: kebabCase('componentId'), val: componentId });
+    delayedAssignValues.componentId = componentId;
   }
   if (componentFile !== undefined) {
-    delayedOperation.operations.push({ type: 'set', attr: kebabCase('componentFile'), val: componentFile });
+    delayedAssignValues.componentFile = componentFile;
   }
   if (componentRoot !== undefined) {
-    delayedOperation.operations.push({ type: 'set', attr: kebabCase('componentRoot'), val: componentRoot });
+    delayedAssignValues.componentRoot = componentRoot;
   }
   if (mainInstance !== undefined) {
-    delayedOperation.operations.push({ type: 'set', attr: kebabCase('mainInstance'), val: mainInstance });
+    delayedAssignValues.mainInstance = mainInstance;
+  }
+  if (isVariantContainer !== undefined) {
+    delayedAssignValues.isVariantContainer = isVariantContainer;
+  }
+  if (variantId !== undefined) {
+    delayedAssignValues.variantId = variantId;
+  }
+  if (variantName !== undefined) {
+    delayedAssignValues.variantName = variantName;
   }
   if (shapeRef !== undefined) {
-    delayedOperation.operations.push({ type: 'set', attr: kebabCase('shapeRef'), val: shapeRef });
+    delayedAssignValues.shapeRef = shapeRef;
   }
 
-  delayedOperations.push(delayedOperation);
+  delayedOperations.push({
+    type: 'mod-obj',
+    id: nodeId,
+    pageId: pageId,
+    operations: [{ type: 'assign', value: delayedAssignValues }],
+  });
 }
 
 export function formatThumbnailId(documentId: string, pageId: string, objectId: string, objectType: 'component' | 'frame') {
@@ -639,9 +671,9 @@ export function markThumbnailToBeKept(
 }
 
 export function performBasicNodeCreation(
-  normalOperations: appCommonFilesChanges$change[],
-  delayedOperations: appCommonFilesChanges$change[],
-  delayedForChildrenOperations: appCommonFilesChanges$change[],
+  normalOperations: appCommonFilesChanges$changeWithoutUnknown[],
+  delayedOperations: appCommonFilesChanges$changeWithoutUnknown[],
+  delayedForChildrenOperations: appCommonFilesChanges$changeWithoutUnknown[],
   newMediasToUpload: string[],
   itemAfter: LiteNode,
   previousNodeIdBeforeMove?: string
@@ -657,6 +689,9 @@ export function performBasicNodeCreation(
     componentFile,
     componentRoot,
     mainInstance,
+    isVariantContainer,
+    variantId,
+    variantName,
     shapeRef,
     ...propertiesObj
   } = itemAfter; // Instruction to omit some properties
@@ -664,22 +699,54 @@ export function performBasicNodeCreation(
   assert(itemAfter.parentId);
   assert(itemAfter.frameId);
 
-  const operation: appCommonFilesChanges$change = {
+  const objId = itemAfter.id; // Penpot allows forcing the ID at creation
+  const objPageId = itemAfter._realPageParentId || _pageId;
+  const objFrameId = isPageRootFrameFromId(itemAfter.frameId) ? rootFrameId : itemAfter.frameId;
+  const objParentId = isPageRootFrameFromId(itemAfter.parentId) ? rootFrameId : itemAfter.parentId;
+
+  const operation: appCommonFilesChanges$changeWithoutUnknown = {
     type: 'add-obj',
-    id: itemAfter.id, // Penpot allows forcing the ID at creation
-    pageId: itemAfter._realPageParentId || _pageId,
-    frameId: isPageRootFrameFromId(itemAfter.frameId) ? rootFrameId : itemAfter.frameId,
-    parentId: isPageRootFrameFromId(itemAfter.parentId) ? rootFrameId : itemAfter.parentId,
+    id: objId,
+    pageId: objPageId,
+    frameId: objFrameId,
+    parentId: objParentId,
     obj: {
       ...propertiesObj,
-      oldId: previousNodeIdBeforeMove, // Can be used by the Penpot internals, specific to operations when an object is moved across pages (with cut/paste)
+      ...({
+        oldId: previousNodeIdBeforeMove, // Can be used by the Penpot internals, specific to operations when an object is moved across pages (with cut/paste)
+      } as any), // TODO: it was used before API types update, not sure it should be removed now
+      // For whatever reason the new API requires setting again the following already specified above
+      id: objId,
+      frameId: objFrameId,
+      parentId: objParentId,
     },
   };
 
   pushOperationsWithOrderingLogic(normalOperations, delayedOperations, delayedForChildrenOperations, operation);
 
-  if (componentId || componentFile || componentRoot || mainInstance || shapeRef) {
-    delayBindingOperation(delayedOperations, id, _pageId, componentId, componentFile, componentRoot, mainInstance, shapeRef);
+  if (
+    componentId ||
+    componentFile ||
+    componentRoot !== undefined ||
+    mainInstance !== undefined ||
+    isVariantContainer !== undefined ||
+    variantId ||
+    variantName ||
+    shapeRef
+  ) {
+    delayBindingOperation(
+      delayedOperations,
+      id,
+      _pageId,
+      componentId,
+      componentFile,
+      componentRoot,
+      mainInstance,
+      isVariantContainer,
+      variantId,
+      variantName,
+      shapeRef
+    );
   }
 
   // Detect new images
@@ -709,7 +776,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
       _apiType: 'page',
       id: currentPageNode.id,
       name: currentPageNode.name,
-      options: currentPageNode.options,
+      background: currentPageNode.background,
     } as LitePageNode);
 
     for (const currentNode of Object.values(currentPageNode.objects)) {
@@ -762,7 +829,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
       _apiType: 'page',
       id: newPageNode.id,
       name: newPageNode.name,
-      options: newPageNode.options,
+      background: newPageNode.background,
     };
 
     flattenNewGlobalTree.set(litePageNode.id, litePageNode);
@@ -810,9 +877,15 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
     }
   }
 
+  const afterVariantsIds: string[] = [];
+
   if (newTree.data.components) {
     for (const newComponent of Object.values(newTree.data.components)) {
       assert(newComponent.id);
+
+      if (newComponent.variantId) {
+        afterVariantsIds.push(newComponent.variantId);
+      }
 
       flattenNewGlobalTree.set(newComponent.id, {
         _apiType: 'component',
@@ -825,7 +898,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 
   console.log(`[nodes differences] ${formatDiffResultLog(diffResult)}`);
 
-  const operations: appCommonFilesChanges$change[] = [];
+  const operations: OperationWithChunkGroupMetadata[] = [];
   const thumbnailsToKeep: Set<string> = new Set(); // Thumbails are only done on top frame for each tree branch (page deletion does not trigger thumbnail removal)
   const delayedOperations: typeof operations = [];
 
@@ -863,15 +936,26 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           type: 'add-typography',
           typography: {
             ...propertiesObj,
-          } as appCommonTypesTypography$typography, // Other types are unknown, we are fine here if the API triggers an error
+          },
         });
       } else if (item.after._apiType === 'component') {
-        const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
+        const { _apiType, variantId, variantProperties, ...propertiesObj } = item.after; // Instruction to omit some properties
 
         operations.push({
           type: 'add-component',
-          ...(propertiesObj as any), // Types do not match due to OpenAPI schema, which is also missing `mainInstancePage/mainInstanceId`
+          ...propertiesObj,
         });
+
+        // `component` changes have priority over all `obj` changes
+        // but for variants the node has to exist before binding it, so we delay this binding
+        if (variantId || variantProperties) {
+          delayedOperations.push({
+            type: 'mod-component',
+            id: propertiesObj.id,
+            variantId: variantId,
+            variantProperties: variantProperties,
+          });
+        }
       }
     } else if (item.state === 'updated') {
       if (item.after._apiType === 'color') {
@@ -890,20 +974,25 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           type: 'mod-typography',
           typography: {
             ...propertiesObj,
-          } as appCommonTypesTypography$typography, // Other types are unknown, we are fine here if the API triggers an error
+          },
         });
       } else if (item.after._apiType === 'component') {
-        const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
+        const { _apiType, variantId, variantProperties, ...propertiesObj } = item.after; // Instruction to omit some properties
 
         operations.push({
           type: 'mod-component',
-          id: item.after.id,
-          name: item.after.name,
-          ...{
-            // Needed due to missing type property
-            path: item.after.path,
-          },
+          ...propertiesObj,
         });
+
+        // As for the `add-component` change we have to delay the bindings since variant node has to exist first
+        if (variantId || variantProperties) {
+          delayedOperations.push({
+            type: 'mod-component',
+            id: propertiesObj.id,
+            variantId: variantId,
+            variantProperties: variantProperties,
+          });
+        }
       }
     }
   }
@@ -927,19 +1016,19 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
         node = item.after;
       }
 
-      if (node && node._apiType === 'node' && node.type === 'frame' && !isPageRootFrameFromId(node.id as string)) {
+      if (node && node._apiType === 'node' && node.type === 'frame' && !isPageRootFrameFromId(node.id)) {
         foundTopBranchFrame = true;
         topBranchFrame = node;
       }
     }
 
-    const nodeOperationsAfterChildrenAreProcessed: appCommonFilesChanges$change[] = [];
+    const nodeOperationsAfterChildrenAreProcessed: appCommonFilesChanges$changeWithoutUnknown[] = [];
 
     if (item.state === 'added') {
       assert(item.after.id);
 
       if (item.after._apiType === 'page') {
-        const { _apiType, id, name, options } = item.after; // Instruction to omit some properties
+        const { _apiType, id, name, background } = item.after; // Instruction to omit some properties
 
         operations.push({
           type: 'add-page',
@@ -947,35 +1036,32 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           name: name,
         });
 
-        // The API refuses to take the `page` property directly with `add-page`, so hacking a bit
-        for (const [optionKey, optionValue] of Object.entries(options)) {
+        // The background cannot be set at creation
+        if (background) {
           operations.push({
-            type: 'set-option',
-            pageId: id,
-            option: kebabCase(optionKey), // Since it's a value we make sure to respect backend keywords logic
-            value: optionValue,
+            type: 'mod-page',
+            id: id,
+            background: background,
           });
         }
       } else if (item.after._apiType === 'node') {
         if (isPageRootFrame(item.after)) {
           const { _apiType, _realPageParentId, _pageId, frameId, id, parentId, ...propertiesObj } = item.after; // Instruction to omit some properties
 
-          // The root frame is automatically created with its wrapping page (the iteration before this one normally)
-          // So we just need to apply modifications if needed
-          const operation: appCommonFilesChanges$change = {
+          // The root frame is automatically created with its wrapping page (the iteration before this one normally), so we just need to apply modifications if needed
+          // Note: root frame can only have its colors customized
+          const operation: appCommonFilesChanges$changeWithoutUnknown = {
             type: 'mod-obj',
             id: rootFrameId,
             pageId: _pageId,
-            operations: (Object.keys(propertiesObj) as (keyof typeof propertiesObj)[])
-              // No need to have the whole node differences patch logic since root frame can only have its colors customized
-              .filter((p) => p === 'fills')
-              .map((property) => {
-                return {
-                  type: 'set',
-                  attr: kebabCase(property), // Since it's a value we make sure to respect backend keywords logic
-                  val: propertiesObj[property],
-                };
-              }),
+            operations: [
+              {
+                type: 'assign',
+                value: {
+                  fills: propertiesObj.fills,
+                },
+              },
+            ],
           };
 
           pushOperationsWithOrderingLogic(operations, delayedOperations, nodeOperationsAfterChildrenAreProcessed, operation);
@@ -989,27 +1075,24 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           type: 'mod-page',
           id: item.after.id,
           name: item.after.name,
+          background: item.after.background,
         });
-
-        const { _apiType, id, name, ...propertiesObj } = item.after; // Instruction to omit some properties
-
-        for (const difference of item.differences) {
-          if (difference.path.length > 1 && difference.path[0] === 'options') {
-            const optionKey = difference.path[1] as keyof PenpotPage['options'];
-
-            operations.push({
-              type: 'set-option',
-              pageId: item.after.id,
-              option: kebabCase(optionKey), // Since it's a value we make sure to respect backend keywords logic
-              value:
-                // Checking the property removal, also check the path length since an array item removal will produce a `REMOVE` too
-                difference.type === 'REMOVE' && difference.path.length === 2 ? null : propertiesObj.options[optionKey],
-            });
-          }
-        }
       } else if (item.after._apiType === 'node') {
-        const { _apiType, _realPageParentId, _pageId, id, componentId, componentFile, componentRoot, mainInstance, shapeRef, ...propertiesObj } =
-          item.after; // Instruction to omit some properties
+        const {
+          _apiType,
+          _realPageParentId,
+          _pageId,
+          id,
+          componentId,
+          componentFile,
+          componentRoot,
+          mainInstance,
+          isVariantContainer,
+          variantId,
+          variantName,
+          shapeRef,
+          ...propertiesObj
+        } = item.after; // Instruction to omit some properties
 
         assert(id);
 
@@ -1083,28 +1166,25 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 
           const uniqueProperties = [...new Set(changedFirstLevelProperties)];
 
-          const operation: appCommonFilesChanges$change = {
+          const operation: appCommonFilesChanges$changeWithoutUnknown = {
             type: 'mod-obj',
             id: isPageRootFrameFromId(id) ? rootFrameId : id,
             pageId: _pageId,
-            operations: uniqueProperties.map((property) => {
-              // The `touched` property has a specific operation format
-              if (property === 'touched') {
-                return {
-                  type: 'set-touched',
-                  touched: propertiesObj.touched || null,
-                };
-              } else {
-                return {
-                  type: 'set',
-                  attr: kebabCase(property), // Since it's a value we make sure to respect backend keywords logic (otherwise we ended having 2 `transformInverse` (the initial one, and one from our update))
-                  val:
-                    (property === 'parentId' || property === 'frameId') && isPageRootFrameFromId(propertiesObj[property] as string)
-                      ? rootFrameId
-                      : propertiesObj[property],
-                };
-              }
-            }),
+            operations: [
+              {
+                type: 'assign',
+                value: Object.fromEntries(
+                  uniqueProperties.map((property) => {
+                    return [
+                      property,
+                      (property === 'parentId' || property === 'frameId') && isPageRootFrameFromId(propertiesObj[property] as string)
+                        ? rootFrameId
+                        : propertiesObj[property],
+                    ];
+                  })
+                ),
+              },
+            ],
           };
 
           pushOperationsWithOrderingLogic(operations, delayedOperations, nodeOperationsAfterChildrenAreProcessed, operation);
@@ -1115,9 +1195,24 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
               item.before.componentFile !== item.after.componentFile ||
               item.before.componentRoot !== item.after.componentRoot ||
               item.before.mainInstance !== item.after.mainInstance ||
+              item.before.isVariantContainer !== item.after.isVariantContainer ||
+              item.before.variantId !== item.after.variantId ||
+              item.before.variantName !== item.after.variantName ||
               item.before.shapeRef !== item.after.shapeRef)
           ) {
-            delayBindingOperation(delayedOperations, id, _pageId, componentId, componentFile, componentRoot, mainInstance, shapeRef);
+            delayBindingOperation(
+              delayedOperations,
+              id,
+              _pageId,
+              componentId,
+              componentFile,
+              componentRoot,
+              mainInstance,
+              isVariantContainer,
+              variantId,
+              variantName,
+              shapeRef
+            );
           }
         }
       }
@@ -1160,8 +1255,63 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 
   // The API expects some bindings to have all nodes created, so running them at the end
   // Note: cannot use `.push(...delayedOperations)` because for huge files it goes over JavaScript parameters length limit
+  //
+  // [IMPORTANT] Due to the Penpot variant validation on the entire tree, it requires some metadata to be set at the same time
+  // to have a valid tree. After manually testing what had to be grouped the strategy has been defined as:
+  // 1. List of variants IDS
+  // 2. Group by variant ID mandatory changes
+  //    * `mod-obj` with `variantId` being the variant ID (it's when we set `variantId` and `variantName`)
+  //    * `mod-obj` with `id` being the variant ID (it's when we set `isVariantContainer` on the variant wrapper (component set))
+  //    * `mod-component` with `variantId` being the variant ID (it's when we set `variantId` and `variantProperties` on the component definition)
+  // 3. A group cannot be splitted on more than a chunk
+  const variantOperations = new Map<string, typeof operations>();
+
   for (const delayedOperation of delayedOperations) {
-    operations.push(delayedOperation);
+    let foundVariantId: string | null = null;
+
+    // We browse this loop just once to at first separate what does not matter and what is
+    if (delayedOperation.type === 'mod-obj') {
+      const assignOperation = delayedOperation.operations.find((operation) => operation.type === 'assign');
+
+      if (assignOperation) {
+        assert(assignOperation.type === 'assign');
+
+        if (assignOperation.value.variantId && afterVariantsIds.includes(assignOperation.value.variantId as string)) {
+          foundVariantId = assignOperation.value.variantId as string;
+        } else if (delayedOperation.id && afterVariantsIds.includes(delayedOperation.id as string)) {
+          foundVariantId = delayedOperation.id as string;
+        }
+      }
+    } else if (
+      delayedOperation.type === 'mod-component' &&
+      (delayedOperation.variantId || delayedOperation.variantProperties) && // It should be safe since `variantProperties` won't be set without `variantId`
+      afterVariantsIds.includes(delayedOperation.variantId as string)
+    ) {
+      foundVariantId = delayedOperation.variantId as string;
+    }
+
+    if (foundVariantId) {
+      const registeredVariantOperations = variantOperations.get(foundVariantId);
+
+      if (!registeredVariantOperations) {
+        variantOperations.set(foundVariantId, [delayedOperation]);
+      } else {
+        registeredVariantOperations.push(delayedOperation);
+      }
+    } else {
+      operations.push(delayedOperation);
+    }
+  }
+
+  // Those grouped operations must be marked so the chunk logic knows when it's allowed to start a new chunk
+  for (const [variantId, currentVariantOperations] of variantOperations) {
+    for (const [operationIndex, operation] of currentVariantOperations.entries()) {
+      operations.push({
+        ...operation,
+        _groupId: variantId,
+        _lastOfTheGroup: operationIndex === currentVariantOperations.length - 1,
+      });
+    }
   }
 
   // Delete others (those should be orphan into the document now)
@@ -1260,9 +1410,6 @@ export async function compare(options: CompareOptionsType) {
       },
     });
 
-    // TODO: for now the response is kebab-case despite types, so forcing the conversion (ref: https://github.com/penpot/penpot/pull/4760#pullrequestreview-2125984653)
-    hostedDocument = camelCase(hostedDocument, Number.MAX_SAFE_INTEGER) as PostCommandGetFileResponse;
-
     const penpotDocumentFolderPath = getPenpotDocumentPath(document.figmaDocument, document.penpotDocument);
     await fs.mkdir(penpotDocumentFolderPath, { recursive: true });
 
@@ -1278,10 +1425,11 @@ export async function compare(options: CompareOptionsType) {
     // Use metadata for future usage
     // Note: `lastModified` and `pages` may have not much value since they are retrieved because the modifications are pushed
     // [WORKAROUND] We use transformed pages to fill the value so hydratation is based on pages after updates (otherwise it would work only after 2 stable synchronizations, which has no sense)
-    meta.penpotProjectId = hostedDocument.projectId as string;
-    meta.penpotDocumentId = hostedDocument.id as string;
-    meta.penpotLastModified = hostedDocument.modifiedAt as Date;
-    meta.penpotPages = (transformedDocument.data as PenpotDocument['data']).pages;
+    meta.penpotTeamId = (hostedDocument as any).teamId;
+    meta.penpotProjectId = hostedDocument.projectId;
+    meta.penpotDocumentId = hostedDocument.id;
+    meta.penpotLastModified = new Date(hostedDocument.modifiedAt);
+    meta.penpotPages = transformedDocument.data.pages;
     await saveMeta(document.figmaDocument, document.penpotDocument, meta);
   }
 }
@@ -1290,7 +1438,7 @@ export async function processOperationsChunk(
   figmaDocumentId: string,
   penpotDocumentId: string,
   differences: Differences,
-  currentChunk: appCommonFilesChanges$change[],
+  currentChunk: appCommonFilesChanges$changeWithoutUnknown[],
   chunkNumber: number,
   succeededOperations: number,
   serverValidation: boolean = true
@@ -1300,15 +1448,16 @@ export async function processOperationsChunk(
       `processing the modifications chunk [${chunkNumber}] containing ${currentChunk.length} operations (previously ${succeededOperations} done over a total of ${differences.newTreeOperations.length})`
     );
 
-    (await postCommandUpdateFile({
+    await postCommandUpdateFile({
       requestBody: {
         id: penpotDocumentId,
         revn: 0, // Required but does no block to use a default one
+        vern: 0, // Don't know what is it yet but it's required
         sessionId: '00000000-0000-0000-0000-000000000000', // It has to be UUID format, no matter the value for us
         changes: currentChunk,
         skipValidate: !serverValidation,
       },
-    })) as unknown; // We patched the response to avoid some processing
+    });
   } catch (error) {
     console.error(`it has failed while being processing the chunk [${chunkNumber}]`);
 
@@ -1339,6 +1488,7 @@ export async function processDifferences(
   serverValidation: boolean = true,
   prompting: boolean = true
 ) {
+  // Note: seeing the name change in the UI requires a browser page refresh
   if (differences.newDocumentName) {
     await postCommandRenameFile({
       requestBody: {
@@ -1452,13 +1602,27 @@ export async function processDifferences(
 
     let chunkNumber = 1;
     let currentChunkCount = 0;
-    let currentChunk: appCommonFilesChanges$change[] = [];
+    let currentChunk: appCommonFilesChanges$changeWithoutUnknown[] = [];
+    let currentGroupId: string | null = null;
+    let currentGroupCount: number = 0;
     let succeededOperations = 0;
-    for (const operation of differences.newTreeOperations) {
+    for (const { _groupId, _lastOfTheGroup, ...operation } of differences.newTreeOperations) {
       const encodedOperationLength = JSON.stringify(operation).length;
+
+      // Needed to avoid splitting operations that must be processed at the same time by the Penpot backend
+      currentGroupId = _groupId && _lastOfTheGroup !== undefined ? _groupId : null;
 
       // Take into account the `,` delimiter
       if (currentChunkCount + Math.max(currentChunk.length - 1, 0) + encodedOperationLength > remainingBodyBytes) {
+        let forwardedOperationsOnNextChunk: typeof currentChunk = [];
+
+        // If currently into a group that cannot be separated, we remove the ongoing ones to set them on the next chunk
+        // (being on the last item of the group is fine)
+        // Note: it's unlikely a group size would be bigger than the allowed chunk size
+        if (currentGroupId && _lastOfTheGroup === false) {
+          forwardedOperationsOnNextChunk = currentChunk.splice(-currentChunkCount);
+        }
+
         // Directly process the chunk to not calculate all of them
         await processOperationsChunk(
           figmaDocumentId,
@@ -1472,13 +1636,15 @@ export async function processDifferences(
 
         succeededOperations += currentChunk.length;
 
-        currentChunk = [];
-        currentChunkCount = 0;
+        // Starting a new chunk
+        currentChunk = [...forwardedOperationsOnNextChunk];
+        currentChunkCount = currentChunk.length;
         chunkNumber++;
       }
 
       currentChunk.push(operation);
       currentChunkCount += encodedOperationLength;
+      currentGroupCount = currentGroupId ? currentGroupCount + 1 : 0;
     }
 
     // The last chunk must be processed
@@ -1582,8 +1748,8 @@ export async function synchronize(options: SynchronizeOptionsType) {
   });
 }
 
-export function formatPenpotPageUrl(baseUrl: string, projectId: string, documentId: string, pageId: string): string {
-  return `${baseUrl}/#/workspace/${projectId}/${documentId}?page-id=${pageId}`;
+export function formatPenpotPageUrl(baseUrl: string, teamId: string, documentId: string, pageId: string): string {
+  return `${baseUrl}/#/workspace?team-id=${teamId}&file-id=${documentId}&page-id=${pageId}`;
 }
 
 export const HydrateOptions = z.object({
@@ -1632,13 +1798,23 @@ export async function hydrate(options: HydrateOptionsType) {
 
   const browser = await chromium.launch({
     executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
-    // headless: false, // Can help debugging
+    // [IMPORTANT] It has to be headful otherwise it won't pass the Cloudflare protection on their SaaS production
+    headless: false,
+    args: [
+      '--window-size=1,1', // It does not work as expected, `viewport` in the browser context must also be set (note there is no working way to minimize the window)
+    ],
   });
 
   try {
-    const browserContext = await browser.newContext();
-    const baseUrl = process.env.PENPOT_BASE_URL || 'https://design.penpot.app/';
+    const browserContext = await browser.newContext({
+      viewport: { width: 1, height: 1 }, // Since the window size won't take 1x1px, we make sure the viewport is, like that the user should not be tempted to interact with the page whereas nothing must be touched
+    });
+    const baseUrl = process.env.PENPOT_BASE_URL || 'https://design.penpot.app';
     const domain = new URL(baseUrl).host;
+
+    if (baseUrl.endsWith('/')) {
+      throw new Error(`the penpot base url must not end with "/" to avoid hydratation navigation issues`);
+    }
 
     await browserContext.addCookies(
       cookiesToSet.map((cookie) => {
@@ -1653,12 +1829,17 @@ export async function hydrate(options: HydrateOptionsType) {
 
     for (const document of options.documents) {
       console.log(`start hydratation for the penpot document ${document.penpotDocument}`);
-      console.log(`it may take from seconds to minutes depending on the document size and if this one is synchronized for the first time`);
+      console.log(
+        `it may take from 30 seconds to minutes depending on the document size and if this one is synchronized for the first time (the first time roughly N minutes for N file pages)`
+      );
+      console.warn(
+        `a chomium window will open to perform the hydratation, please do not close it or change url (note it has to be visible otherwise it would not pass the cloudflare protection on the penpot production)`
+      );
 
       const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
 
       // Check we have the needed information into the `meta.json`
-      if (meta.penpotProjectId === 'not_known_yet') {
+      if (meta.penpotTeamId === 'not_known_yet') {
         throw new Error(`to run hydratation you must first run the synchronization on this document on this machine`);
       }
 
@@ -1694,7 +1875,7 @@ export async function hydrate(options: HydrateOptionsType) {
             successTimerId = setTimeout(() => {
               if (pagesToWatch.length > 0) {
                 const pageToWatch = pagesToWatch.shift() as string;
-                const pageUrl = formatPenpotPageUrl(baseUrl, meta.penpotProjectId, document.penpotDocument, pageToWatch);
+                const pageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, pageToWatch);
 
                 page
                   .evaluate((newUrl) => {
@@ -1761,7 +1942,7 @@ export async function hydrate(options: HydrateOptionsType) {
             }
           });
 
-          const firstPageUrl = formatPenpotPageUrl(baseUrl, meta.penpotProjectId, document.penpotDocument, firstPageToWatch);
+          const firstPageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, firstPageToWatch);
 
           page
             .goto(firstPageUrl, {

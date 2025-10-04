@@ -103,24 +103,20 @@ export const getFormData = (options: ApiRequestOptions): FormData | undefined =>
 	return undefined;
 };
 
-type Resolver<T> = (options: ApiRequestOptions<T>) => Promise<T>;
+type Resolver<T> = (options: ApiRequestOptions) => Promise<T>;
 
-export const resolve = async <T>(options: ApiRequestOptions<T>, resolver?: T | Resolver<T>): Promise<T | undefined> => {
+export const resolve = async <T>(options: ApiRequestOptions, resolver?: T | Resolver<T>): Promise<T | undefined> => {
 	if (typeof resolver === 'function') {
 		return (resolver as Resolver<T>)(options);
 	}
 	return resolver;
 };
 
-export const getHeaders = async <T>(config: OpenAPIConfig, options: ApiRequestOptions<T>): Promise<Headers> => {
+export const getHeaders = async (config: OpenAPIConfig, options: ApiRequestOptions): Promise<Headers> => {
 	const [token, username, password, additionalHeaders] = await Promise.all([
-		// @ts-ignore
 		resolve(options, config.TOKEN),
-		// @ts-ignore
 		resolve(options, config.USERNAME),
-		// @ts-ignore
 		resolve(options, config.PASSWORD),
-		// @ts-ignore
 		resolve(options, config.HEADERS),
 	]);
 
@@ -285,7 +281,7 @@ export const catchErrorCodes = (options: ApiRequestOptions, result: ApiResult): 
 	const error = errors[result.status];
 	if (error) {
 		// Additional log to see fully details and not just `[ [Object], [Object], [Object], ... ]`
-		if (Array.isArray(result.body.details)) {
+		if (result.body?.details && Array.isArray(result.body.details)) {
 			console.error(JSON.stringify(result.body.details));
 		}
 
@@ -316,7 +312,7 @@ export const catchErrorCodes = (options: ApiRequestOptions, result: ApiResult): 
  * @returns CancelablePromise<T>
  * @throws ApiError
  */
-export const request = <T>(config: OpenAPIConfig, options: ApiRequestOptions<T>): CancelablePromise<T> => {
+export const request = <T>(config: OpenAPIConfig, options: ApiRequestOptions): CancelablePromise<T> => {
 	return new CancelablePromise(async (resolve, reject, onCancel) => {
 		try {
 			const url = getUrl(config, options);
@@ -334,17 +330,12 @@ export const request = <T>(config: OpenAPIConfig, options: ApiRequestOptions<T>)
 				const responseBody = await getResponseBody(response);
 				const responseHeader = getResponseHeader(response, options.responseHeader);
 
-				let transformedBody = responseBody;
-				if (options.responseTransformer && response.ok) {
-					transformedBody = await options.responseTransformer(responseBody)
-				}
-
 				const result: ApiResult = {
 					url,
 					ok: response.ok,
 					status: response.status,
 					statusText: response.statusText,
-					body: responseHeader ?? transformedBody,
+					body: responseHeader ?? responseBody,
 				};
 
 				catchErrorCodes(options, result);

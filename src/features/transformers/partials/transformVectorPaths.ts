@@ -1,4 +1,3 @@
-import assert from 'assert';
 import svgPathParser from 'svg-path-parser';
 
 import { Paint, PaintOverride, Path, Transform, VectorNode } from '@figpot/src/clients/figma';
@@ -13,6 +12,7 @@ import { translateCommands } from '@figpot/src/features/translators/vectors/tran
 import { translateWindingRule } from '@figpot/src/features/translators/vectors/translateWindingRule';
 import { PathShape } from '@figpot/src/models/entities/penpot/shapes/path';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 const { parseSVG } = svgPathParser;
 
@@ -40,7 +40,7 @@ function transformVectorPath(
   figmaNodeTransform: Transform,
   vectorPath: Path,
   shapeFills: Paint[] | null
-): PathShape {
+): Omit<PathShape, 'id'> {
   // TODO: this returns a line from Figma as a rectangle, which is too complicated to move into Penpot (we should use stroke weight and stroke align to try simplifying the path)
   // Ref: https://github.com/penpot/penpot-exporter-figma-plugin/issues/210
   const normalizedPaths = parseSVG(vectorPath.path);
@@ -64,11 +64,11 @@ function transformVectorPath(
   };
 }
 
-export function transformVectorPaths(registry: AbstractRegistry, node: VectorNode, figmaNodeTransform: Transform): PathShape[] {
+export function transformVectorPaths(registry: AbstractRegistry, node: VectorNode, figmaNodeTransform: Transform): Omit<PathShape, 'id'>[] {
   assert(node.strokeGeometry);
   assert(node.fillGeometry);
 
-  const pathShapes: PathShape[] = [];
+  const pathShapes: Omit<PathShape, 'id'>[] = [];
   for (const path of node.strokeGeometry) {
     const shapeFills = getMergedFill(node, path);
 

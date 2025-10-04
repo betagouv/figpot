@@ -1,4 +1,3 @@
-import assert from 'assert';
 import svgPathParser from 'svg-path-parser';
 
 import { BooleanOperationNode, Transform } from '@figpot/src/clients/figma';
@@ -17,6 +16,7 @@ import { translateId } from '@figpot/src/features/translators/translateId';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { BoolContent, BoolShape } from '@figpot/src/models/entities/penpot/shapes/bool';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 const { parseSVG } = svgPathParser;
 
@@ -38,14 +38,14 @@ export function transformBooleanNode(
   node: BooleanOperationNode,
   closestFigmaFrameId: string,
   figmaNodeTransform: Transform
-): BoolShape {
+): Omit<BoolShape, 'id'> {
   const childrenShapes = transformChildren(registry, node, closestFigmaFrameId, figmaNodeTransform);
 
   return {
     type: 'bool',
     name: node.name,
     shapes: childrenShapes,
-    boolContent: translatePathNode(node, figmaNodeTransform),
+    content: translatePathNode(node, figmaNodeTransform),
     boolType: translateBoolType(node.booleanOperation),
     ...transformFills(registry, node),
     ...transformEffects(registry, node),

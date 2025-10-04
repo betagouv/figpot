@@ -15,9 +15,5 @@ export function translateFontVariantId(googleFont: GoogleFont, fontName: TypeSty
   const style = fontName.italic ? 'italic' : 'regular';
   const variant = googleFont.variants?.find((variant) => variant === style);
 
-  if (variant !== undefined) {
-    return variant;
-  }
-
-  return undefined;
+  return variant ?? 'regular'; // Seems this default would be acceptable
 }

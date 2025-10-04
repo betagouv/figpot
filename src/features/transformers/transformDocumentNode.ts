@@ -3,11 +3,12 @@ import { MappingType } from '@figpot/src/features/document';
 import { FigmaDefinedColor, FigmaDefinedTypography } from '@figpot/src/features/figma';
 import { transformPageNode } from '@figpot/src/features/transformers/transformPageNode';
 import { translateColor } from '@figpot/src/features/translators/translateColor';
-import { translateComponentId, translateId, translateUuidAsObjectKey } from '@figpot/src/features/translators/translateId';
+import { translateComponentId, translateId } from '@figpot/src/features/translators/translateId';
 import { translateTypography } from '@figpot/src/features/translators/translateTypography';
 import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { Registry } from '@figpot/src/models/entities/registry';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 export function detectLocalFigmaComponents(foundComponentsIds: string[], figmaNode: SubcanvasNode) {
   if (figmaNode.type === 'COMPONENT') {
@@ -91,19 +92,49 @@ export function transformDocumentNode(
     const penpotComponentId = translateComponentId(`${componentId}_component`, mapping);
     const penpotComponentInstanceId = translateId(componentId, mapping);
 
-    // In case of a components group since there is no equivalent into Penpot, we prepend the group name so it's under a group
-    const componentName = component.componentSetId ? `${figmaNode.componentSets[component.componentSetId].name} / ${component.name}` : component.name;
+    // In case of a components group the component (being a variant) must have the name of the component (not the variation)
+    const componentName = component.componentSetId ? figmaNode.componentSets[component.componentSetId].name : component.name;
 
     const pathLevels = componentName.split('/').map((pathLevel) => pathLevel.trim());
-    const name = pathLevels.pop();
+    const name = pathLevels.pop() ?? 'unknown name';
 
     const penpotComponent: LibraryComponent = {
       id: penpotComponentId,
       path: pathLevels.length > 0 ? pathLevels.join(' / ') : '', // We add spaces as normalized by Penpot
       name: name,
-      mainInstancePage: null, // Will be set after, once we have browsed the normal tree
       mainInstanceId: penpotComponentInstanceId,
+      mainInstancePage: 'to_replace', // Will be set after, once we have browsed the normal tree
     };
+
+    if (component.componentSetId) {
+      // The `variantId` corresponds into Penpot to the component wrapping all variants
+      penpotComponent.variantId = translateId(component.componentSetId, mapping);
+
+      // The exact properties for this variant can be extracted from the encoded Figma node name
+      const properties: LibraryComponent['variantProperties'] = [];
+
+      const propertiesPairs = component.name.split(',');
+
+      for (const propertyPair of propertiesPairs) {
+        const parts = propertyPair.split('=').map(
+          (part) => part.trim() // We trim the input since the separation are not strict (can be ` = ` or  `=` or ` =`, same for `,`)
+        );
+
+        // In case the parsing gives a weird result, just skip the property
+        if (parts.length !== 2) {
+          continue;
+        }
+
+        const [name, value] = parts;
+
+        properties.push({
+          name: name,
+          value: value,
+        });
+      }
+
+      penpotComponent.variantProperties = properties;
+    }
 
     registry.addComponent(penpotComponent);
   }
@@ -116,6 +147,9 @@ export function transformDocumentNode(
 
   // Patch components with information gotten while browing the entire tree
   for (const component of registry.getComponents().values()) {
+    let skipMainInstanceSearch = false;
+    let skipVariantSearch = !component.variantId; // If it's not for a variant it can be skipped by default
+
     pagesLoop: for (const pageIndex of penpotPagesNodes) {
       for (const object of Object.values(pageIndex.objects)) {
         if (object.id === component.mainInstanceId) {
@@ -127,6 +161,31 @@ export function transformDocumentNode(
           // TODO: it won't work for components not inside the tree (those with instance excluded by a CLI pattern, or remote components), maybe we should try to get this information to patch them too... (tried `/v1/components/$COMPONENT_KEY` but it returns 404)
           component.path = component.path !== '' ? `${pageIndex.name} / ${component.path}` : pageIndex.name;
 
+          // We also need to specify the variant wrapper (component set) at the component definition
+          if (component.variantId) {
+            assert(component.variantProperties, 'variant properties must be filled at that time');
+
+            object.name = component.name; // The node has the name of the variant wrapper (component set)
+            object.variantId = component.variantId;
+            object.variantName = component.variantProperties.map((property) => property.value).join(', '); // By default it uses the concatenation of properties values
+
+            // [WORKAROUND] They added a validation comparing paths and names while expecting exact match
+            // So for the ease we just reuse the component metadata to directly patch tree nodes
+            object.name = component.path !== '' ? `${component.path} / ${component.name}` : component.name;
+          }
+
+          skipMainInstanceSearch = true;
+        }
+
+        if (component.variantId && object.id === component.variantId) {
+          // [WORKAROUND] They added a validation comparing paths and names while expecting exact match
+          // So for the ease we just reuse the component metadata to directly patch tree nodes
+          object.name = component.path !== '' ? `${component.path} / ${component.name}` : component.name;
+
+          skipVariantSearch = true;
+        }
+
+        if (skipMainInstanceSearch && skipVariantSearch) {
           break pagesLoop;
         }
       }
@@ -137,20 +196,20 @@ export function transformDocumentNode(
     name: figmaNode.name,
     data: {
       pages: figmaNode.document.children.map((child) => translateId(child.id, registry.getMapping())),
-      pagesIndex: Object.fromEntries(penpotPagesNodes.map((penpotPageNode) => [translateUuidAsObjectKey(penpotPageNode.id), penpotPageNode])),
+      pagesIndex: Object.fromEntries(penpotPagesNodes.map((penpotPageNode) => [penpotPageNode.id, penpotPageNode])),
       colors: Object.fromEntries(
         Array.from(registry.getColors()).map(([penpotColorId, penpotColor]) => {
-          return [translateUuidAsObjectKey(penpotColorId), penpotColor];
+          return [penpotColorId, penpotColor];
         })
       ),
       typographies: Object.fromEntries(
         Array.from(registry.getTypographies()).map(([penpotTypographyId, penpotTypography]) => {
-          return [translateUuidAsObjectKey(penpotTypographyId), penpotTypography];
+          return [penpotTypographyId, penpotTypography];
         })
       ),
       components: Object.fromEntries(
         Array.from(registry.getComponents()).map(([penpotComponentId, penpotComponent]) => {
-          return [translateUuidAsObjectKey(penpotComponentId), penpotComponent];
+          return [penpotComponentId, penpotComponent];
         })
       ),
     },

@@ -1,10 +1,9 @@
-import assert from 'assert';
-
 import { HasLayoutTrait, Rectangle, Transform } from '@figpot/src/clients/figma';
 import { ShapeBaseAttributes, ShapeGeomAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { Matrix } from '@figpot/src/models/entities/penpot/traits/matrix';
 import { Point } from '@figpot/src/models/entities/penpot/traits/point';
 import { Selrect } from '@figpot/src/models/entities/penpot/traits/selrect';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { applyMatrixToPoint } from '@figpot/src/utils/matrix';
 import { applyInverseRotation, calculateCenter } from '@figpot/src/utils/rotation';
 

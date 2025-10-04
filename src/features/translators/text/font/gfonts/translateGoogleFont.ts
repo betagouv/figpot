@@ -1,4 +1,3 @@
-import assert from 'assert';
 import slugify from 'slugify';
 
 import { TypeStyle } from '@figpot/src/clients/figma';
@@ -6,6 +5,7 @@ import gfontsFile from '@figpot/src/features/translators/text/font/gfonts/gfonts
 import { GoogleFont } from '@figpot/src/features/translators/text/font/gfonts/googleFont';
 import { translateFontVariantId } from '@figpot/src/features/translators/text/font/gfonts/translateFontVariantId';
 import { TextTypography } from '@figpot/src/models/entities/penpot/shapes/text';
+import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { Cache } from '@figpot/src/utils/cache';
 
 const gfonts = gfontsFile.items;

@@ -13,7 +13,7 @@ import { transformText } from '@figpot/src/features/transformers/partials/transf
 import { TextShape } from '@figpot/src/models/entities/penpot/shapes/text';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
-export function transformTextNode(registry: AbstractRegistry, node: TextNode, figmaNodeTransform: Transform): TextShape {
+export function transformTextNode(registry: AbstractRegistry, node: TextNode, figmaNodeTransform: Transform): Omit<TextShape, 'id'> {
   return {
     type: 'text',
     name: node.name,

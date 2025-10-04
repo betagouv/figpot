@@ -4,6 +4,8 @@ import Asm from 'stream-json/Assembler.js';
 import streamJsonParser from 'stream-json/Parser.js';
 import { ReadableStream } from 'stream/web';
 
+import { PostCommandUpdateFileData } from '@figpot/src/clients/penpot';
+
 const { chain } = streamChain;
 const { parser } = streamJsonParser;
 
@@ -49,3 +51,8 @@ export async function getJsonResponseBody(response: Response): Promise<any> {
     return await response.json();
   }
 }
+
+// We have to do this to avoid the operation about comments that as not "type" and that would complicate our array of operations
+type WithTypeProperty<T> = T extends { type: any } ? T : never;
+
+export type appCommonFilesChanges$changeWithoutUnknown = WithTypeProperty<NonNullable<PostCommandUpdateFileData['requestBody']['changes']>[0]>;

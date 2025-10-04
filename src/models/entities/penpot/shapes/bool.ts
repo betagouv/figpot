@@ -25,7 +25,7 @@ export type BoolAttributes = {
   type?: 'bool';
   shapes?: Uuid[];
   boolType: BoolOperations;
-  boolContent?: BoolContent[];
+  content: BoolContent[];
 };
 
 export type BoolContent = {

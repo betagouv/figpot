@@ -1,6 +1,6 @@
 # figpot
 
-This library is a Figma to Penpot converter and synchronizer, it will fit your needs:
+This library is **a Figma to Penpot converter and synchronizer supporting variants**, it will fit your needs:
 
 - To migrate from Figma to Penpot _(one-time transfer)_
 - To provide your design system onto Penpot while keeping Figma as a source of truth _(incremental transfers)_
@@ -21,7 +21,7 @@ This library is a Figma to Penpot converter and synchronizer, it will fit your n
 Prepare the minimal information:
 
 1. Open your [Figma](https://www.figma.com/files/) document inside the browser and copy its identifier _(for `https://www.figma.com/design/CptbnRHeDv3pzOai91abcd/` the ID is `CptbnRHeDv3pzOai91abcd`)_
-2. Open [Penpot](https://design.penpot.app/) and create an empty file, and copy its identifier _(for `https://design.penpot.app/#/workspace/xxxxx/3d04e89b-bff0-8115-8004-bc14b0d50123?page-id=yyyyy` the ID is `3d04e89b-bff0-8115-8004-bc14b0d50123`)_
+2. Open [Penpot](https://design.penpot.app/) and create an empty file, and copy its identifier _(for `https://design.penpot.app/#/workspace?team-id=yyy&file-id=3d04e89b-bff0-8115-8004-bc14b0d50123&page-id=zzz` the ID is `3d04e89b-bff0-8115-8004-bc14b0d50123`)_
 
 Make sure to have [Node.js](https://nodejs.org/) installed and simply run:
 
@@ -152,9 +152,9 @@ It may be implemented in the future, but it would require all expected files to 
 
 ### How to manage Penpot error `referential-integrity`?
 
-When pushing modifications to Penpot we have to chunk them in multiple requests due to their server maximum constraints. For each request Penpot servers will take the entire file state and check its validity (which makes sense), but unfortunately since the release of variants inside Penpot, we have operations in a chunk that may need some other in a following chunk. For this, the server will throw an error about integrity issue.
+When pushing modifications to Penpot we have to chunk them in multiple requests due to their server maximum constraints. For each request Penpot servers will take the entire file state and check its validity (which makes sense), but unfortunately since the release of variants inside Penpot, we have operations in a chunk that may need some others in a following chunk. For this, the server will throw an error about integrity issue.
 
-We did not find for now an ordering of operations that is passing for huge files with variants. So if you are also facing this, we provide the parameter `--no-server-validation` to ask the Penpot server to not check for integrity. Since the file is new, there is no risk using it.
+We did not find for now an ordering of operations that is passing 100% of the time for huge files with variants. So if you are also facing this, we provide the parameter `--no-server-validation` to ask the Penpot server to not check for integrity. When synchronizing on a brand new Penpot file, there is no risk using it.
 
 Note you can omit using this parameter after a first complete synchronization, because probably your next differences to push won't trigger integrity failure due to interconnected operations.
 
@@ -162,21 +162,20 @@ Note you can omit using this parameter after a first complete synchronization, b
 
 This library is not intended to do real time synchronization, and usually almost real time synchronization is not even needed.
 
-We advise you to run the synchronization twice a week. Trying to synchronize has no data integrity impact, but it consumes a lot of ressources for nothing if your file is quite stable (fetching, transforming, comparing...).
+Trying to synchronize often has no data integrity impact, but it consumes a lot of ressources for nothing if your file is quite stable (fetching, transforming, comparing...). So at first we advise running the synchronization manually, and if you make changes regularly, to run it twice a week through CI/CD automation.
 
 ### What is the difference with `penpot-exporter-figma-plugin`?
 
 [penpot-exporter-figma-plugin](https://github.com/penpot/penpot-exporter-figma-plugin) is a Figma plugin that allows exporting an archive containing converted information as Penpot format, that you need to import into Penpot then.
 
-This project has been started before `figpot` but it didn't fulfill some use cases:
+This project has been started before `figpot` but it didn't fulfill some use cases at that time. As of today some are still true:
 
 - It requires a manual intervention from the user _(despite browser actions can be automated, it would have not solved following issues)_
 - There is no incremental logic, so an export will always result into a new Penpot file
-- Keeping a custom font is tricky (needed to analyze the HTML code)
-- It requires Figma to be launched into a browser, reducing by default your available memory to perform all the conversion calculation (possibly resulting in a crash for medium-sized files)
+- It requires Figma to be launched either into a browser or Figma Desktop, reducing by default your available memory to perform all the conversion calculation (possibly resulting in a crash for medium-sized files)
 - For Figma files with a huge amount of elements, it may reach browser limits (resulting in a crash too)
 
-All those "cons" are due to limitations being a Figma plugin, **for my initial use cases**. Their plugin is definitely great in case you have tiny files to transfer just once, without dealing with `npx` or `npm`. And to be fair, I reused a great part of their transformers (which saved me time, but will also help both librairies to benefit from the other one improvements).
+All those "cons" are due to limitations being a Figma plugin, **for my initial use cases**. Their plugin is definitely great in case you have tiny files to transfer just once, without dealing with `npx` or `npm` (it's complementary, using a different strategy of synchronization). And to be fair, I reused a great part of their transformers (which saved me time, and fortunately both libraries can benefit from the other one improvements).
 
 ### Why `mapping.json` keeps growing despite deleting elements?
 

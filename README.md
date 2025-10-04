@@ -1,8 +1,5 @@
 # figpot
 
-> [!IMPORTANT]
-> The package is implemented and has been tested with a custom Penpot instance. To be widely used the Penpot SaaS must be patched... Be patient and follow the issue https://tree.taiga.io/project/penpot/us/8372 ⏱️🚀
-
 This library is a Figma to Penpot converter and synchronizer, it will fit your needs:
 
 - To migrate from Figma to Penpot _(one-time transfer)_

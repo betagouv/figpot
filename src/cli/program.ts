@@ -89,7 +89,7 @@ deps.action(async (options) => {
   // Reproducing the Playwright CLI install logic by code is too complex, so executing a raw command instead
   // (try to match the version from the dependency tree to make prevent breaking changes using a latest one)
   // Ref: https://github.com/microsoft/playwright/blob/7c55b94280b89cc2612c8b4fa5d93d60203b3259/packages/playwright-core/src/cli/program.ts#L115-L179
-  await $`npx patchright@1.52.4 install --with-deps chromium`;
+  await $({ stdio: 'inherit' })`npx --yes patchright@1.52.4 install --with-deps chromium`;
 });
 
 document

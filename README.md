@@ -222,7 +222,7 @@ It would be great while contributing to mimic what's done inside `document.spec.
 
 If you want to improve `figpot` and test it in a specific folder of your computer the easiest is:
 
-1. In your local `figpot` repository, run: `npm link`
+1. In your local `figpot` repository, run `npm link` and then `npm run dev` to compile the package and watch for any change (use `npm run build` to disable watching)
 2. Wherever you want on your computer you should be able to run `figpot document synchronize...` _(if `figpot` command if not found, maybe you are missing the Node.js binaries folder in your `PATH` environment variable)_
 
 ### Debugging

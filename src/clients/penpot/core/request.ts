@@ -5,8 +5,6 @@ import { CancelablePromise } from './CancelablePromise';
 import type { OnCancel } from './CancelablePromise';
 import type { OpenAPIConfig } from './OpenAPI';
 
-import { getJsonResponseBody } from '../../workaround';
-
 export const isString = (value: unknown): value is string => {
 	return typeof value === 'string';
 };
@@ -216,8 +214,7 @@ export const getResponseBody = async (response: Response): Promise<unknown> => {
 			if (contentType) {
 				const binaryTypes = ['application/octet-stream', 'application/pdf', 'application/zip', 'audio/', 'image/', 'video/'];
 				if (contentType.includes('application/json') || contentType.includes('+json')) {
-					// [WORKAROUND] Needed for huge content, see its description
-					return await getJsonResponseBody(response);
+					return await response.json();
 				} else if (binaryTypes.some(type => contentType.includes(type))) {
 					return await response.blob();
 				} else if (contentType.includes('multipart/form-data')) {
@@ -280,11 +277,6 @@ export const catchErrorCodes = (options: ApiRequestOptions, result: ApiResult): 
 
 	const error = errors[result.status];
 	if (error) {
-		// Additional log to see fully details and not just `[ [Object], [Object], [Object], ... ]`
-		if (result.body?.details && Array.isArray(result.body.details)) {
-			console.error(JSON.stringify(result.body.details));
-		}
-
 		throw new ApiError(options, result, error);
 	}
 

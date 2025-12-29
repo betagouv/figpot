@@ -19,7 +19,7 @@ export function transformSceneNode(
   figmaNode: SubcanvasNode,
   closestFigmaFrameId: string,
   figmaNodeTransform: Transform
-): Omit<PenpotNode, 'id'> {
+): Omit<PenpotNode, 'id'> | undefined {
   let penpotNode: Omit<PenpotNode, 'id'> | undefined;
 
   switch (figmaNode.type) {
@@ -38,6 +38,10 @@ export function transformSceneNode(
       break;
     case 'TEXT':
       penpotNode = transformTextNode(registry, figmaNode, figmaNodeTransform);
+      // transformTextNode can return undefined for invalid geometry
+      if (penpotNode === undefined) {
+        return undefined;
+      }
       break;
     case 'VECTOR':
       penpotNode = transformVectorNode(registry, figmaNode, closestFigmaFrameId, figmaNodeTransform);

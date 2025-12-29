@@ -14,13 +14,19 @@ export function translateChild(
   figmaParentId: string,
   closestFigmaFrameId: string,
   parentCumulativeTransform: Transform
-): PenpotNode {
+): PenpotNode | undefined {
   // Cumulate the parent transform with the child one (we do this here to not polluting each subcall)
   const childNodeTransform: Transform = isTransformedNode(figmaChild as HasLayoutTrait)
     ? cumulateNodeTransforms(parentCumulativeTransform, (figmaChild as HasLayoutTrait).relativeTransform as Transform)
     : parentCumulativeTransform;
 
   const penpotNode = transformSceneNode(registry, figmaChild, closestFigmaFrameId, childNodeTransform);
+
+  // transformSceneNode can return undefined for nodes with invalid geometry (e.g., text nodes with NaN dimensions)
+  if (penpotNode === undefined) {
+    return undefined;
+  }
+
   const penpotNodeId = translateId(figmaChild.id, registry.getMapping());
 
   return {
@@ -38,13 +44,21 @@ export function translateChildren(
   closestFigmaFrameId: string,
   parentCumulativeTransform: Transform
 ): Uuid[] {
+  const validChildIds: Uuid[] = [];
+
   for (const figmaChild of figmaChildren) {
     const penpotNode = translateChild(registry, figmaChild, figmaParentId, closestFigmaFrameId, parentCumulativeTransform);
 
+    // Skip nodes that couldn't be transformed (e.g., invalid geometry)
+    if (penpotNode === undefined) {
+      continue;
+    }
+
     registry.addNode(penpotNode);
+    validChildIds.push(penpotNode.id);
   }
 
-  return figmaChildren.map((figmaChild) => translateId(figmaChild.id, registry.getMapping()));
+  return validChildIds;
 }
 
 /**

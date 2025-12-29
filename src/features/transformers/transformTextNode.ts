@@ -13,7 +13,46 @@ import { transformText } from '@figpot/src/features/transformers/partials/transf
 import { TextShape } from '@figpot/src/models/entities/penpot/shapes/text';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
-export function transformTextNode(registry: AbstractRegistry, node: TextNode, figmaNodeTransform: Transform): Omit<TextShape, 'id'> {
+/**
+ * Check if a text node has valid geometry data required for Penpot.
+ * Returns false if absoluteBoundingBox or size is missing/invalid.
+ */
+function hasValidGeometry(node: TextNode): boolean {
+  // Check if absoluteBoundingBox exists and has valid values
+  if (!node.absoluteBoundingBox) {
+    return false;
+  }
+
+  const { x, y, width, height } = node.absoluteBoundingBox;
+  if (x == null || y == null || width == null || height == null) {
+    return false;
+  }
+
+  // Check for NaN values
+  if (Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(width) || Number.isNaN(height)) {
+    return false;
+  }
+
+  // Check if size exists and has valid values
+  if (!node.size) {
+    return false;
+  }
+
+  const { x: sizeX, y: sizeY } = node.size;
+  if (sizeX == null || sizeY == null || Number.isNaN(sizeX) || Number.isNaN(sizeY)) {
+    return false;
+  }
+
+  return true;
+}
+
+export function transformTextNode(registry: AbstractRegistry, node: TextNode, figmaNodeTransform: Transform): Omit<TextShape, 'id'> | undefined {
+  // Validate geometry before processing
+  if (!hasValidGeometry(node)) {
+    console.warn(`Skipping text node "${node.name}" (id: ${node.id}) due to invalid geometry (missing or NaN dimensions)`);
+    return undefined;
+  }
+
   return {
     type: 'text',
     name: node.name,

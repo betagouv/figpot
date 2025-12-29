@@ -116,14 +116,18 @@ document
 
     let documents: DocumentOptionsType[];
     if (!options.document || options.document === true) {
-      throw new Error('please specify both figma and penpot documents to synchronize');
-      // TODO: disabling this for now until we implement the documents retrieval from Penpot
-      // TODO: should deal with `options.ci` value
-      // documents = (await retrieveDocumentsFromInput()).map((figmaDocument) => {
-      //   return {
-      //     figmaDocument: figmaDocument,
-      //   };
-      // });
+      // Try to use environment variables if no document flag is provided
+      const figmaDocumentId = process.env.FIGMA_DOCUMENT_ID;
+      const penpotFileId = process.env.PENPOT_FILE_ID;
+
+      if (figmaDocumentId && penpotFileId) {
+        console.log(`Using documents from environment variables: ${figmaDocumentId}:${penpotFileId}`);
+        documents = [{ figmaDocument: figmaDocumentId, penpotDocument: penpotFileId }];
+      } else {
+        throw new Error(
+          'Please specify documents to synchronize either via -d flag (e.g., -d figmaId:penpotId) or set FIGMA_DOCUMENT_ID and PENPOT_FILE_ID environment variables'
+        );
+      }
     } else {
       documents = processDocumentsParametersFromInput(options.document);
     }

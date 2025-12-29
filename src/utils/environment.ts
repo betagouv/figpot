@@ -6,7 +6,8 @@ import { AccessTokenConfigSchema, CredentialsConfigSchema } from '@figpot/src/mo
 
 if (typeof process.env.PENPOT_BASE_URL === 'string') {
   // Can be used in case of a self-hosted instance
-  PenpotClientSettings.BASE = `${process.env.PENPOT_BASE_URL}/api/rpc`;
+  // Note: Penpot 2.11.x uses /api/rpc/command/, Penpot 2.12+ uses /api/main/methods/
+  PenpotClientSettings.BASE = `${process.env.PENPOT_BASE_URL}/api/rpc/command/`;
 }
 
 export const config = {

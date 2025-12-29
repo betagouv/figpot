@@ -4,7 +4,9 @@ import Asm from 'stream-json/Assembler.js';
 import streamJsonParser from 'stream-json/Parser.js';
 import { ReadableStream } from 'stream/web';
 
-import { PostCommandUpdateFileData } from '@figpot/src/clients/penpot';
+
+
+import { PostUpdateFileData } from '@figpot/src/clients/penpot';
 
 const { chain } = streamChain;
 const { parser } = streamJsonParser;
@@ -17,7 +19,7 @@ export async function getJsonResponseBody(response: Response): Promise<any> {
   // [WORKAROUND] Currently the backend is sending back all changes we just did
   // For huge documents it doubles or more the time of processing, since the answer is not used now we just ignore it
   // Note: ideally the backend would not send at all this over the network
-  if (response.status >= 200 && response.status < 300 && response.body && response.url.endsWith('api/rpc/command/update-file')) {
+  if (response.status >= 200 && response.status < 300 && response.body && response.url.endsWith('update-file')) {
     response.body.cancel();
 
     return { message: `unusable patched object, please see "src/clients/workaround.ts"` };
@@ -28,7 +30,7 @@ export async function getJsonResponseBody(response: Response): Promise<any> {
     ((contentLength && parseInt(contentLength, 10) >= 0x1fffffe8) ||
       // [WORKAROUND] `Content-Length` header is not returned so applying the patch to appropriate URLs
       response.url.includes('v1/files/') || // For Figma to get an entire file
-      response.url.endsWith('api/rpc/command/get-file')) // For Penpot to get an entire file (stricter condition since that's the prefix of other endpoints)
+      response.url.endsWith('get-file')) // For Penpot to get an entire file (stricter condition since that's the prefix of other endpoints)
   ) {
     // [WORKAROUND] Have to cast the stream to keep things simple (we made sure it works inside Node.js)
     // Ref: https://github.com/DefinitelyTyped/DefinitelyTyped/discussions/65542
@@ -55,4 +57,4 @@ export async function getJsonResponseBody(response: Response): Promise<any> {
 // We have to do this to avoid the operation about comments that as not "type" and that would complicate our array of operations
 type WithTypeProperty<T> = T extends { type: any } ? T : never;
 
-export type appCommonFilesChanges$changeWithoutUnknown = WithTypeProperty<NonNullable<PostCommandUpdateFileData['requestBody']['changes']>[0]>;
+export type appCommonFilesChanges$changeWithoutUnknown = WithTypeProperty<NonNullable<PostUpdateFileData['requestBody']['changes']>[0]>;

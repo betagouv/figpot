@@ -66,21 +66,42 @@ const excludeColorPatternsOption = new Option(
 
 const replaceFontPatternsOption = new Option(
   '-rfp, --replace-font-pattern [replaceFontPatterns...]',
-  `pair of a regexp and the value in the form of '^Arial:Helvetica' " ${patternInfo}`
+  `regexp + replacement family in the form '<regex>:<family>' — matched against the Figma fontFamily AND fontPostScriptName. Optionally append ':<weight>' and/or ':<normal|italic>' to also force the weight/style (useful when a single-weight Figma variant like 'Arial-Black' maps to a Penpot font registered at a different weight). Examples: '^Arial:Helvetica', '^Arial-Black$:Arial Black:400:normal' ${patternInfo}`
 );
 
 function formatReplaceFontPatterns(replaceFontPattern: string[]): object[] {
   return replaceFontPattern.map((patternSettings): object => {
-    // The regex could include the `:` symbol whereas the value to set will not (fonts do not have special character in their name)
-    const lastIndex = patternSettings.lastIndexOf(':');
+    let remaining = patternSettings;
 
+    // Peel optional trailing style (":normal" or ":italic")
+    let setStyle: 'normal' | 'italic' | undefined;
+    const styleMatch = remaining.match(/:(normal|italic)$/);
+    if (styleMatch) {
+      setStyle = styleMatch[1] as 'normal' | 'italic';
+      remaining = remaining.slice(0, -styleMatch[0].length);
+    }
+
+    // Peel optional trailing weight (":<positive integer>")
+    let setWeight: number | undefined;
+    const weightMatch = remaining.match(/:([1-9]\d*)$/);
+    if (weightMatch) {
+      setWeight = parseInt(weightMatch[1], 10);
+      remaining = remaining.slice(0, -weightMatch[0].length);
+    }
+
+    // Remaining is "<regex>:<family>" — use lastIndexOf to preserve colons inside the regex
+    const lastIndex = remaining.lastIndexOf(':');
     if (lastIndex === -1) {
-      throw new Error(`the --replace-font-pattern must contain a regexp and the replace value, in the form of: '^Arial:Helvetica'`);
+      throw new Error(
+        `the --replace-font-pattern must contain a regexp and the replace family in the form of "^Arial:Helvetica" (optionally followed by ':<weight>' and/or ':<normal|italic>')`
+      );
     }
 
     return {
-      search: patternSettings.substring(0, lastIndex),
-      set: patternSettings.substring(lastIndex + 1),
+      search: remaining.substring(0, lastIndex),
+      set: remaining.substring(lastIndex + 1),
+      setWeight,
+      setStyle,
     };
   });
 }

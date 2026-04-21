@@ -520,6 +520,8 @@ export type ExcludePatternsType = z.infer<typeof ExcludePatterns>;
 export const ReplaceFontPattern = z.object({
   search: Pattern,
   set: z.string().min(1),
+  setWeight: z.number().int().positive().optional(),
+  setStyle: z.enum(['normal', 'italic']).optional(),
 });
 export type ReplaceFontPatternType = z.infer<typeof ReplaceFontPattern>;
 

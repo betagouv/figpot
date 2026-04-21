@@ -216,15 +216,48 @@ export function countTotalElements(tree: GetFileResponse, colors: FigmaDefinedCo
   return treeCount + colors.length + typographies.length;
 }
 
-export function patchFontFamily(fontSettings: TypeStyle, replaceFontPatterns: ReplaceFontPatternType[]) {
-  if (fontSettings.fontFamily) {
-    for (const replaceFontPattern of replaceFontPatterns) {
-      if (replaceFontPattern.search.test(fontSettings.fontFamily as string)) {
-        fontSettings.fontFamily = replaceFontPattern.set;
+// Reverse of the suffix→weight table in `translateFontWeight`: given a weight + style, produce a PostScript suffix that `extractFontFamilySuffix` will recognize
+const FONT_WEIGHT_POST_SCRIPT_SUFFIX: Record<number, { normal: string; italic: string }> = {
+  100: { normal: 'Thin', italic: 'ThinItalic' },
+  200: { normal: 'ExtraLight', italic: 'ExtraLightItalic' },
+  300: { normal: 'Light', italic: 'LightItalic' },
+  400: { normal: 'Regular', italic: 'Italic' },
+  500: { normal: 'Medium', italic: 'MediumItalic' },
+  600: { normal: 'SemiBold', italic: 'SemiBoldItalic' },
+  700: { normal: 'Bold', italic: 'BoldItalic' },
+  800: { normal: 'ExtraBold', italic: 'ExtraBoldItalic' },
+  900: { normal: 'Black', italic: 'BlackItalic' },
+};
 
-        return;
+export function patchFontFamily(fontSettings: TypeStyle, replaceFontPatterns: ReplaceFontPatternType[]) {
+  if (!fontSettings.fontFamily) {
+    return;
+  }
+
+  for (const replaceFontPattern of replaceFontPatterns) {
+    // Test against both fontFamily and fontPostScriptName so users can target either side (Figma sometimes exposes the variant name only via the PostScript field)
+    const matchesFamily = replaceFontPattern.search.test(fontSettings.fontFamily);
+    const matchesPostScript = !!fontSettings.fontPostScriptName && replaceFontPattern.search.test(fontSettings.fontPostScriptName);
+    if (!matchesFamily && !matchesPostScript) {
+      continue;
+    }
+
+    fontSettings.fontFamily = replaceFontPattern.set;
+
+    // Allow forcing a weight/style so a Figma single-weight variant (e.g. "Arial-Black" at 900) can land on a differently-registered Penpot font (e.g. "Arial Black" at 400)
+    if (replaceFontPattern.setStyle !== undefined) {
+      fontSettings.italic = replaceFontPattern.setStyle === 'italic';
+    }
+    if (replaceFontPattern.setWeight !== undefined) {
+      fontSettings.fontWeight = replaceFontPattern.setWeight;
+      // `translateFontWeight` ignores `fontWeight` and derives the weight from the PostScript suffix, so we also synthesize a PostScript name whose suffix maps back to the forced weight
+      const postScriptSuffix = FONT_WEIGHT_POST_SCRIPT_SUFFIX[replaceFontPattern.setWeight]?.[fontSettings.italic === true ? 'italic' : 'normal'];
+      if (postScriptSuffix) {
+        fontSettings.fontPostScriptName = postScriptSuffix;
       }
     }
+
+    return;
   }
 }
 

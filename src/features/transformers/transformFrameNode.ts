@@ -7,7 +7,7 @@ import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/t
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
 import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
-import { transformAutoLayout, transformLayoutAttributes } from '@figpot/src/features/transformers/partials/transformLayout';
+import { buildLayoutGridCells, transformAutoLayout, transformLayoutAttributes } from '@figpot/src/features/transformers/partials/transformLayout';
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
@@ -46,6 +46,9 @@ export function transformFrameNode(
 
   const childrenShapes = transformChildren(registry, node, node.id, figmaNodeTransform);
 
+  // Grid cells are built AFTER children are transformed because they reference the Penpot-mapped child ids
+  const layoutGridCells = !isSectionNode(node) ? buildLayoutGridCells(registry, node, childrenShapes) : undefined;
+
   return {
     type: 'frame',
     name: node.name,
@@ -53,6 +56,7 @@ export function transformFrameNode(
     showContent: isSectionNode(node) ? true : !node.clipsContent,
     ...transformFills(registry, node),
     ...frameSpecificAttributes,
+    ...(layoutGridCells ? { layoutGridCells } : {}),
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformSceneNode(node),
   };

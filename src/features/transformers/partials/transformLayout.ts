@@ -35,9 +35,18 @@ export function transformAutoLayout(node: HasFramePropertiesTrait & HasLayoutTra
     };
 
     if (node.layoutMode === 'GRID') {
+      // Grid-mode gaps come from dedicated Figma fields (`gridRowGap` / `gridColumnGap`), not `itemSpacing` which is flex-only.
+      // The flex-oriented `layout.layoutGap` / `layout.layoutGapType` computed above are undefined for GRID, so we override here.
+      const gridRowGap = node.gridRowGap ?? 0;
+      const gridColumnGap = node.gridColumnGap ?? 0;
+      const hasGridGap = node.gridRowGap !== undefined || node.gridColumnGap !== undefined;
+
+      // `layoutGridCells` is generated in `buildLayoutGridCells` after children are transformed — it needs the Penpot-mapped child ids
       return {
         ...layout,
         layout: 'grid',
+        layoutGap: hasGridGap ? { rowGap: gridRowGap, columnGap: gridColumnGap } : layout.layoutGap,
+        layoutGapType: hasGridGap ? (gridRowGap === gridColumnGap ? 'simple' : 'multiple') : layout.layoutGapType,
         layoutGridDir: translateLayoutGridDir(node),
         layoutGridColumns: translateLayoutGridColumns(node),
         layoutGridRows: translateLayoutGridRows(node),

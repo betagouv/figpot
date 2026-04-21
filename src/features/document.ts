@@ -14,7 +14,7 @@ import { Digraph, toDot } from 'ts-graphviz';
 import { toFile } from 'ts-graphviz/adapter';
 import { z } from 'zod';
 
-import { GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
+import { ApiError as FigmaApiError, GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
 import { OpenAPI as PenpotClientSettings, postGetFileObjectThumbnails, postGetFontVariants } from '@figpot/src/clients/penpot';
 import { PostGetFileResponse, postGetFile, postRenameFile, postUpdateFile } from '@figpot/src/clients/penpot';
 import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/workaround';
@@ -41,7 +41,7 @@ import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/tex
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot/src/utils/comparaison';
-import { config, penpotApiBaseUrl } from '@figpot/src/utils/environment';
+import { config, figmaRateLimitContext, penpotApiBaseUrl } from '@figpot/src/utils/environment';
 import { downloadFile, openAsBlob, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
 import { gracefulExit } from '@figpot/src/utils/system';
 
@@ -50,6 +50,19 @@ const __root_dirname = process.cwd();
 export const documentsFolderPath = path.resolve(__root_dirname, './data/documents/');
 export const fontsFolderPath = path.resolve(__root_dirname, './data/fonts/');
 export const mediasFolderPath = path.resolve(__root_dirname, './data/medias/');
+
+function formatSecondsHuman(totalSeconds: number): string {
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts: string[] = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (seconds && !days && !hours) parts.push(`${seconds}s`);
+  return parts.length > 0 ? parts.join(' ') : `${totalSeconds}s`;
+}
 
 export const FigmaToPenpotMapping = z.map(z.string(), z.string());
 export type FigmaToPenpotMappingType = z.infer<typeof FigmaToPenpotMapping>;
@@ -110,6 +123,7 @@ export const RetrieveOptions = z.object({
   documents: z.array(DocumentOptions),
   prompting: Prompting,
   syncMappingWithGit: z.boolean(),
+  useCachedFigmaTree: z.boolean(),
 });
 export type RetrieveOptionsType = z.infer<typeof RetrieveOptions>;
 
@@ -362,8 +376,42 @@ export async function retrieve(options: RetrieveOptionsType) {
 
     await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
 
-    // Save the document tree locally
-    const documentTree = await retrieveDocument(document.figmaDocument);
+    // Save the document tree locally (or reuse the last saved one to skip the expensive Figma fetch during debugging)
+    let documentTree: GetFileResponse;
+    if (options.useCachedFigmaTree && fsSync.existsSync(getFigmaDocumentTreePath(document.figmaDocument))) {
+      documentTree = await readFigmaTreeFile(document.figmaDocument);
+    } else {
+      try {
+        documentTree = await retrieveDocument(document.figmaDocument);
+      } catch (error) {
+        if (error instanceof FigmaApiError && error.status === 429) {
+          const retryAfterHeader = figmaRateLimitContext.retryAfter;
+          const rateLimitTypeHeader = figmaRateLimitContext.rateLimitType;
+          const retryAfterSeconds = retryAfterHeader && /^\d+$/.test(retryAfterHeader) ? parseInt(retryAfterHeader, 10) : null;
+          const retryHint =
+            retryAfterSeconds !== null
+              ? `wait ${formatSecondsHuman(retryAfterSeconds)} before retrying (the value Figma returned is ${retryAfterSeconds}s)`
+              : 'wait about a minute before retrying';
+
+          // The endpoint tier is not returned by Figma, and the public docs don't provide a machine-readable endpoint→tier map.
+          // As of 2026-04, their rate-limits page cites "GET file metadata" as a Tier 2 endpoint, which is the informal name
+          // for `GET /v1/files/:key` — the call we make here. Verify at https://developers.figma.com/docs/rest-api/rate-limits/
+          const endpointTier = 'Tier 2';
+          const seatClassHint = rateLimitTypeHeader ? ` for "${rateLimitTypeHeader}" seat class` : '';
+
+          console.warn(
+            `Figma is rate-limiting the fetch of "${document.figmaDocument}". The "get file" endpoint (${endpointTier}${seatClassHint}) is one of the most expensive and since 2026 Figma enforces stricter monthly caps on it. See https://developers.figma.com/docs/rest-api/rate-limits/ for the quota table.\nYou can either:\n` +
+              `  - ${retryHint}\n` +
+              `  - use a Figma account on a higher plan with a larger quota\n` +
+              `  - pass "--use-cached-figma-tree" to reuse the previously retrieved Figma tree (if any is saved locally)`
+          );
+
+          throw new Error(`Figma rate limit reached on document "${document.figmaDocument}"`);
+        }
+
+        throw error;
+      }
+    }
 
     // Use metadata for future usage
     const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
@@ -1722,6 +1770,7 @@ export const SynchronizeOptions = z.object({
   syncMappingWithGit: z.boolean(),
   serverValidation: ServerValidation,
   prompting: Prompting,
+  useCachedFigmaTree: z.boolean(),
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;
 

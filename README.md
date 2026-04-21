@@ -158,6 +158,14 @@ We did not find for now an ordering of operations that is passing 100% of the ti
 
 Note you can omit using this parameter after a first complete synchronization, because probably your next differences to push won't trigger integrity failure due to interconnected operations.
 
+### How to avoid Figma rate limits while iterating?
+
+The Figma retriever fetches document tree (`/v1/files/{key}?geometry=paths`) that is expensive and can throw a `429 Rate limit exceeded` error since the endpoint is rate-limited. During debugging or when iterating on Penpot-side changes, the Figma data rarely needs to be refetched between runs.
+
+Starting in 2026, Figma tightened this further by introducing **monthly caps** on the most expensive endpoints for some plan tiers (see [Figma's rate limits documentation](https://developers.figma.com/docs/rest-api/rate-limits/)). Once the monthly cap is hit, the `Retry-After` value Figma returns can be several days long — waiting it out is usually not practical.
+
+You can pass `--use-cached-figma-tree` on `synchronize` to reuse the previously saved Figma tree instead of calling Figma again. If the cache file does not exist, the flag is ignored and a fresh fetch is performed.
+
 ### How to set up a recurrent synchronization?
 
 This library is not intended to do real time synchronization, and usually almost real time synchronization is not even needed.

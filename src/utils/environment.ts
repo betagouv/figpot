@@ -9,6 +9,25 @@ export const penpotApiBaseUrl = `${process.env.PENPOT_BASE_URL ?? 'https://desig
 // The generated client does `BASE + path` where `path` has no leading slash, so BASE must end with a trailing one
 PenpotClientSettings.BASE = `${penpotApiBaseUrl}/`;
 
+// Captured from the latest Figma response so callers can inspect rate-limit metadata after an `ApiError` is thrown.
+// The generated `ApiError` doesn't carry headers, so we stash them via a response interceptor (no patching of the generated client).
+// Reset on every response so a later non-429 call doesn't leave stale values around for a subsequent catch.
+export const figmaRateLimitContext: { retryAfter: string | null; rateLimitType: string | null } = {
+  retryAfter: null,
+  rateLimitType: null,
+};
+
+FigmaClientSettings.interceptors.response.use((response) => {
+  if (response.status === 429) {
+    figmaRateLimitContext.retryAfter = response.headers.get('retry-after');
+    figmaRateLimitContext.rateLimitType = response.headers.get('x-figma-rate-limit-type');
+  } else {
+    figmaRateLimitContext.retryAfter = null;
+    figmaRateLimitContext.rateLimitType = null;
+  }
+  return response;
+});
+
 export const config = {
   figmaAccessToken: '',
   penpotAccessToken: '',

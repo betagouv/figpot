@@ -1741,10 +1741,13 @@ export async function processDifferences(
         },
       });
 
-      if (response.status !== 200) {
+      if (!response.ok) {
         // If not removed there is a risk of visual defect until there is a modification inside
         // We have no easy way to retry this on the next synchronization because the tree will already be modified
-        console.error(await response.json());
+        // Use `text()` (not `json()`) because error responses from this endpoint can be empty
+        const body = await response.text();
+
+        console.error(`thumbnail delete failed: ${response.status} ${response.statusText} — ${body || '<empty body>'}`);
         console.warn(`the thumbnail ${oldThumbnail} seems to not be deleted correctly`);
       }
     }

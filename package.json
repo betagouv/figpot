@@ -18,9 +18,7 @@
   ],
   "type": "module",
   "module": "./dist/index.js",
-  "bin": {
-    "@betagouv/figpot": "./dist/cli/index.js"
-  },
+  "bin": "./dist/cli/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "postinstall": "patch-package",
@@ -39,7 +37,7 @@
     "test:unit:watch": "npm run jest --- --watch",
     "client:generate": "npm run client:figma:generate && npm run client:penpot:generate",
     "client:figma:generate": "openapi-ts -i https://raw.githubusercontent.com/figma/rest-api-spec/main/openapi/openapi.yaml -o src/clients/figma",
-    "client:penpot:generate": "openapi-ts -i https://design.penpot.app/api/openapi.json -o src/clients/penpot",
+    "client:penpot:generate": "openapi-ts -i https://design.penpot.app/api/main/doc/openapi.json -o src/clients/penpot",
     "clean": "rm -rf dist && rm -rf node_modules",
     "cm": "cz",
     "patchright": "patchright",

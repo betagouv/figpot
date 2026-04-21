@@ -158,6 +158,33 @@ We did not find for now an ordering of operations that is passing 100% of the ti
 
 Note you can omit using this parameter after a first complete synchronization, because probably your next differences to push won't trigger integrity failure due to interconnected operations.
 
+### How to redirect a Figma font to a different Penpot font?
+
+Use `--replace-font-pattern`. The syntax is `'<regex>:<family>[:<weight>[:<normal|italic>]]'`:
+
+- the `<regex>` is tested against both the Figma `fontFamily` AND `fontPostScriptName`, so you can target either side (Figma sometimes exposes the variant name only via the PostScript field)
+- the `<family>` replaces the Figma `fontFamily`
+- the optional `<weight>` forces the `fontWeight` on match — useful for single-weight Figma variants (e.g. `Arial-Black` at 900) that need to land on a Penpot font registered at a different weight (e.g. `Arial Black` at 400)
+- the optional `<normal|italic>` forces the style on match
+
+Examples:
+
+```shell
+# Straight family replacement
+--replace-font-pattern "^Arial:Helvetica"
+
+# Redirect the Figma "Arial-Black" PostScript variant to Penpot's separately-registered "Arial Black" font at weight 400, normal style
+--replace-font-pattern "^Arial-Black$:Arial Black:400:normal"
+```
+
+### How to avoid Figma rate limits while iterating?
+
+The Figma retriever fetches document tree (`/v1/files/{key}?geometry=paths`) that is expensive and can throw a `429 Rate limit exceeded` error since the endpoint is rate-limited. During debugging or when iterating on Penpot-side changes, the Figma data rarely needs to be refetched between runs.
+
+Starting in 2026, Figma tightened this further by introducing **monthly caps** on the most expensive endpoints for some plan tiers (see [Figma's rate limits documentation](https://developers.figma.com/docs/rest-api/rate-limits/)). Once the monthly cap is hit, the `Retry-After` value Figma returns can be several days long — waiting it out is usually not practical.
+
+You can pass `--use-cached-figma-data` on `synchronize` to reuse the previously saved Figma data (tree, colors, typographies) instead of calling Figma again. If any of those cache files is missing, the flag is ignored and a fresh fetch is performed.
+
 ### How to set up a recurrent synchronization?
 
 This library is not intended to do real time synchronization, and usually almost real time synchronization is not even needed.

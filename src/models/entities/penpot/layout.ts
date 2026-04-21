@@ -72,7 +72,7 @@ export type GridTrack = {
   value?: number;
 };
 
-type GridCell = {
+export type GridCell = {
   id?: Uuid;
   areaName?: string;
   row: number;

@@ -1,4 +1,10 @@
-import { HasChildrenTrait, HasFramePropertiesTrait, HasLayoutTrait, SubcanvasNode } from '@figpot/src/clients/figma';
+import {
+  gridChildHorizontalAlign as FigmaGridChildAlign,
+  HasChildrenTrait,
+  HasFramePropertiesTrait,
+  HasLayoutTrait,
+  SubcanvasNode,
+} from '@figpot/src/clients/figma';
 import {
   GridTrack,
   JustifyAlignContent,
@@ -212,4 +218,18 @@ export function translateLayoutGridRows(node: HasLayoutTrait): GridTrack[] {
       value: 1,
     };
   });
+}
+
+export function translateGridChildAlign(align?: FigmaGridChildAlign): 'start' | 'center' | 'end' | undefined {
+  // Figma's "AUTO" and an unset value both map to Penpot's omitted alignment (defaults to "auto" on Penpot side)
+  switch (align) {
+    case 'MIN':
+      return 'start';
+    case 'CENTER':
+      return 'center';
+    case 'MAX':
+      return 'end';
+    default:
+      return undefined;
+  }
 }

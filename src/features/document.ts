@@ -14,9 +14,9 @@ import { Digraph, toDot } from 'ts-graphviz';
 import { toFile } from 'ts-graphviz/adapter';
 import { z } from 'zod';
 
-import { GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
-import { OpenAPI as PenpotClientSettings, postCommandGetFileObjectThumbnails, postCommandGetFontVariants } from '@figpot/src/clients/penpot';
-import { PostCommandGetFileResponse, postCommandGetFile, postCommandRenameFile, postCommandUpdateFile } from '@figpot/src/clients/penpot';
+import { ApiError as FigmaApiError, GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
+import { OpenAPI as PenpotClientSettings, postGetFileObjectThumbnails, postGetFontVariants } from '@figpot/src/clients/penpot';
+import { PostGetFileResponse, postGetFile, postRenameFile, postUpdateFile } from '@figpot/src/clients/penpot';
 import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/workaround';
 import {
   FigmaDefinedColor,
@@ -41,7 +41,7 @@ import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/tex
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot/src/utils/comparaison';
-import { config } from '@figpot/src/utils/environment';
+import { config, figmaRateLimitContext, penpotApiBaseUrl } from '@figpot/src/utils/environment';
 import { downloadFile, openAsBlob, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
 import { gracefulExit } from '@figpot/src/utils/system';
 
@@ -50,6 +50,19 @@ const __root_dirname = process.cwd();
 export const documentsFolderPath = path.resolve(__root_dirname, './data/documents/');
 export const fontsFolderPath = path.resolve(__root_dirname, './data/fonts/');
 export const mediasFolderPath = path.resolve(__root_dirname, './data/medias/');
+
+function formatSecondsHuman(totalSeconds: number): string {
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts: string[] = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (seconds && !days && !hours) parts.push(`${seconds}s`);
+  return parts.length > 0 ? parts.join(' ') : `${totalSeconds}s`;
+}
 
 export const FigmaToPenpotMapping = z.map(z.string(), z.string());
 export type FigmaToPenpotMappingType = z.infer<typeof FigmaToPenpotMapping>;
@@ -110,6 +123,7 @@ export const RetrieveOptions = z.object({
   documents: z.array(DocumentOptions),
   prompting: Prompting,
   syncMappingWithGit: z.boolean(),
+  useCachedFigmaData: z.boolean(),
 });
 export type RetrieveOptionsType = z.infer<typeof RetrieveOptions>;
 
@@ -336,12 +350,22 @@ export async function saveMapping(figmaDocumentId: string, penpotDocumentId: str
 
 export async function retrieve(options: RetrieveOptionsType) {
   for (const document of options.documents) {
+    // When `--use-cached-figma-data` is set and every cache artifact is present on disk, skip the three Figma calls
+    // (`retrieveColors` / `retrieveDocument` / `retrieveStylesNodes`) and reuse the processed outputs. `colors.json` and
+    // `typographies.json` already store the final merged shape, so the intermediate `stylesNodes` response is not needed.
+    // `getImageFills` below is still executed because it's a cheap call and handling it from the tree alone would add surface for bugs.
+    const useCache =
+      options.useCachedFigmaData &&
+      fsSync.existsSync(getFigmaDocumentTreePath(document.figmaDocument)) &&
+      fsSync.existsSync(getFigmaDocumentColorsPath(document.figmaDocument)) &&
+      fsSync.existsSync(getFigmaDocumentTypographiesPath(document.figmaDocument));
+
     // Get all predefined colors from Figma
     // We do not use `getPublishedVariables()` because it contains only a part of the local ones, and without values
     // Note: other variable kinds are not retrieved because Penpot cannot manage them (so using their raw value)
-    const figmaColors = await retrieveColors(document.figmaDocument);
+    const figmaColors = useCache ? await readFigmaColorsFile(document.figmaDocument) : await retrieveColors(document.figmaDocument);
 
-    const customPenpotFontsVariants = (await postCommandGetFontVariants({
+    const customPenpotFontsVariants = (await postGetFontVariants({
       requestBody: {
         fileId: document.penpotDocument,
       },
@@ -362,8 +386,42 @@ export async function retrieve(options: RetrieveOptionsType) {
 
     await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
 
-    // Save the document tree locally
-    const documentTree = await retrieveDocument(document.figmaDocument);
+    // Save the document tree locally (or reuse the last saved one to skip the expensive Figma fetch during debugging)
+    let documentTree: GetFileResponse;
+    if (useCache) {
+      documentTree = await readFigmaTreeFile(document.figmaDocument);
+    } else {
+      try {
+        documentTree = await retrieveDocument(document.figmaDocument);
+      } catch (error) {
+        if (error instanceof FigmaApiError && error.status === 429) {
+          const retryAfterHeader = figmaRateLimitContext.retryAfter;
+          const rateLimitTypeHeader = figmaRateLimitContext.rateLimitType;
+          const retryAfterSeconds = retryAfterHeader && /^\d+$/.test(retryAfterHeader) ? parseInt(retryAfterHeader, 10) : null;
+          const retryHint =
+            retryAfterSeconds !== null
+              ? `wait ${formatSecondsHuman(retryAfterSeconds)} before retrying (the value Figma returned is ${retryAfterSeconds}s)`
+              : 'wait about a minute before retrying';
+
+          // The endpoint tier is not returned by Figma, and the public docs don't provide a machine-readable endpoint→tier map.
+          // As of 2026-04, their rate-limits page cites "GET file metadata" as a Tier 2 endpoint, which is the informal name
+          // for `GET /v1/files/:key` — the call we make here. Verify at https://developers.figma.com/docs/rest-api/rate-limits/
+          const endpointTier = 'Tier 2';
+          const seatClassHint = rateLimitTypeHeader ? ` for "${rateLimitTypeHeader}" seat class` : '';
+
+          console.warn(
+            `Figma is rate-limiting the fetch of "${document.figmaDocument}". The "get file" endpoint (${endpointTier}${seatClassHint}) is one of the most expensive and since 2026 Figma enforces stricter monthly caps on it. See https://developers.figma.com/docs/rest-api/rate-limits/ for the quota table.\nYou can either:\n` +
+              `  - ${retryHint}\n` +
+              `  - use a Figma account on a higher plan with a larger quota\n` +
+              `  - pass "--use-cached-figma-data" to reuse the previously retrieved Figma tree, colors and typographies (if saved locally)`
+          );
+
+          throw new Error(`Figma rate limit reached on document "${document.figmaDocument}"`);
+        }
+
+        throw error;
+      }
+    }
 
     // Use metadata for future usage
     const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
@@ -371,26 +429,28 @@ export async function retrieve(options: RetrieveOptionsType) {
     meta.figmaLastModified = new Date(documentTree.lastModified);
     await saveMeta(document.figmaDocument, document.penpotDocument, meta);
 
-    // Process attached styles
-    const stylesIds: string[] = Object.keys(documentTree.styles);
+    // Process attached styles (skipped when using the cached data — `typographies.json` is already the final output and is re-read later by `transform()`)
+    if (!useCache) {
+      const stylesIds: string[] = Object.keys(documentTree.styles);
 
-    // The Figma API does not expose styles easily, so we have to use an endpoint to get simulated applied styles to extract wanted values
-    // Ref: https://forum.figma.com/t/rest-api-get-color-and-text-styles/49216/4
-    const stylesNodes = await retrieveStylesNodes(document.figmaDocument, stylesIds);
+      // The Figma API does not expose styles easily, so we have to use an endpoint to get simulated applied styles to extract wanted values
+      // Ref: https://forum.figma.com/t/rest-api-get-color-and-text-styles/49216/4
+      const stylesNodes = await retrieveStylesNodes(document.figmaDocument, stylesIds);
 
-    const figmaTypographies = extractStylesTypographies(documentTree, stylesNodes);
-    mergeStylesColors(figmaColors, documentTree, stylesNodes);
+      const figmaTypographies = extractStylesTypographies(documentTree, stylesNodes);
+      mergeStylesColors(figmaColors, documentTree, stylesNodes);
 
-    const documentFolderPath = getFigmaDocumentPath(document.figmaDocument);
-    await fs.mkdir(documentFolderPath, { recursive: true });
+      const documentFolderPath = getFigmaDocumentPath(document.figmaDocument);
+      await fs.mkdir(documentFolderPath, { recursive: true });
 
-    await writeBigJsonFile(getFigmaDocumentTreePath(document.figmaDocument), documentTree);
-    await fs.writeFile(getFigmaDocumentColorsPath(document.figmaDocument), JSON.stringify(figmaColors, null, 2), {
-      encoding: 'utf-8',
-    });
-    await fs.writeFile(getFigmaDocumentTypographiesPath(document.figmaDocument), JSON.stringify(figmaTypographies, null, 2), {
-      encoding: 'utf-8',
-    });
+      await writeBigJsonFile(getFigmaDocumentTreePath(document.figmaDocument), documentTree);
+      await fs.writeFile(getFigmaDocumentColorsPath(document.figmaDocument), JSON.stringify(figmaColors, null, 2), {
+        encoding: 'utf-8',
+      });
+      await fs.writeFile(getFigmaDocumentTypographiesPath(document.figmaDocument), JSON.stringify(figmaTypographies, null, 2), {
+        encoding: 'utf-8',
+      });
+    }
 
     // Save images
     const imagesList = await getImageFills({
@@ -460,6 +520,8 @@ export type ExcludePatternsType = z.infer<typeof ExcludePatterns>;
 export const ReplaceFontPattern = z.object({
   search: Pattern,
   set: z.string().min(1),
+  setWeight: z.number().int().positive().optional(),
+  setStyle: z.enum(['normal', 'italic']).optional(),
 });
 export type ReplaceFontPatternType = z.infer<typeof ReplaceFontPattern>;
 
@@ -1398,13 +1460,13 @@ export async function compare(options: CompareOptionsType) {
 
     const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
 
-    const currentThumbnails = await postCommandGetFileObjectThumbnails({
+    const currentThumbnails = await postGetFileObjectThumbnails({
       requestBody: {
         fileId: document.penpotDocument,
       },
     });
 
-    let hostedDocument = await postCommandGetFile({
+    let hostedDocument = await postGetFile({
       requestBody: {
         id: document.penpotDocument,
       },
@@ -1448,7 +1510,7 @@ export async function processOperationsChunk(
       `processing the modifications chunk [${chunkNumber}] containing ${currentChunk.length} operations (previously ${succeededOperations} done over a total of ${differences.newTreeOperations.length})`
     );
 
-    await postCommandUpdateFile({
+    await postUpdateFile({
       requestBody: {
         id: penpotDocumentId,
         revn: 0, // Required but does no block to use a default one
@@ -1490,7 +1552,7 @@ export async function processDifferences(
 ) {
   // Note: seeing the name change in the UI requires a browser page refresh
   if (differences.newDocumentName) {
-    await postCommandRenameFile({
+    await postRenameFile({
       requestBody: {
         id: penpotDocumentId,
         name: differences.newDocumentName,
@@ -1559,7 +1621,7 @@ export async function processDifferences(
 
       console.log(`uploading the media ${penpotMediaId} to Penpot`);
 
-      const response = await fetch(`${PenpotClientSettings.BASE}/command/upload-file-media-object`, {
+      const response = await fetch(`${penpotApiBaseUrl}/upload-file-media-object`, {
         method: 'POST',
         body: formData,
         headers: {
@@ -1666,7 +1728,7 @@ export async function processDifferences(
       //   },
       // });
 
-      const response = await fetch(`${PenpotClientSettings.BASE}/command/delete-file-object-thumbnail`, {
+      const response = await fetch(`${penpotApiBaseUrl}/delete-file-object-thumbnail`, {
         method: 'POST',
         body: JSON.stringify({
           fileId: penpotDocumentId,
@@ -1679,10 +1741,13 @@ export async function processDifferences(
         },
       });
 
-      if (response.status !== 200) {
+      if (!response.ok) {
         // If not removed there is a risk of visual defect until there is a modification inside
         // We have no easy way to retry this on the next synchronization because the tree will already be modified
-        console.error(await response.json());
+        // Use `text()` (not `json()`) because error responses from this endpoint can be empty
+        const body = await response.text();
+
+        console.error(`thumbnail delete failed: ${response.status} ${response.statusText} — ${body || '<empty body>'}`);
         console.warn(`the thumbnail ${oldThumbnail} seems to not be deleted correctly`);
       }
     }
@@ -1722,6 +1787,7 @@ export const SynchronizeOptions = z.object({
   syncMappingWithGit: z.boolean(),
   serverValidation: ServerValidation,
   prompting: Prompting,
+  useCachedFigmaData: z.boolean(),
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;
 
@@ -1761,7 +1827,7 @@ export type HydrateOptionsType = z.infer<typeof HydrateOptions>;
 export async function hydrate(options: HydrateOptionsType) {
   // Get the UI access token (short-lived) (the API access token would not compatible for the following actions)
   // Note: this is inspired by `postCommandLoginWithPassword()` but we need to catch the response cookie header
-  const response = await fetch(`${PenpotClientSettings.BASE}/command/login-with-password`, {
+  const response = await fetch(`${penpotApiBaseUrl}/login-with-password`, {
     method: 'POST',
     body: JSON.stringify({
       email: config.penpotUserEmail,
@@ -1846,7 +1912,7 @@ export async function hydrate(options: HydrateOptionsType) {
       const page = await browserContext.newPage();
 
       try {
-        const endpointsToWatch = ['/api/rpc/command/update-file?', '/api/rpc/command/create-file-object-thumbnail?'];
+        const endpointsToWatch = ['/api/main/methods/update-file?', '/api/main/methods/create-file-object-thumbnail?'];
         let stage: 'start' | 'waiting-updates' = 'start';
 
         const pagesToWatch = [...meta.penpotPages];
@@ -1915,7 +1981,7 @@ export async function hydrate(options: HydrateOptionsType) {
 
           page.on('response', async (response) => {
             const url = response.url();
-            if (stage === 'start' && url.includes('/api/rpc/command/get-file?')) {
+            if (stage === 'start' && url.includes('/api/main/methods/get-file?')) {
               if (response.status() === 200) {
                 stage = 'waiting-updates';
 

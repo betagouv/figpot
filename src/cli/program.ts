@@ -37,6 +37,10 @@ const serverValidationOption = new Option(
   '--no-server-validation',
   'skip Penpot validation server-side, useful for big files or for a Penpot instance with limited resources, use it with caution'
 );
+const useCachedFigmaDataOption = new Option(
+  '--use-cached-figma-data',
+  'reuse the previously retrieved Figma data (tree, colors, typographies) from local cache instead of fetching it again (useful to avoid Figma rate limits or plan-based restrictions during iteration)'
+);
 
 const patternInfo = '(use single quotes around the parameter to prevent your terminal to replace special characters)';
 const excludePagePatternsOption = new Option(
@@ -62,21 +66,42 @@ const excludeColorPatternsOption = new Option(
 
 const replaceFontPatternsOption = new Option(
   '-rfp, --replace-font-pattern [replaceFontPatterns...]',
-  `pair of a regexp and the value in the form of '^Arial:Helvetica' " ${patternInfo}`
+  `regexp + replacement family in the form '<regex>:<family>' — matched against the Figma fontFamily AND fontPostScriptName. Optionally append ':<weight>' and/or ':<normal|italic>' to also force the weight/style (useful when a single-weight Figma variant like 'Arial-Black' maps to a Penpot font registered at a different weight). Examples: '^Arial:Helvetica', '^Arial-Black$:Arial Black:400:normal' ${patternInfo}`
 );
 
 function formatReplaceFontPatterns(replaceFontPattern: string[]): object[] {
   return replaceFontPattern.map((patternSettings): object => {
-    // The regex could include the `:` symbol whereas the value to set will not (fonts do not have special character in their name)
-    const lastIndex = patternSettings.lastIndexOf(':');
+    let remaining = patternSettings;
 
+    // Peel optional trailing style (":normal" or ":italic")
+    let setStyle: 'normal' | 'italic' | undefined;
+    const styleMatch = remaining.match(/:(normal|italic)$/);
+    if (styleMatch) {
+      setStyle = styleMatch[1] as 'normal' | 'italic';
+      remaining = remaining.slice(0, -styleMatch[0].length);
+    }
+
+    // Peel optional trailing weight (":<positive integer>")
+    let setWeight: number | undefined;
+    const weightMatch = remaining.match(/:([1-9]\d*)$/);
+    if (weightMatch) {
+      setWeight = parseInt(weightMatch[1], 10);
+      remaining = remaining.slice(0, -weightMatch[0].length);
+    }
+
+    // Remaining is "<regex>:<family>" — use lastIndexOf to preserve colons inside the regex
+    const lastIndex = remaining.lastIndexOf(':');
     if (lastIndex === -1) {
-      throw new Error(`the --replace-font-pattern must contain a regexp and the replace value, in the form of: '^Arial:Helvetica'`);
+      throw new Error(
+        `the --replace-font-pattern must contain a regexp and the replace family in the form of "^Arial:Helvetica" (optionally followed by ':<weight>' and/or ':<normal|italic>')`
+      );
     }
 
     return {
-      search: patternSettings.substring(0, lastIndex),
-      set: patternSettings.substring(lastIndex + 1),
+      search: remaining.substring(0, lastIndex),
+      set: remaining.substring(lastIndex + 1),
+      setWeight,
+      setStyle,
     };
   });
 }
@@ -90,6 +115,10 @@ deps.action(async (options) => {
   // (try to match the version from the dependency tree to make prevent breaking changes using a latest one)
   // Ref: https://github.com/microsoft/playwright/blob/7c55b94280b89cc2612c8b4fa5d93d60203b3259/packages/playwright-core/src/cli/program.ts#L115-L179
   await $({ stdio: 'inherit' })`npx --yes patchright@1.52.4 install --with-deps chromium`;
+
+  console.log(
+    `If you see a playwright warning message it's just because you run figpot outside a directory with a "node_modules", but this should be fine`
+  );
 });
 
 document
@@ -104,6 +133,7 @@ document
   .addOption(replaceFontPatternsOption)
   .addOption(syncMappingWithGitOption)
   .addOption(serverValidationOption)
+  .addOption(useCachedFigmaDataOption)
   .addOption(continuousIntegrationOption)
   .option('-nh, --no-hydrate', 'prevent performing hydratation after the synchronization')
   .option('-ht, --hydrate-timeout <hydrateTimeout>', 'specify a maximum of duration for hydratation')
@@ -144,6 +174,7 @@ document
         syncMappingWithGit: options.syncMappingWithGit || false,
         serverValidation: options.serverValidation,
         prompting: !options.ci,
+        useCachedFigmaData: options.useCachedFigmaData || false,
       })
     );
   });
@@ -177,6 +208,7 @@ debugDocument
   .description('save Figma documents locally')
   .addOption(documentsOption)
   .addOption(syncMappingWithGitOption)
+  .addOption(useCachedFigmaDataOption)
   .addOption(continuousIntegrationOption)
   .action(async (options) => {
     await ensureAccessTokens(!options.ci);
@@ -188,6 +220,7 @@ debugDocument
         documents: documents,
         syncMappingWithGit: options.syncMappingWithGit || false,
         prompting: !options.ci,
+        useCachedFigmaData: options.useCachedFigmaData || false,
       })
     );
   });

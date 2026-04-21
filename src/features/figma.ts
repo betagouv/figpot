@@ -132,7 +132,12 @@ export async function retrieveColors(documentId: string): Promise<FigmaDefinedCo
   } catch (error) {
     const body = (error as unknown as any).body as ErrorResponsePayloadWithErrorBoolean;
 
-    if (body.status === 403 && body.message.includes('file_variables:read')) {
+    // Figma returns 403 on this endpoint when the caller's plan does not grant access to local variables.
+    // The response message has varied over time ("file_variables:read" scope-style, then "Limited by Figma plan"),
+    // so we match both known wordings (lower-cased to be resilient to casing changes) to avoid re-breaking when Figma rephrases.
+    const lowerMessage = body.message.toLowerCase();
+
+    if (body.status === 403 && (lowerMessage.includes('file_variables:read') || lowerMessage.includes('limited by figma plan'))) {
       console.warn(
         `exact color variables names won't be transferred since Figma requires the most expensive plan just to get variables you defined (Enterprise plan you seem to not have)...`
       );

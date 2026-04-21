@@ -18,9 +18,7 @@
   ],
   "type": "module",
   "module": "./dist/index.js",
-  "bin": {
-    "@betagouv/figpot": "./dist/cli/index.js"
-  },
+  "bin": "./dist/cli/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "postinstall": "patch-package",

@@ -49,6 +49,8 @@ export function cleanHostedDocument(hostedTree: PostGetFileResponse): PenpotDocu
         object.touched = object.touched.sort();
       }
 
+      stripServerDerivedGeometry(object);
+
       if (object.type === 'text') {
         // From the UI this is passed with all position for each texts, it would be really difficult to calculate it
         // on our own. Hopefully they are not required for the text to be correctly created, so ignoring it :)
@@ -110,4 +112,30 @@ export function cleanHostedDocument(hostedTree: PostGetFileResponse): PenpotDocu
       components: components,
     },
   };
+}
+
+// When a node has `auto` or `fill` sizing on an axis, Penpot recomputes the corresponding dimension on hydration from its own
+// text/content measurement (which differs slightly from Figma's). Pushing the Figma-derived dimension just triggers a perpetual
+// diff between our value and Penpot's recomputed one. Stripping the derived fields from both sides (local after transform and
+// remote in `cleanHostedDocument`) keeps microdiff in sync and lets Penpot's layout engine own the final numbers.
+//
+// `selrect` and `points` depend on both width and height, so we strip them entirely whenever any axis is server-derived.
+// `x` / `y` are NOT touched — they are set by the parent container and never recomputed by Penpot itself.
+export function stripServerDerivedGeometry(object: any): void {
+  const vDerived = object.layoutItemVSizing === 'auto' || object.layoutItemVSizing === 'fill';
+  const hDerived = object.layoutItemHSizing === 'auto' || object.layoutItemHSizing === 'fill';
+
+  if (!vDerived && !hDerived) {
+    return;
+  }
+
+  if (vDerived) {
+    delete object.height;
+  }
+  if (hDerived) {
+    delete object.width;
+  }
+
+  delete object.selrect;
+  delete object.points;
 }

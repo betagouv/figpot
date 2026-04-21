@@ -30,7 +30,7 @@ import {
   retrieveStylesNodes,
 } from '@figpot/src/features/figma';
 import { restoreMappingFromRepository, saveMappingToRepository } from '@figpot/src/features/git';
-import { cleanHostedDocument } from '@figpot/src/features/penpot';
+import { cleanHostedDocument, stripServerDerivedGeometry } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
 import { isPageRootFrame, isPageRootFrameFromId, registerFontId, rootFrameId } from '@figpot/src/features/translators/translateId';
 import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
@@ -498,6 +498,14 @@ export function transformDocument(
   // and since we do comparaisons both in later stage or when doing tests we need to make sure
   // all properties set to `undefined` by `transformDocumentNode()` won't "produce" an object difference
   removeUndefinedProperties(penpotTree);
+
+  // Same stripping as `cleanHostedDocument` does on the remote side: for nodes with `auto`/`fill` sizing, Penpot will
+  // recompute the relevant dimensions during hydration. Omitting them from the local tree prevents microdiff churn.
+  for (const page of Object.values(penpotTree.data.pagesIndex)) {
+    for (const object of Object.values(page.objects)) {
+      stripServerDerivedGeometry(object);
+    }
+  }
 
   return penpotTree;
 }

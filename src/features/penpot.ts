@@ -1,6 +1,6 @@
 import svgPathParser from 'svg-path-parser';
 
-import { PostCommandGetFileResponse } from '@figpot/src/clients/penpot';
+import { PostGetFileResponse } from '@figpot/src/clients/penpot';
 import { formatPageRootFrameId, rootFrameId } from '@figpot/src/features/translators/translateId';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
@@ -9,7 +9,7 @@ import { translateNonRotatedCommands } from './translators/vectors/translateNonR
 
 const { parseSVG } = svgPathParser;
 
-export function cleanHostedDocument(hostedTree: PostCommandGetFileResponse): PenpotDocument {
+export function cleanHostedDocument(hostedTree: PostGetFileResponse): PenpotDocument {
   assert(hostedTree.data);
 
   // Remove fields not meaningful and specific to Penpot and those that are dynamic (so it can be compared to the conversion from Figma)

@@ -4,10 +4,10 @@ import { OpenAPI as FigmaClientSettings } from '@figpot/src/clients/figma';
 import { OpenAPI as PenpotClientSettings } from '@figpot/src/clients/penpot';
 import { AccessTokenConfigSchema, CredentialsConfigSchema } from '@figpot/src/models/entities/environment';
 
-if (typeof process.env.PENPOT_BASE_URL === 'string') {
-  // Can be used in case of a self-hosted instance
-  PenpotClientSettings.BASE = `${process.env.PENPOT_BASE_URL}/api/rpc`;
-}
+export const penpotApiBaseUrl = `${process.env.PENPOT_BASE_URL ?? 'https://design.penpot.app'}/api/main/methods`;
+
+// The generated client does `BASE + path` where `path` has no leading slash, so BASE must end with a trailing one
+PenpotClientSettings.BASE = `${penpotApiBaseUrl}/`;
 
 export const config = {
   figmaAccessToken: '',

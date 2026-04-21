@@ -15,8 +15,8 @@ import { toFile } from 'ts-graphviz/adapter';
 import { z } from 'zod';
 
 import { GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
-import { OpenAPI as PenpotClientSettings, postCommandGetFileObjectThumbnails, postCommandGetFontVariants } from '@figpot/src/clients/penpot';
-import { PostCommandGetFileResponse, postCommandGetFile, postCommandRenameFile, postCommandUpdateFile } from '@figpot/src/clients/penpot';
+import { OpenAPI as PenpotClientSettings, postGetFileObjectThumbnails, postGetFontVariants } from '@figpot/src/clients/penpot';
+import { PostGetFileResponse, postGetFile, postRenameFile, postUpdateFile } from '@figpot/src/clients/penpot';
 import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/workaround';
 import {
   FigmaDefinedColor,
@@ -41,7 +41,7 @@ import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/tex
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot/src/utils/comparaison';
-import { config } from '@figpot/src/utils/environment';
+import { config, penpotApiBaseUrl } from '@figpot/src/utils/environment';
 import { downloadFile, openAsBlob, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
 import { gracefulExit } from '@figpot/src/utils/system';
 
@@ -341,7 +341,7 @@ export async function retrieve(options: RetrieveOptionsType) {
     // Note: other variable kinds are not retrieved because Penpot cannot manage them (so using their raw value)
     const figmaColors = await retrieveColors(document.figmaDocument);
 
-    const customPenpotFontsVariants = (await postCommandGetFontVariants({
+    const customPenpotFontsVariants = (await postGetFontVariants({
       requestBody: {
         fileId: document.penpotDocument,
       },
@@ -1398,13 +1398,13 @@ export async function compare(options: CompareOptionsType) {
 
     const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
 
-    const currentThumbnails = await postCommandGetFileObjectThumbnails({
+    const currentThumbnails = await postGetFileObjectThumbnails({
       requestBody: {
         fileId: document.penpotDocument,
       },
     });
 
-    let hostedDocument = await postCommandGetFile({
+    let hostedDocument = await postGetFile({
       requestBody: {
         id: document.penpotDocument,
       },
@@ -1448,7 +1448,7 @@ export async function processOperationsChunk(
       `processing the modifications chunk [${chunkNumber}] containing ${currentChunk.length} operations (previously ${succeededOperations} done over a total of ${differences.newTreeOperations.length})`
     );
 
-    await postCommandUpdateFile({
+    await postUpdateFile({
       requestBody: {
         id: penpotDocumentId,
         revn: 0, // Required but does no block to use a default one
@@ -1490,7 +1490,7 @@ export async function processDifferences(
 ) {
   // Note: seeing the name change in the UI requires a browser page refresh
   if (differences.newDocumentName) {
-    await postCommandRenameFile({
+    await postRenameFile({
       requestBody: {
         id: penpotDocumentId,
         name: differences.newDocumentName,
@@ -1559,7 +1559,7 @@ export async function processDifferences(
 
       console.log(`uploading the media ${penpotMediaId} to Penpot`);
 
-      const response = await fetch(`${PenpotClientSettings.BASE}/command/upload-file-media-object`, {
+      const response = await fetch(`${penpotApiBaseUrl}/upload-file-media-object`, {
         method: 'POST',
         body: formData,
         headers: {
@@ -1666,7 +1666,7 @@ export async function processDifferences(
       //   },
       // });
 
-      const response = await fetch(`${PenpotClientSettings.BASE}/command/delete-file-object-thumbnail`, {
+      const response = await fetch(`${penpotApiBaseUrl}/delete-file-object-thumbnail`, {
         method: 'POST',
         body: JSON.stringify({
           fileId: penpotDocumentId,
@@ -1761,7 +1761,7 @@ export type HydrateOptionsType = z.infer<typeof HydrateOptions>;
 export async function hydrate(options: HydrateOptionsType) {
   // Get the UI access token (short-lived) (the API access token would not compatible for the following actions)
   // Note: this is inspired by `postCommandLoginWithPassword()` but we need to catch the response cookie header
-  const response = await fetch(`${PenpotClientSettings.BASE}/command/login-with-password`, {
+  const response = await fetch(`${penpotApiBaseUrl}/login-with-password`, {
     method: 'POST',
     body: JSON.stringify({
       email: config.penpotUserEmail,
@@ -1846,7 +1846,7 @@ export async function hydrate(options: HydrateOptionsType) {
       const page = await browserContext.newPage();
 
       try {
-        const endpointsToWatch = ['/api/rpc/command/update-file?', '/api/rpc/command/create-file-object-thumbnail?'];
+        const endpointsToWatch = ['/api/main/methods/update-file?', '/api/main/methods/create-file-object-thumbnail?'];
         let stage: 'start' | 'waiting-updates' = 'start';
 
         const pagesToWatch = [...meta.penpotPages];
@@ -1915,7 +1915,7 @@ export async function hydrate(options: HydrateOptionsType) {
 
           page.on('response', async (response) => {
             const url = response.url();
-            if (stage === 'start' && url.includes('/api/rpc/command/get-file?')) {
+            if (stage === 'start' && url.includes('/api/main/methods/get-file?')) {
               if (response.status() === 200) {
                 stage = 'waiting-updates';
 

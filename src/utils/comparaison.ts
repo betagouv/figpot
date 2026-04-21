@@ -54,7 +54,10 @@ export function getDiff<Model extends Record<ReferenceProperty, any>, ReferenceP
             wDiff.type === 'CHANGE' &&
             typeof wDiff.oldValue === 'number' &&
             typeof wDiff.value === 'number' &&
-            Math.abs(wDiff.value - wDiff.oldValue) < NUMBER_TOLERANCE
+            // Also treat two values as equal when they round-trip to the same float32 — Penpot stores path coordinates as float32
+            // (WebGL/canvas rendering) so `17598.357` comes back as `17598.357421875` on the next read. The absolute gap grows with the
+            // magnitude of the coordinate, which a fixed `NUMBER_TOLERANCE` cannot cover
+            (Math.abs(wDiff.value - wDiff.oldValue) < NUMBER_TOLERANCE || Math.fround(wDiff.value) === Math.fround(wDiff.oldValue))
           ) {
             beforeAfterModelDiff.splice(w, 1);
           }

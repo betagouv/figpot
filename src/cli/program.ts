@@ -37,9 +37,9 @@ const serverValidationOption = new Option(
   '--no-server-validation',
   'skip Penpot validation server-side, useful for big files or for a Penpot instance with limited resources, use it with caution'
 );
-const useCachedFigmaTreeOption = new Option(
-  '--use-cached-figma-tree',
-  'reuse the previously retrieved Figma document tree from local cache instead of fetching it again (useful to avoid Figma rate limits during iteration)'
+const useCachedFigmaDataOption = new Option(
+  '--use-cached-figma-data',
+  'reuse the previously retrieved Figma data (tree, colors, typographies) from local cache instead of fetching it again (useful to avoid Figma rate limits or plan-based restrictions during iteration)'
 );
 
 const patternInfo = '(use single quotes around the parameter to prevent your terminal to replace special characters)';
@@ -112,7 +112,7 @@ document
   .addOption(replaceFontPatternsOption)
   .addOption(syncMappingWithGitOption)
   .addOption(serverValidationOption)
-  .addOption(useCachedFigmaTreeOption)
+  .addOption(useCachedFigmaDataOption)
   .addOption(continuousIntegrationOption)
   .option('-nh, --no-hydrate', 'prevent performing hydratation after the synchronization')
   .option('-ht, --hydrate-timeout <hydrateTimeout>', 'specify a maximum of duration for hydratation')
@@ -153,7 +153,7 @@ document
         syncMappingWithGit: options.syncMappingWithGit || false,
         serverValidation: options.serverValidation,
         prompting: !options.ci,
-        useCachedFigmaTree: options.useCachedFigmaTree || false,
+        useCachedFigmaData: options.useCachedFigmaData || false,
       })
     );
   });
@@ -187,7 +187,7 @@ debugDocument
   .description('save Figma documents locally')
   .addOption(documentsOption)
   .addOption(syncMappingWithGitOption)
-  .addOption(useCachedFigmaTreeOption)
+  .addOption(useCachedFigmaDataOption)
   .addOption(continuousIntegrationOption)
   .action(async (options) => {
     await ensureAccessTokens(!options.ci);
@@ -199,7 +199,7 @@ debugDocument
         documents: documents,
         syncMappingWithGit: options.syncMappingWithGit || false,
         prompting: !options.ci,
-        useCachedFigmaTree: options.useCachedFigmaTree || false,
+        useCachedFigmaData: options.useCachedFigmaData || false,
       })
     );
   });

@@ -164,7 +164,7 @@ The Figma retriever fetches document tree (`/v1/files/{key}?geometry=paths`) tha
 
 Starting in 2026, Figma tightened this further by introducing **monthly caps** on the most expensive endpoints for some plan tiers (see [Figma's rate limits documentation](https://developers.figma.com/docs/rest-api/rate-limits/)). Once the monthly cap is hit, the `Retry-After` value Figma returns can be several days long — waiting it out is usually not practical.
 
-You can pass `--use-cached-figma-tree` on `synchronize` to reuse the previously saved Figma tree instead of calling Figma again. If the cache file does not exist, the flag is ignored and a fresh fetch is performed.
+You can pass `--use-cached-figma-data` on `synchronize` to reuse the previously saved Figma data (tree, colors, typographies) instead of calling Figma again. If any of those cache files is missing, the flag is ignored and a fresh fetch is performed.
 
 ### How to set up a recurrent synchronization?
 

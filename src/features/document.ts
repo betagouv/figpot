@@ -123,7 +123,7 @@ export const RetrieveOptions = z.object({
   documents: z.array(DocumentOptions),
   prompting: Prompting,
   syncMappingWithGit: z.boolean(),
-  useCachedFigmaTree: z.boolean(),
+  useCachedFigmaData: z.boolean(),
 });
 export type RetrieveOptionsType = z.infer<typeof RetrieveOptions>;
 
@@ -350,10 +350,20 @@ export async function saveMapping(figmaDocumentId: string, penpotDocumentId: str
 
 export async function retrieve(options: RetrieveOptionsType) {
   for (const document of options.documents) {
+    // When `--use-cached-figma-data` is set and every cache artifact is present on disk, skip the three Figma calls
+    // (`retrieveColors` / `retrieveDocument` / `retrieveStylesNodes`) and reuse the processed outputs. `colors.json` and
+    // `typographies.json` already store the final merged shape, so the intermediate `stylesNodes` response is not needed.
+    // `getImageFills` below is still executed because it's a cheap call and handling it from the tree alone would add surface for bugs.
+    const useCache =
+      options.useCachedFigmaData &&
+      fsSync.existsSync(getFigmaDocumentTreePath(document.figmaDocument)) &&
+      fsSync.existsSync(getFigmaDocumentColorsPath(document.figmaDocument)) &&
+      fsSync.existsSync(getFigmaDocumentTypographiesPath(document.figmaDocument));
+
     // Get all predefined colors from Figma
     // We do not use `getPublishedVariables()` because it contains only a part of the local ones, and without values
     // Note: other variable kinds are not retrieved because Penpot cannot manage them (so using their raw value)
-    const figmaColors = await retrieveColors(document.figmaDocument);
+    const figmaColors = useCache ? await readFigmaColorsFile(document.figmaDocument) : await retrieveColors(document.figmaDocument);
 
     const customPenpotFontsVariants = (await postGetFontVariants({
       requestBody: {
@@ -378,7 +388,7 @@ export async function retrieve(options: RetrieveOptionsType) {
 
     // Save the document tree locally (or reuse the last saved one to skip the expensive Figma fetch during debugging)
     let documentTree: GetFileResponse;
-    if (options.useCachedFigmaTree && fsSync.existsSync(getFigmaDocumentTreePath(document.figmaDocument))) {
+    if (useCache) {
       documentTree = await readFigmaTreeFile(document.figmaDocument);
     } else {
       try {
@@ -403,7 +413,7 @@ export async function retrieve(options: RetrieveOptionsType) {
             `Figma is rate-limiting the fetch of "${document.figmaDocument}". The "get file" endpoint (${endpointTier}${seatClassHint}) is one of the most expensive and since 2026 Figma enforces stricter monthly caps on it. See https://developers.figma.com/docs/rest-api/rate-limits/ for the quota table.\nYou can either:\n` +
               `  - ${retryHint}\n` +
               `  - use a Figma account on a higher plan with a larger quota\n` +
-              `  - pass "--use-cached-figma-tree" to reuse the previously retrieved Figma tree (if any is saved locally)`
+              `  - pass "--use-cached-figma-data" to reuse the previously retrieved Figma tree, colors and typographies (if saved locally)`
           );
 
           throw new Error(`Figma rate limit reached on document "${document.figmaDocument}"`);
@@ -419,26 +429,28 @@ export async function retrieve(options: RetrieveOptionsType) {
     meta.figmaLastModified = new Date(documentTree.lastModified);
     await saveMeta(document.figmaDocument, document.penpotDocument, meta);
 
-    // Process attached styles
-    const stylesIds: string[] = Object.keys(documentTree.styles);
+    // Process attached styles (skipped when using the cached data — `typographies.json` is already the final output and is re-read later by `transform()`)
+    if (!useCache) {
+      const stylesIds: string[] = Object.keys(documentTree.styles);
 
-    // The Figma API does not expose styles easily, so we have to use an endpoint to get simulated applied styles to extract wanted values
-    // Ref: https://forum.figma.com/t/rest-api-get-color-and-text-styles/49216/4
-    const stylesNodes = await retrieveStylesNodes(document.figmaDocument, stylesIds);
+      // The Figma API does not expose styles easily, so we have to use an endpoint to get simulated applied styles to extract wanted values
+      // Ref: https://forum.figma.com/t/rest-api-get-color-and-text-styles/49216/4
+      const stylesNodes = await retrieveStylesNodes(document.figmaDocument, stylesIds);
 
-    const figmaTypographies = extractStylesTypographies(documentTree, stylesNodes);
-    mergeStylesColors(figmaColors, documentTree, stylesNodes);
+      const figmaTypographies = extractStylesTypographies(documentTree, stylesNodes);
+      mergeStylesColors(figmaColors, documentTree, stylesNodes);
 
-    const documentFolderPath = getFigmaDocumentPath(document.figmaDocument);
-    await fs.mkdir(documentFolderPath, { recursive: true });
+      const documentFolderPath = getFigmaDocumentPath(document.figmaDocument);
+      await fs.mkdir(documentFolderPath, { recursive: true });
 
-    await writeBigJsonFile(getFigmaDocumentTreePath(document.figmaDocument), documentTree);
-    await fs.writeFile(getFigmaDocumentColorsPath(document.figmaDocument), JSON.stringify(figmaColors, null, 2), {
-      encoding: 'utf-8',
-    });
-    await fs.writeFile(getFigmaDocumentTypographiesPath(document.figmaDocument), JSON.stringify(figmaTypographies, null, 2), {
-      encoding: 'utf-8',
-    });
+      await writeBigJsonFile(getFigmaDocumentTreePath(document.figmaDocument), documentTree);
+      await fs.writeFile(getFigmaDocumentColorsPath(document.figmaDocument), JSON.stringify(figmaColors, null, 2), {
+        encoding: 'utf-8',
+      });
+      await fs.writeFile(getFigmaDocumentTypographiesPath(document.figmaDocument), JSON.stringify(figmaTypographies, null, 2), {
+        encoding: 'utf-8',
+      });
+    }
 
     // Save images
     const imagesList = await getImageFills({
@@ -1770,7 +1782,7 @@ export const SynchronizeOptions = z.object({
   syncMappingWithGit: z.boolean(),
   serverValidation: ServerValidation,
   prompting: Prompting,
-  useCachedFigmaTree: z.boolean(),
+  useCachedFigmaData: z.boolean(),
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;
 

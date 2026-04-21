@@ -60,8 +60,9 @@ export function cleanHostedDocument(hostedTree: PostGetFileResponse): PenpotDocu
             delete textChild.key;
           }
         }
-      } else if (object.type === 'path') {
-        // The new Penpot API is no longer returning an array of commands but instead the inline SVG path
+      } else if (object.type === 'path' || object.type === 'bool') {
+        // The new Penpot API is no longer returning an array of commands but instead the inline SVG path.
+        // Applies to both `path` and `bool` (boolean-op nodes expose their resolved shape as a path too).
         // We cannot compare it directly with the inline Figma SVG path provided due to logic of calculation, so instead
         // translating from here also to get same things for comparaison (transformed tree has to use commands, it cannot pushes inline path)
         if (typeof object.content === 'string' && (object.content as string).length > 0 && (object.content as string)[0] === 'M') {

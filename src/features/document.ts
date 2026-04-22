@@ -464,7 +464,8 @@ export async function retrieve(options: RetrieveOptionsType) {
 
       // It should always be the same extension so simplifying with the wildcard pattern
       // (the extension is retrieved from HTTP headers when downloading)
-      const potentielExistingFilesPaths = await glob(`${filePath}.*`);
+      // `windowsPathsNoEscape` so backslashes from `path.resolve()` on Windows are treated as separators, not as the escape character
+      const potentielExistingFilesPaths = await glob(`${filePath}.*`, { windowsPathsNoEscape: true });
 
       // We assume uploaded images are immutable, so if locally existing, skip
       if (potentielExistingFilesPaths.length === 0) {
@@ -1585,7 +1586,8 @@ export async function processDifferences(
       }
 
       const filePath = getFigmaMediaPath(figmaMediaId);
-      const potentielExistingFilesPaths = await glob(`${filePath}.*`);
+      // `windowsPathsNoEscape` so backslashes from `path.resolve()` on Windows are treated as separators, not as the escape character
+      const potentielExistingFilesPaths = await glob(`${filePath}.*`, { windowsPathsNoEscape: true });
 
       if (!potentielExistingFilesPaths.length) {
         throw new Error(`the Figma file ${figmaMediaId} cannot be uploaded to Penpot since missing locally`);

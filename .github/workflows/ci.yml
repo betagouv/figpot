@@ -8,7 +8,7 @@ on:
 env:
   APP_NAME: figpot
   NODE_OPTIONS: --max_old_space_size=4096
-  NODE_VERSION: 20.15.0
+  NODE_VERSION: 20.20.2
   JEST_CACHE_FOLDER_SUFFIX: .cache/jest
 concurrency:
   # Prevent parallel builds of the same branch

@@ -18,7 +18,9 @@
   ],
   "type": "module",
   "module": "./dist/index.js",
-  "bin": "./dist/cli/index.js",
+  "bin": {
+    "figpot": "dist/cli/index.js"
+  },
   "types": "./dist/index.d.ts",
   "scripts": {
     "postinstall": "patch-package",
@@ -107,7 +109,7 @@
     "tsx": "^4.7.0",
     "typescript": "^5.2.2"
   },
-  "packageManager": "npm@10.4.0",
+  "packageManager": "npm@11.7.0",
   "engines": {
     "node": ">=18.16.0"
   },

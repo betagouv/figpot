@@ -21,7 +21,11 @@ const { parseSVG } = svgPathParser;
 function translatePathNode(node: StarNode | RegularPolygonNode, figmaNodeTransform: Transform): Segment[] {
   assert(node.fillGeometry);
 
-  return translateCommands(node, figmaNodeTransform, parseSVG(node.fillGeometry[0].path));
+  if (node.fillGeometry.length > 0) {
+    return translateCommands(node, figmaNodeTransform, parseSVG(node.fillGeometry[0].path));
+  } else {
+    return [];
+  }
 }
 
 export function transformPathNode(

@@ -19,7 +19,7 @@ export function transformSceneNode(
   figmaNode: SubcanvasNode,
   closestFigmaFrameId: string,
   figmaNodeTransform: Transform
-): Omit<PenpotNode, 'id'> {
+): Omit<PenpotNode, 'id'> | undefined {
   let penpotNode: Omit<PenpotNode, 'id'> | undefined;
 
   switch (figmaNode.type) {
@@ -61,14 +61,17 @@ export function transformSceneNode(
     case 'INSTANCE':
       penpotNode = transformInstanceNode(registry, figmaNode, figmaNodeTransform);
       break;
-    // case 'CONNECTOR':
-    //   // TODO: implement it?
-    //   penpotNode = await transformConnectorNode(figmaNode, baseX, baseY);
-    //   break;
   }
 
   if (penpotNode === undefined) {
-    throw new Error(`Unsupported Figma node type: ${figmaNode.type}`);
+    // any other type is not yet implemented (`SLOT`, `SLIDE`, `TABLE, `SHAPE_WITH_TEXT`)
+    // so instead of aborting the whole migration, just notify the user it will be skipped
+    // note: some have just for now no equivalent in Penpot (`TEXT_PATH`, `CONNECTOR`)
+    console.warn(
+      `skipping the Figma node "${figmaNode.name ?? '(unnamed)'}" (id "${figmaNode.id ?? 'unknown'}", type "${figmaNode.type ?? 'unknown'}") because its type is not supported by figpot`
+    );
+
+    return undefined;
   }
 
   return penpotNode;

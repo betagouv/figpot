@@ -4,6 +4,7 @@ import {
   ErrorResponsePayloadWithErrorBoolean,
   GetFileNodesResponse,
   GetFileResponse,
+  GetLocalVariablesResponse,
   LocalVariable,
   Paint,
   RGBA,
@@ -37,6 +38,52 @@ export type FigmaDefinedColor = {
 
 export function isColor(value: string | number | boolean | RGBA | VariableAlias): value is RGBA {
   return typeof value === 'object' && 'r' in value;
+}
+
+// A Figma color variable does not always hold a raw color: it can be an alias pointing to another
+// variable (`{ type: 'VARIABLE_ALIAS', id: '...' }`). In that case `valuesByMode` stores the alias
+// instead of an `RGBA`, so we walk the alias chain until we reach a concrete color.
+// An alias can target a variable hosted in another Figma file: such a variable is not part of this
+// document response (`meta.variables`), so it stays unresolved and we return `undefined` for it.
+function resolveColorVariableValue(
+  variable: LocalVariable,
+  meta: GetLocalVariablesResponse['meta'],
+  visitedVariableIds: Set<string> = new Set()
+): RGBA | undefined {
+  // Guard against cyclic aliases (a variable aliasing itself directly or through a chain)
+  if (visitedVariableIds.has(variable.id)) {
+    return undefined;
+  }
+
+  visitedVariableIds.add(variable.id);
+
+  const collection = meta.variableCollections[variable.variableCollectionId];
+  if (!collection) {
+    return undefined;
+  }
+
+  // We rely on the default mode value (variable modes are not handled yet, see the TODO in `retrieveColors`)
+  const modeValue = variable.valuesByMode[collection.defaultModeId];
+  if (modeValue === undefined) {
+    return undefined;
+  }
+
+  if (isColor(modeValue)) {
+    return modeValue;
+  }
+
+  // Not a raw color, so it should be an alias to another variable that we follow recursively
+  if (typeof modeValue === 'object' && 'type' in modeValue && modeValue.type === 'VARIABLE_ALIAS') {
+    const aliasedVariable = meta.variables[modeValue.id];
+    if (!aliasedVariable) {
+      // The aliased variable lives in another Figma file, it's not part of this document response
+      return undefined;
+    }
+
+    return resolveColorVariableValue(aliasedVariable, meta, visitedVariableIds);
+  }
+
+  return undefined;
 }
 
 export function processDocumentsParametersFromInput(parameters: string[]): DocumentOptionsType[] {
@@ -103,31 +150,42 @@ export async function retrieveColors(documentId: string): Promise<FigmaDefinedCo
 
   try {
     const localVariablesResult = await getLocalVariables({ fileKey: documentId });
+    let unresolvedColorVariablesCount = 0;
+
     for (const localVariable of Object.values(localVariablesResult.meta.variables)) {
       if (localVariable.resolvedType === 'COLOR') {
-        // TODO: variables can be nested, it should be taken into account to also make sure what happens if the nested variable is into another file
-        // We rely on a value if provided by using the default Figma mode, and when it's not available The easier for us is to set the value from the hardcoded values of nodes (may be a problem in some cases if multiple mode applied, but it's unlikely)
+        // The value can be an alias to another variable (even one hosted in another file), `resolveColorVariableValue`
+        // walks the alias chain and returns `undefined` when the final color cannot be reached.
+        //
+        // TODO: variable modes are not handled yet, we only rely on the default mode of each collection
         // Ref: https://forum.figma.com/t/how-to-access-variable-alias-value-from-another-collection/53203/4
-        const collection = localVariablesResult.meta.variableCollections[localVariable.variableCollectionId];
+        const resolvedColor = resolveColorVariableValue(localVariable, localVariablesResult.meta);
+
+        if (!resolvedColor) {
+          unresolvedColorVariablesCount++;
+        }
 
         colors.push({
           id: localVariable.id,
           key: localVariable.key,
           name: localVariable.name,
           description: localVariable.description,
-          value:
-            !!collection &&
-            localVariable.valuesByMode[collection.defaultModeId] !== undefined &&
-            isColor(localVariable.valuesByMode[collection.defaultModeId])
-              ? {
-                  // Color variables can only manage a simple color so emulating to the appropriate Paint one
-                  type: 'SOLID',
-                  color: localVariable.valuesByMode[collection.defaultModeId] as RGBA,
-                  blendMode: 'NORMAL',
-                }
-              : undefined,
+          value: resolvedColor
+            ? {
+                // Color variables can only manage a simple color so emulating to the appropriate Paint one
+                type: 'SOLID',
+                color: resolvedColor,
+                blendMode: 'NORMAL',
+              }
+            : undefined,
         });
       }
+    }
+
+    if (unresolvedColorVariablesCount > 0) {
+      console.warn(
+        `${unresolvedColorVariablesCount} color variable(s) could not be resolved to a concrete color (most likely aliases to variables hosted in another Figma file). They won't be transferred as Penpot library colors, but nodes using them keep their hardcoded color.`
+      );
     }
   } catch (error) {
     const body = (error as unknown as any).body as ErrorResponsePayloadWithErrorBoolean;

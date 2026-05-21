@@ -1,4 +1,4 @@
-import { SubcanvasNode, Transform } from '@figpot/src/clients/figma';
+import { EllipseNode, SubcanvasNode, Transform, VectorNode } from '@figpot/src/clients/figma';
 import { transformBooleanNode } from '@figpot/src/features/transformers/transformBooleanNode';
 import { transformComponentNode } from '@figpot/src/features/transformers/transformComponentNode';
 import { transformComponentSetNode } from '@figpot/src/features/transformers/transformComponentSetNode';
@@ -14,6 +14,10 @@ import { transformVectorNode } from '@figpot/src/features/transformers/transform
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
+function isArcEllipse(node: EllipseNode): boolean {
+  return node.arcData.innerRadius > 0 || node.arcData.endingAngle - node.arcData.startingAngle < 2 * Math.PI - 0.001;
+}
+
 export function transformSceneNode(
   registry: AbstractRegistry,
   figmaNode: SubcanvasNode,
@@ -27,7 +31,10 @@ export function transformSceneNode(
       penpotNode = transformRectangleNode(registry, figmaNode, figmaNodeTransform);
       break;
     case 'ELLIPSE':
-      penpotNode = transformEllipseNode(registry, figmaNode, figmaNodeTransform);
+      // A partial sweep or a hole (arc / pie / donut) has no Penpot `circle` equivalent, so ending with pure vector
+      penpotNode = isArcEllipse(figmaNode)
+        ? transformVectorNode(registry, figmaNode as unknown as VectorNode, closestFigmaFrameId, figmaNodeTransform)
+        : transformEllipseNode(registry, figmaNode, figmaNodeTransform);
       break;
     case 'SECTION':
     case 'FRAME':

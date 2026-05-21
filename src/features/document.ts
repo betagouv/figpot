@@ -1159,10 +1159,13 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 
         assert(id);
 
-        // Penpot does not handle moving objects across pages
-        // So to handle this we use a combination of a deletion and a creation
+        // Penpot cannot move an object across pages, nor morph a shape `type` in place (e.g. circle -> path)
+        // In both cases we combine a deletion and a re-creation instead of a modification
         // Note: only objects can be moved, not the root frame so not handlind this complex logic
-        if (item.before._apiType === 'node' && item.before._pageId !== item.after._pageId) {
+        if (
+          item.before._apiType === 'node' &&
+          (item.before._pageId !== item.after._pageId || item.before.type !== item.after.type)
+        ) {
           operations.push({
             type: 'del-obj',
             id: item.before.id,

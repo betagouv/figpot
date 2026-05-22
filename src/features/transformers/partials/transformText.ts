@@ -1,4 +1,4 @@
-import { TextNode, TypeStyle } from '@figpot/src/clients/figma';
+import { TextNode } from '@figpot/src/clients/figma';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
 import { TextSegment } from '@figpot/src/features/translators/text/paragraph/translateParagraphProperties';
 import { translateGrowType } from '@figpot/src/features/translators/text/properties/translateGrowType';

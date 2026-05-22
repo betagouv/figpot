@@ -317,7 +317,12 @@ export function collectTextPathNodeIds(tree: GetFileResponse): string[] {
 
   function deepCollect(figmaNode: SubcanvasNode) {
     if (figmaNode.type === 'TEXT_PATH') {
-      textPathNodeIds.push(figmaNode.id);
+      // A non-empty `fillGeometry` means the Figma API corrupted this TEXT_PATH: it returns the path circle
+      // instead of the outlined text. Its SVG render is meaningless, so we neither fetch nor cache it (the
+      // transform step skips such nodes too) — that way a missing local SVG always means "nothing usable".
+      if (!figmaNode.fillGeometry || figmaNode.fillGeometry.length === 0) {
+        textPathNodeIds.push(figmaNode.id);
+      }
     }
 
     if ('children' in figmaNode) {

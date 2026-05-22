@@ -48,8 +48,9 @@ export function transformSceneNode(
       penpotNode = transformTextNode(registry, figmaNode, figmaNodeTransform);
       break;
     case 'TEXT_PATH':
-      penpotNode = transformTextPathNode(registry, figmaNode, figmaNodeTransform);
-      break;
+      // `transformTextPathNode` emits its own specific warning when it skips a corrupted node, so we return
+      // straight away to avoid the generic "type not supported" warning below
+      return transformTextPathNode(registry, figmaNode, figmaNodeTransform);
     case 'VECTOR':
       penpotNode = transformVectorNode(registry, figmaNode, closestFigmaFrameId, figmaNodeTransform);
       break;

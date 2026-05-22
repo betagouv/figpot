@@ -20,23 +20,28 @@ import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 const { parseSVG } = svgPathParser;
 
 // Penpot has no "text on a path" shape, so during `retrieve` each TEXT_PATH is rendered by Figma as an SVG
-// with the glyphs outlined. And from here we rebuild it as a Penpot `path` from that cached SVG.
+// with the glyphs outlined, and here we rebuild it as a Penpot `path` from that cached SVG.
 export function transformTextPathNode(
   registry: AbstractRegistry,
   node: TextPathNode,
   figmaNodeTransform: Transform
 ): Omit<PathShape, 'id'> | undefined {
-  const svgFilePath = getFigmaTextPathSvgPath(node.id);
+  // TEXT_PATH node with a non-empty `fillGeometry` is skipped since corrupted on Figma's side: their API returns the path
+  // circle instead of the outlined text — even though exporting the SVG from the Figma app itself works
+  // note: we could have fallback to PNG but it would add more complexity to deal with new unexpected medias,
+  if (node.fillGeometry && node.fillGeometry.length > 0) {
+    console.warn(
+      `skipping the text-path "${node.name}" (${node.id}): the Figma API returns its path circle instead of the outlined ` +
+        `text. It is a Figma API bug even if exporting it as SVG from the Figma app works fine. Deleting and recreating this node ` +
+        `in Figma may fix this`
+    );
 
-  if (!fsSync.existsSync(svgFilePath)) {
-    throw new Error(`the SVG render of the text-path "${node.name}" (${node.id}) is missing, the retrieve step should have fetched it`);
+    return undefined;
   }
 
-  // TODO: a TEXT_PATH carrying a non-empty `fillGeometry` gets its text dropped by Figma's SVG export
-  // (only the baseline shape survives). A possible fix is reusing the SVG of a content-identical sibling
-  // whose `fillGeometry` is empty — unverified, so for now we just warn.
-  if (node.fillGeometry && node.fillGeometry.length > 0) {
-    console.warn(`the text-path "${node.name}" (${node.id}) may render incorrectly (Figma's SVG export drops the text for such nodes)`);
+  const svgFilePath = getFigmaTextPathSvgPath(node.id);
+  if (!fsSync.existsSync(svgFilePath)) {
+    throw new Error(`the SVG render of the text-path "${node.name}" (${node.id}) is missing, the retrieve step should have fetched it`);
   }
 
   const svgContent = fsSync.readFileSync(svgFilePath, 'utf-8');

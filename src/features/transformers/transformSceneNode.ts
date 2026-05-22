@@ -1,4 +1,4 @@
-import { EllipseNode, SubcanvasNode, Transform, VectorNode } from '@figpot/src/clients/figma';
+import { EllipseNode, Transform, VectorNode } from '@figpot/src/clients/figma';
 import { transformBooleanNode } from '@figpot/src/features/transformers/transformBooleanNode';
 import { transformComponentNode } from '@figpot/src/features/transformers/transformComponentNode';
 import { transformComponentSetNode } from '@figpot/src/features/transformers/transformComponentSetNode';
@@ -12,6 +12,7 @@ import { transformRectangleNode } from '@figpot/src/features/transformers/transf
 import { transformTextNode } from '@figpot/src/features/transformers/transformTextNode';
 import { transformTextPathNode } from '@figpot/src/features/transformers/transformTextPathNode';
 import { transformVectorNode } from '@figpot/src/features/transformers/transformVectorNode';
+import { SubcanvasNodeWithSlot } from '@figpot/src/models/entities/figma/slot';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
@@ -21,7 +22,7 @@ function isArcEllipse(node: EllipseNode): boolean {
 
 export function transformSceneNode(
   registry: AbstractRegistry,
-  figmaNode: SubcanvasNode,
+  figmaNode: SubcanvasNodeWithSlot,
   closestFigmaFrameId: string,
   figmaNodeTransform: Transform
 ): Omit<PenpotNode, 'id'> | undefined {
@@ -39,6 +40,10 @@ export function transformSceneNode(
       break;
     case 'SECTION':
     case 'FRAME':
+      penpotNode = transformFrameNode(registry, figmaNode, figmaNodeTransform);
+      break;
+    case 'SLOT':
+      // A Figma component slot is a plain container of the slotted nodes, so we render it like a frame
       penpotNode = transformFrameNode(registry, figmaNode, figmaNodeTransform);
       break;
     case 'GROUP':
@@ -76,7 +81,7 @@ export function transformSceneNode(
   }
 
   if (penpotNode === undefined) {
-    // any other type is not yet implemented (`SLOT`, `SLIDE`, `TABLE, `SHAPE_WITH_TEXT`)
+    // any other type is not yet implemented (`SLIDE`, `TABLE`, `SHAPE_WITH_TEXT`)
     // so instead of aborting the whole migration, just notify the user it will be skipped
     // note: some have just for now no equivalent in Penpot (`TEXT_PATH`, `CONNECTOR`)
     console.warn(

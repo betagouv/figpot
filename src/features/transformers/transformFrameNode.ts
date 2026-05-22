@@ -11,17 +11,18 @@ import { buildLayoutGridCells, transformAutoLayout, transformLayoutAttributes } 
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
+import { SlotNode } from '@figpot/src/models/entities/figma/slot';
 import { FrameShape } from '@figpot/src/models/entities/penpot/shapes/frame';
 import { Point } from '@figpot/src/models/entities/penpot/traits/point';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
-function isSectionNode(node: FrameNode | SectionNode | ComponentNode | ComponentSetNode | InstanceNode): node is SectionNode {
+function isSectionNode(node: FrameNode | SectionNode | ComponentNode | ComponentSetNode | InstanceNode | SlotNode): node is SectionNode {
   return node.type === 'SECTION';
 }
 
 export function transformFrameNode(
   registry: AbstractRegistry,
-  node: (FrameNode | SectionNode | ComponentNode | ComponentSetNode | InstanceNode) & Pick<SubcanvasNode, 'id'>,
+  node: (FrameNode | SectionNode | ComponentNode | ComponentSetNode | InstanceNode | SlotNode) & Pick<SubcanvasNode, 'id'>,
   figmaNodeTransform: Transform
 ): Omit<FrameShape, 'id'> {
   let frameSpecificAttributes: Partial<FrameShape> = {};

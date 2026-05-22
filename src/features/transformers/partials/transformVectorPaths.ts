@@ -3,13 +3,13 @@ import svgPathParser from 'svg-path-parser';
 import { Paint, PaintOverride, Path, Transform, VectorNode } from '@figpot/src/clients/figma';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
-import { transformVectorFills } from '@figpot/src/features/transformers/partials/transformFills';
+import { transformFills, transformVectorFills } from '@figpot/src/features/transformers/partials/transformFills';
 import { transformLayoutAttributes } from '@figpot/src/features/transformers/partials/transformLayout';
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
-import { transformStrokesFromVector } from '@figpot/src/features/transformers/partials/transformStrokes';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { translateWindingRule } from '@figpot/src/features/translators/vectors/translateWindingRule';
+import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { PathShape } from '@figpot/src/models/entities/penpot/shapes/path';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
@@ -39,7 +39,7 @@ function transformVectorPath(
   node: VectorNode,
   figmaNodeTransform: Transform,
   vectorPath: Path,
-  shapeFills: Paint[] | null
+  fills: Pick<ShapeAttributes, 'fills'>
 ): Omit<PathShape, 'id'> {
   // TODO: this returns a line from Figma as a rectangle, which is too complicated to move into Penpot (we should use stroke weight and stroke align to try simplifying the path)
   // Ref: https://github.com/penpot/penpot-exporter-figma-plugin/issues/210
@@ -54,8 +54,7 @@ function transformVectorPath(
     },
     constraintsH: 'scale',
     constraintsV: 'scale',
-    ...transformVectorFills(registry, node, vectorPath, shapeFills),
-    ...transformStrokesFromVector(registry, node, normalizedPaths),
+    ...fills,
     ...transformEffects(registry, node),
     ...transformSceneNode(node),
     ...transformBlend(node),
@@ -68,12 +67,15 @@ export function transformVectorPaths(registry: AbstractRegistry, node: VectorNod
   assert(node.strokeGeometry);
   assert(node.fillGeometry);
 
-  const pathShapes: Omit<PathShape, 'id'>[] = [];
-  for (const path of node.strokeGeometry) {
-    const shapeFills = getMergedFill(node, path);
+  // Figma's `strokeGeometry` is not a strokable centerline but the stroke already expanded into a fillable
+  // outline. So we paint each path with the stroke color as a plain fill, instead of also applying a Penpot
+  // stroke on top of it (which would render the stroke a second time and make thin lines look much thicker)
+  const strokeAsFills = transformFills(registry, {
+    fills: node.strokes ?? [],
+    styles: node.styles?.['stroke'] ? { fill: node.styles['stroke'] } : undefined,
+  });
 
-    pathShapes.push(transformVectorPath(registry, node, figmaNodeTransform, path, shapeFills));
-  }
+  const strokeShapes = node.strokeGeometry.map((vectorPath) => transformVectorPath(registry, node, figmaNodeTransform, vectorPath, strokeAsFills));
 
   // TODO: not sure it's necessary except if the fill is not working, commenting for now
   // but for some random shapes the fill would not work and this would be required. Better to fix the curves deduplication due to the SVG parser library
@@ -83,8 +85,8 @@ export function transformVectorPaths(registry: AbstractRegistry, node: VectorNod
     .map((geometry) => {
       const shapeFills = getMergedFill(node, geometry);
 
-      return transformVectorPath(registry, node, figmaNodeTransform, geometry, shapeFills);
+      return transformVectorPath(registry, node, figmaNodeTransform, geometry, transformVectorFills(registry, node, geometry, shapeFills));
     });
 
-  return [...geometryShapes, ...pathShapes];
+  return [...geometryShapes, ...strokeShapes];
 }

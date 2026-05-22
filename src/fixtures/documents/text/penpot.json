@@ -22,7 +22,7 @@
                 "fontStyle": "italic",
                 "textDecoration": "none",
                 "letterSpacing": "0",
-                "lineHeight": "1",
+                "lineHeight": "1.171875",
                 "textTransform": "none",
                 "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
               },
@@ -37,7 +37,7 @@
                 "fontStyle": "normal",
                 "textDecoration": "none",
                 "letterSpacing": "0",
-                "lineHeight": "1",
+                "lineHeight": "1.36181640625",
                 "textTransform": "none",
                 "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
               },
@@ -52,7 +52,7 @@
                 "fontStyle": "italic",
                 "textDecoration": "none",
                 "letterSpacing": "0",
-                "lineHeight": "1",
+                "lineHeight": "1.171875",
                 "textTransform": "none",
                 "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
               },
@@ -67,7 +67,7 @@
                 "fontStyle": "italic",
                 "textDecoration": "none",
                 "letterSpacing": "0",
-                "lineHeight": "1",
+                "lineHeight": "1.36181640625",
                 "textTransform": "none",
                 "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
               }
@@ -81,7 +81,7 @@
             "fontStyle": "italic",
             "textDecoration": "none",
             "letterSpacing": "0",
-            "lineHeight": "1",
+            "lineHeight": "1.171875",
             "textTransform": "none",
             "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
           },
@@ -99,7 +99,7 @@
                 "fontStyle": "italic",
                 "textDecoration": "none",
                 "letterSpacing": "0",
-                "lineHeight": "1",
+                "lineHeight": "1.171875",
                 "textTransform": "none",
                 "fills": [{ "fillColor": "#ff0000", "fillOpacity": 1 }]
               },
@@ -114,7 +114,7 @@
                 "fontStyle": "italic",
                 "textDecoration": "none",
                 "letterSpacing": "0",
-                "lineHeight": "1",
+                "lineHeight": "1.171875",
                 "textTransform": "none",
                 "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
               },
@@ -129,7 +129,7 @@
                 "fontStyle": "italic",
                 "textDecoration": "none",
                 "letterSpacing": "0",
-                "lineHeight": "1",
+                "lineHeight": "1.36181640625",
                 "textTransform": "none",
                 "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
               }
@@ -143,7 +143,7 @@
             "fontStyle": "italic",
             "textDecoration": "none",
             "letterSpacing": "0",
-            "lineHeight": "1",
+            "lineHeight": "1.171875",
             "textTransform": "none",
             "fills": [{ "fillColor": "#000000", "fillOpacity": 1 }]
           }

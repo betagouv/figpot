@@ -17,6 +17,32 @@ export function translateTextSegments(registry: BoundVariableRegistry, node: Tex
   return segments.map((segment) => translateStyleTextSegment(registry, node, segment));
 }
 
+// Penpot includes the last character's trailing letter-spacing when it measures a line, which offsets
+// centered and right-aligned text (Figma adds no such gap after the last glyph). Dropping it from the very
+// last segment leaves every real inter-character gap untouched, so negative tracking still overlaps glyphs.
+export function dropTrailingLetterSpacing(segments: PenpotTextNode[]): PenpotTextNode[] {
+  if (segments.length === 0) {
+    return segments;
+  }
+
+  const lastSegment = segments[segments.length - 1];
+  if (lastSegment.letterSpacing === undefined || parseFloat(lastSegment.letterSpacing) === 0) {
+    return segments;
+  }
+
+  // Spread to iterate by code point so a trailing surrogate pair (emoji, PUA glyph) is not split in half
+  const characters = [...(lastSegment.text ?? '')];
+  if (characters.length <= 1) {
+    return [...segments.slice(0, -1), { ...lastSegment, letterSpacing: '0' }];
+  }
+
+  return [
+    ...segments.slice(0, -1),
+    { ...lastSegment, text: characters.slice(0, -1).join('') },
+    { ...lastSegment, text: characters[characters.length - 1], letterSpacing: '0' },
+  ];
+}
+
 export function transformTextStyle(registry: BoundVariableRegistry, node: TextNode, style: TypeStyle): TextStyle {
   const typographyStyleId = getTypographyStyleId(node);
 

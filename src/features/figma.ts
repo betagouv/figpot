@@ -4,6 +4,8 @@ import {
   ErrorResponsePayloadWithErrorBoolean,
   GetFileNodesResponse,
   GetFileResponse,
+  GetImagesResponse,
+  GetLocalVariablesResponse,
   LocalVariable,
   Paint,
   RGBA,
@@ -12,6 +14,7 @@ import {
   VariableAlias,
   getFile,
   getFileNodes,
+  getImages,
   getLocalVariables,
   getProjectFiles,
   getTeamProjects,
@@ -39,6 +42,52 @@ export function isColor(value: string | number | boolean | RGBA | VariableAlias)
   return typeof value === 'object' && 'r' in value;
 }
 
+// A Figma color variable does not always hold a raw color: it can be an alias pointing to another
+// variable (`{ type: 'VARIABLE_ALIAS', id: '...' }`). In that case `valuesByMode` stores the alias
+// instead of an `RGBA`, so we walk the alias chain until we reach a concrete color.
+// An alias can target a variable hosted in another Figma file: such a variable is not part of this
+// document response (`meta.variables`), so it stays unresolved and we return `undefined` for it.
+function resolveColorVariableValue(
+  variable: LocalVariable,
+  meta: GetLocalVariablesResponse['meta'],
+  visitedVariableIds: Set<string> = new Set()
+): RGBA | undefined {
+  // Guard against cyclic aliases (a variable aliasing itself directly or through a chain)
+  if (visitedVariableIds.has(variable.id)) {
+    return undefined;
+  }
+
+  visitedVariableIds.add(variable.id);
+
+  const collection = meta.variableCollections[variable.variableCollectionId];
+  if (!collection) {
+    return undefined;
+  }
+
+  // We rely on the default mode value (variable modes are not handled yet, see the TODO in `retrieveColors`)
+  const modeValue = variable.valuesByMode[collection.defaultModeId];
+  if (modeValue === undefined) {
+    return undefined;
+  }
+
+  if (isColor(modeValue)) {
+    return modeValue;
+  }
+
+  // Not a raw color, so it should be an alias to another variable that we follow recursively
+  if (typeof modeValue === 'object' && 'type' in modeValue && modeValue.type === 'VARIABLE_ALIAS') {
+    const aliasedVariable = meta.variables[modeValue.id];
+    if (!aliasedVariable) {
+      // The aliased variable lives in another Figma file, it's not part of this document response
+      return undefined;
+    }
+
+    return resolveColorVariableValue(aliasedVariable, meta, visitedVariableIds);
+  }
+
+  return undefined;
+}
+
 export function processDocumentsParametersFromInput(parameters: string[]): DocumentOptionsType[] {
   return parameters.map((parameter) => {
     const parts = parameter.split(':');
@@ -50,6 +99,36 @@ export function processDocumentsParametersFromInput(parameters: string[]): Docum
   });
 }
 
+// Figma gateway has a URL length limit, so a long list of IDs passed as a query parameter must be split
+// across several requests. `baseUrl` is the request URL without the IDs, used to compute the room left.
+// Ref: https://stackoverflow.com/a/40250849/3608410
+function chunkIdsForUrlLength(ids: string[], baseUrl: string): string[][] {
+  const urlLengthLimitBytes = 8_192;
+  const remainingBytesPerRequest = urlLengthLimitBytes - baseUrl.length - 10; // We add a safe margin of 10 in case of specific default adding
+
+  // [IMPORTANT] The generated Figma client encodes all query parameters so we account for that for `:` and `,`
+  const delimiterLength = encodeURIComponent(',').length;
+
+  const chunks: string[][] = [[]];
+  let currentChunkIndex = 0;
+  let currentChunkCount = 0;
+  for (const id of ids) {
+    const encodedIdLength = encodeURIComponent(id).length;
+
+    // Take into account the `,` delimiter
+    if (currentChunkCount + Math.max(chunks[currentChunkIndex].length - 1, 0) * delimiterLength + encodedIdLength > remainingBytesPerRequest) {
+      chunks.push([]);
+      currentChunkIndex++;
+      currentChunkCount = 0;
+    }
+
+    chunks[currentChunkIndex].push(id);
+    currentChunkCount += encodedIdLength;
+  }
+
+  return chunks;
+}
+
 export async function retrieveStylesNodes(documentId: string, stylesIds: string[]): Promise<GetFileNodesResponse['nodes']> {
   if (!stylesIds.length) {
     return {};
@@ -57,32 +136,8 @@ export async function retrieveStylesNodes(documentId: string, stylesIds: string[
 
   const nodes: GetFileNodesResponse['nodes'] = {};
 
-  // Figma gateway has URL length limit that is reached when having too many styles
-  // So we need to chunk according to this limit to minize calls (have to do it step by step because each entry has a different length)
-  // Ref: https://stackoverflow.com/a/40250849/3608410
   // Note: styles types `GRID` and `EFFECT` are most of the time a few, so no removing them for retrieval for future use
-  const urlLengthLimitBytes = 8_192;
-  const remainingBytesPerRequest = urlLengthLimitBytes - `https://api.figma.com/v1/files/${documentId}/nodes?depth=1&ids=`.length - 10; // We add a safe marging of 10 in case of specific default adding
-
-  // [IMPORTANT] The generated Figma client is encoding all query parameters so we need to take this into account for `:` and `,`
-  const delimiterLength = encodeURIComponent(',').length;
-
-  const chunks: string[][] = [[]];
-  let currentChunkIndex = 0;
-  let currentChunkCount = 0;
-  for (const styleId of stylesIds) {
-    const encodedStyleIdLength = encodeURIComponent(styleId).length;
-
-    // Take into account the `,` delimiter
-    if (currentChunkCount + Math.max(chunks[currentChunkIndex].length - 1, 0) * delimiterLength + encodedStyleIdLength > remainingBytesPerRequest) {
-      chunks.push([]);
-      currentChunkIndex++;
-      currentChunkCount = 0;
-    }
-
-    chunks[currentChunkIndex].push(styleId);
-    currentChunkCount += encodedStyleIdLength;
-  }
+  const chunks = chunkIdsForUrlLength(stylesIds, `https://api.figma.com/v1/files/${documentId}/nodes?depth=1&ids=`);
 
   for (const stylesIds of chunks) {
     const response = await getFileNodes({
@@ -98,36 +153,77 @@ export async function retrieveStylesNodes(documentId: string, stylesIds: string[
   return nodes;
 }
 
+// Figma "text on a path" (TEXT_PATH) has no Penpot equivalent, so each one is rendered as an SVG (glyphs
+// outlined) to be rebuilt as a Penpot `path`. Returns a map of node id to the rendered SVG URL.
+export async function retrieveTextPathImages(documentId: string, textPathNodeIds: string[]): Promise<GetImagesResponse['images']> {
+  const images: GetImagesResponse['images'] = {};
+
+  if (!textPathNodeIds.length) {
+    return images;
+  }
+
+  const chunks = chunkIdsForUrlLength(
+    textPathNodeIds,
+    `https://api.figma.com/v1/images/${documentId}?format=svg&svg_outline_text=true&use_absolute_bounds=true&ids=`
+  );
+
+  for (const nodeIds of chunks) {
+    const response = await getImages({
+      fileKey: documentId,
+      ids: nodeIds.join(','),
+      format: 'svg',
+      svgOutlineText: true,
+      useAbsoluteBounds: true,
+    });
+
+    // Merge image maps
+    Object.assign(images, response.images);
+  }
+
+  return images;
+}
+
 export async function retrieveColors(documentId: string): Promise<FigmaDefinedColor[]> {
   const colors: FigmaDefinedColor[] = [];
 
   try {
     const localVariablesResult = await getLocalVariables({ fileKey: documentId });
+    let unresolvedColorVariablesCount = 0;
+
     for (const localVariable of Object.values(localVariablesResult.meta.variables)) {
       if (localVariable.resolvedType === 'COLOR') {
-        // TODO: variables can be nested, it should be taken into account to also make sure what happens if the nested variable is into another file
-        // We rely on a value if provided by using the default Figma mode, and when it's not available The easier for us is to set the value from the hardcoded values of nodes (may be a problem in some cases if multiple mode applied, but it's unlikely)
+        // The value can be an alias to another variable (even one hosted in another file), `resolveColorVariableValue`
+        // walks the alias chain and returns `undefined` when the final color cannot be reached.
+        //
+        // TODO: variable modes are not handled yet, we only rely on the default mode of each collection
         // Ref: https://forum.figma.com/t/how-to-access-variable-alias-value-from-another-collection/53203/4
-        const collection = localVariablesResult.meta.variableCollections[localVariable.variableCollectionId];
+        const resolvedColor = resolveColorVariableValue(localVariable, localVariablesResult.meta);
+
+        if (!resolvedColor) {
+          unresolvedColorVariablesCount++;
+        }
 
         colors.push({
           id: localVariable.id,
           key: localVariable.key,
           name: localVariable.name,
           description: localVariable.description,
-          value:
-            !!collection &&
-            localVariable.valuesByMode[collection.defaultModeId] !== undefined &&
-            isColor(localVariable.valuesByMode[collection.defaultModeId])
-              ? {
-                  // Color variables can only manage a simple color so emulating to the appropriate Paint one
-                  type: 'SOLID',
-                  color: localVariable.valuesByMode[collection.defaultModeId] as RGBA,
-                  blendMode: 'NORMAL',
-                }
-              : undefined,
+          value: resolvedColor
+            ? {
+                // Color variables can only manage a simple color so emulating to the appropriate Paint one
+                type: 'SOLID',
+                color: resolvedColor,
+                blendMode: 'NORMAL',
+              }
+            : undefined,
         });
       }
+    }
+
+    if (unresolvedColorVariablesCount > 0) {
+      console.warn(
+        `${unresolvedColorVariablesCount} color variable(s) could not be resolved to a concrete color (most likely aliases to variables hosted in another Figma file). They won't be transferred as Penpot library colors, but nodes using them keep their hardcoded color.`
+      );
     }
   } catch (error) {
     const body = (error as unknown as any).body as ErrorResponsePayloadWithErrorBoolean;
@@ -214,6 +310,35 @@ export function countTotalElements(tree: GetFileResponse, colors: FigmaDefinedCo
   }
 
   return treeCount + colors.length + typographies.length;
+}
+
+export function collectTextPathNodeIds(tree: GetFileResponse): string[] {
+  const textPathNodeIds: string[] = [];
+
+  function deepCollect(figmaNode: SubcanvasNode) {
+    if (figmaNode.type === 'TEXT_PATH') {
+      // A non-empty `fillGeometry` means the Figma API corrupted this TEXT_PATH: it returns the path circle
+      // instead of the outlined text. Its SVG render is meaningless, so we neither fetch nor cache it (the
+      // transform step skips such nodes too) — that way a missing local SVG always means "nothing usable".
+      if (!figmaNode.fillGeometry || figmaNode.fillGeometry.length === 0) {
+        textPathNodeIds.push(figmaNode.id);
+      }
+    }
+
+    if ('children' in figmaNode) {
+      for (const childNode of figmaNode.children) {
+        deepCollect(childNode);
+      }
+    }
+  }
+
+  for (const canvas of tree.document.children) {
+    for (const node of canvas.children) {
+      deepCollect(node);
+    }
+  }
+
+  return textPathNodeIds;
 }
 
 // Reverse of the suffix→weight table in `translateFontWeight`: given a weight + style, produce a PostScript suffix that `extractFontFamilySuffix` will recognize

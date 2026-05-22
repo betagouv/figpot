@@ -1,9 +1,9 @@
-import { TextNode, TypeStyle } from '@figpot/src/clients/figma';
+import { TextNode } from '@figpot/src/clients/figma';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
 import { TextSegment } from '@figpot/src/features/translators/text/paragraph/translateParagraphProperties';
 import { translateGrowType } from '@figpot/src/features/translators/text/properties/translateGrowType';
 import { translateVerticalAlign } from '@figpot/src/features/translators/text/properties/translateVerticalAlign';
-import { transformTextStyle, translateTextSegments } from '@figpot/src/features/translators/text/translateTextSegments';
+import { dropTrailingLetterSpacing, transformTextStyle, translateTextSegments } from '@figpot/src/features/translators/text/translateTextSegments';
 import { TextAttributes, TextShape } from '@figpot/src/models/entities/penpot/shapes/text';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
@@ -77,6 +77,9 @@ function extractTextSegments(node: TextNode): Paragraph[] {
 export function transformText(registry: AbstractRegistry, node: TextNode): TextAttributes & Pick<TextShape, 'growType'> {
   const styledParagraphs = extractTextSegments(node);
 
+  // The trailing letter-spacing only mis-places the glyphs when the line is not left-anchored
+  const dropTrailingSpacing = node.style.textAlignHorizontal === 'CENTER' || node.style.textAlignHorizontal === 'RIGHT';
+
   return {
     content: {
       type: 'root',
@@ -87,9 +90,11 @@ export function transformText(registry: AbstractRegistry, node: TextNode): TextA
               type: 'paragraph-set',
               children: styledParagraphs.length
                 ? styledParagraphs.map((paragraph) => {
+                    const segments = translateTextSegments(registry, node, paragraph);
+
                     return {
                       type: 'paragraph',
-                      children: translateTextSegments(registry, node, paragraph),
+                      children: dropTrailingSpacing ? dropTrailingLetterSpacing(segments) : segments,
                       ...transformTextStyle(registry, node, paragraph[0].style), // A paragraph cannot be empty as stated into `extractTextSegments()` (Penpot does not allow this)
                       ...transformFills(registry, node),
                     };

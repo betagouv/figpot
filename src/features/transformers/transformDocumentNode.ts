@@ -72,8 +72,25 @@ export function transformDocumentNode(
 
   const registry = new Registry(mapping);
 
+  let colorVariablesWithoutValueCount = 0;
   for (const figmaDefinedColor of figmaDefinedColors) {
+    // A color variable can be an alias to a variable hosted in another Figma file: `retrieveColors` is
+    // unable to resolve it (the variable is not part of this document response) so its `value` stays undefined.
+    // We skip it instead of crashing: it simply won't exist as a Penpot library color, and any node bound to
+    // it still falls back to its hardcoded color through `translateBoundVariables`.
+    if (!figmaDefinedColor.value) {
+      colorVariablesWithoutValueCount++;
+
+      continue;
+    }
+
     registry.addColor(translateColor(registry, figmaDefinedColor));
+  }
+
+  if (colorVariablesWithoutValueCount > 0) {
+    console.warn(
+      `${colorVariablesWithoutValueCount} color variable(s) were skipped because their value could not be resolved (most likely aliases to variables hosted in another Figma file)`
+    );
   }
 
   for (const figmaDefinedTypography of figmaDefinedTypographies) {

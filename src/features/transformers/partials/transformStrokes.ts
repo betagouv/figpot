@@ -1,6 +1,4 @@
-import type { Command } from 'svg-path-parser';
-
-import { HasGeometryTrait, IndividualStrokesTrait, VectorNode } from '@figpot/src/clients/figma';
+import { HasGeometryTrait, IndividualStrokesTrait } from '@figpot/src/clients/figma';
 import { translateColorId, translateDocumentId } from '@figpot/src/features/translators/translateId';
 import { translateStrokeCap, translateStrokes } from '@figpot/src/features/translators/translateStrokes';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
@@ -42,38 +40,6 @@ export function transformStrokes(
           };
         })
       : strokes,
-  };
-}
-
-// function findVertex(vertexs: readonly VectorVertex[], command: Command): VectorVertex | undefined {
-//   if (command.command !== 'moveto' && command.command !== 'lineto' && command.command !== 'curveto') {
-//     return;
-//   }
-
-//   return vertexs.find((vertex) => vertex.x === command.x && vertex.y === command.y);
-// }
-
-export function transformStrokesFromVector(registry: AbstractRegistry, node: VectorNode, vector: Command[]): Pick<ShapeAttributes, 'strokes'> {
-  const strokeCaps = (stroke: Stroke) => {
-    // if (vectorRegion !== undefined) {
-    //   return stroke;
-    // }
-
-    // const startVertex = findVertex(node.vectorNetwork.vertices, vector[0]);
-    // const endVertex = findVertex(node.vectorNetwork.vertices, vector[vector.length - 1]);
-
-    // if (!startVertex || !endVertex) {
-    //   return stroke;
-    // }
-
-    // stroke.strokeCapStart = translateStrokeCap(startVertex);
-    // stroke.strokeCapEnd = translateStrokeCap(endVertex);
-
-    return stroke;
-  };
-
-  return {
-    strokes: translateStrokes(registry, node, strokeCaps),
   };
 }
 

@@ -18,7 +18,8 @@ export function translateStrokes(
     strokeStyle: !!node.strokeDashes && node.strokeDashes.length > 0 ? 'dashed' : 'solid',
   };
 
-  return node.strokes.map((paint, index) => translateStroke(registry, paint, sharedStrokeProperties, strokeCaps, index === 0));
+  // Strokes are layered in reverse order in Penpot compared to Figma (same as fills), so we reverse them
+  return node.strokes.map((paint, index) => translateStroke(registry, paint, sharedStrokeProperties, strokeCaps, index === 0)).reverse();
 }
 
 export function translateStroke(

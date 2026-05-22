@@ -5,13 +5,8 @@ export function translateLineHeight(segment: Pick<TypeStyle, 'lineHeightPx' | 'l
   assert(segment.fontSize);
   assert(segment.lineHeightPx);
 
-  switch (segment.lineHeightUnit) {
-    case 'FONT_SIZE_%':
-      return ((segment.fontSize / 100) * (segment.lineHeightPercentFontSize ?? 100)).toString();
-    case 'INTRINSIC_%': // This one seems to fit automatically the font size
-      return '1';
-    case 'PIXELS':
-    default:
-      return (segment.lineHeightPx / segment.fontSize).toString();
-  }
+  // Penpot's line height is a unitless ratio of the font size. Figma always exposes the resolved line height
+  // in pixels (`lineHeightPx`), whatever unit it was authored with (`PIXELS`, `FONT_SIZE_%`, `INTRINSIC_%`),
+  // so dividing it by the font size always yields the correct ratio
+  return (segment.lineHeightPx / segment.fontSize).toString();
 }

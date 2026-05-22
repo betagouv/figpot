@@ -4,6 +4,7 @@ import {
   ErrorResponsePayloadWithErrorBoolean,
   GetFileNodesResponse,
   GetFileResponse,
+  GetImagesResponse,
   GetLocalVariablesResponse,
   LocalVariable,
   Paint,
@@ -13,6 +14,7 @@ import {
   VariableAlias,
   getFile,
   getFileNodes,
+  getImages,
   getLocalVariables,
   getProjectFiles,
   getTeamProjects,
@@ -97,6 +99,36 @@ export function processDocumentsParametersFromInput(parameters: string[]): Docum
   });
 }
 
+// Figma gateway has a URL length limit, so a long list of IDs passed as a query parameter must be split
+// across several requests. `baseUrl` is the request URL without the IDs, used to compute the room left.
+// Ref: https://stackoverflow.com/a/40250849/3608410
+function chunkIdsForUrlLength(ids: string[], baseUrl: string): string[][] {
+  const urlLengthLimitBytes = 8_192;
+  const remainingBytesPerRequest = urlLengthLimitBytes - baseUrl.length - 10; // We add a safe margin of 10 in case of specific default adding
+
+  // [IMPORTANT] The generated Figma client encodes all query parameters so we account for that for `:` and `,`
+  const delimiterLength = encodeURIComponent(',').length;
+
+  const chunks: string[][] = [[]];
+  let currentChunkIndex = 0;
+  let currentChunkCount = 0;
+  for (const id of ids) {
+    const encodedIdLength = encodeURIComponent(id).length;
+
+    // Take into account the `,` delimiter
+    if (currentChunkCount + Math.max(chunks[currentChunkIndex].length - 1, 0) * delimiterLength + encodedIdLength > remainingBytesPerRequest) {
+      chunks.push([]);
+      currentChunkIndex++;
+      currentChunkCount = 0;
+    }
+
+    chunks[currentChunkIndex].push(id);
+    currentChunkCount += encodedIdLength;
+  }
+
+  return chunks;
+}
+
 export async function retrieveStylesNodes(documentId: string, stylesIds: string[]): Promise<GetFileNodesResponse['nodes']> {
   if (!stylesIds.length) {
     return {};
@@ -104,32 +136,8 @@ export async function retrieveStylesNodes(documentId: string, stylesIds: string[
 
   const nodes: GetFileNodesResponse['nodes'] = {};
 
-  // Figma gateway has URL length limit that is reached when having too many styles
-  // So we need to chunk according to this limit to minize calls (have to do it step by step because each entry has a different length)
-  // Ref: https://stackoverflow.com/a/40250849/3608410
   // Note: styles types `GRID` and `EFFECT` are most of the time a few, so no removing them for retrieval for future use
-  const urlLengthLimitBytes = 8_192;
-  const remainingBytesPerRequest = urlLengthLimitBytes - `https://api.figma.com/v1/files/${documentId}/nodes?depth=1&ids=`.length - 10; // We add a safe marging of 10 in case of specific default adding
-
-  // [IMPORTANT] The generated Figma client is encoding all query parameters so we need to take this into account for `:` and `,`
-  const delimiterLength = encodeURIComponent(',').length;
-
-  const chunks: string[][] = [[]];
-  let currentChunkIndex = 0;
-  let currentChunkCount = 0;
-  for (const styleId of stylesIds) {
-    const encodedStyleIdLength = encodeURIComponent(styleId).length;
-
-    // Take into account the `,` delimiter
-    if (currentChunkCount + Math.max(chunks[currentChunkIndex].length - 1, 0) * delimiterLength + encodedStyleIdLength > remainingBytesPerRequest) {
-      chunks.push([]);
-      currentChunkIndex++;
-      currentChunkCount = 0;
-    }
-
-    chunks[currentChunkIndex].push(styleId);
-    currentChunkCount += encodedStyleIdLength;
-  }
+  const chunks = chunkIdsForUrlLength(stylesIds, `https://api.figma.com/v1/files/${documentId}/nodes?depth=1&ids=`);
 
   for (const stylesIds of chunks) {
     const response = await getFileNodes({
@@ -143,6 +151,36 @@ export async function retrieveStylesNodes(documentId: string, stylesIds: string[
   }
 
   return nodes;
+}
+
+// Figma "text on a path" (TEXT_PATH) has no Penpot equivalent, so each one is rendered as an SVG (glyphs
+// outlined) to be rebuilt as a Penpot `path`. Returns a map of node id to the rendered SVG URL.
+export async function retrieveTextPathImages(documentId: string, textPathNodeIds: string[]): Promise<GetImagesResponse['images']> {
+  const images: GetImagesResponse['images'] = {};
+
+  if (!textPathNodeIds.length) {
+    return images;
+  }
+
+  const chunks = chunkIdsForUrlLength(
+    textPathNodeIds,
+    `https://api.figma.com/v1/images/${documentId}?format=svg&svg_outline_text=true&use_absolute_bounds=true&ids=`
+  );
+
+  for (const nodeIds of chunks) {
+    const response = await getImages({
+      fileKey: documentId,
+      ids: nodeIds.join(','),
+      format: 'svg',
+      svgOutlineText: true,
+      useAbsoluteBounds: true,
+    });
+
+    // Merge image maps
+    Object.assign(images, response.images);
+  }
+
+  return images;
 }
 
 export async function retrieveColors(documentId: string): Promise<FigmaDefinedColor[]> {
@@ -272,6 +310,30 @@ export function countTotalElements(tree: GetFileResponse, colors: FigmaDefinedCo
   }
 
   return treeCount + colors.length + typographies.length;
+}
+
+export function collectTextPathNodeIds(tree: GetFileResponse): string[] {
+  const textPathNodeIds: string[] = [];
+
+  function deepCollect(figmaNode: SubcanvasNode) {
+    if (figmaNode.type === 'TEXT_PATH') {
+      textPathNodeIds.push(figmaNode.id);
+    }
+
+    if ('children' in figmaNode) {
+      for (const childNode of figmaNode.children) {
+        deepCollect(childNode);
+      }
+    }
+  }
+
+  for (const canvas of tree.document.children) {
+    for (const node of canvas.children) {
+      deepCollect(node);
+    }
+  }
+
+  return textPathNodeIds;
 }
 
 // Reverse of the suffix→weight table in `translateFontWeight`: given a weight + style, produce a PostScript suffix that `extractFontFamilySuffix` will recognize

@@ -10,6 +10,7 @@ import { transformLineNode } from '@figpot/src/features/transformers/transformLi
 import { transformPathNode } from '@figpot/src/features/transformers/transformPathNode';
 import { transformRectangleNode } from '@figpot/src/features/transformers/transformRectangleNode';
 import { transformTextNode } from '@figpot/src/features/transformers/transformTextNode';
+import { transformTextPathNode } from '@figpot/src/features/transformers/transformTextPathNode';
 import { transformVectorNode } from '@figpot/src/features/transformers/transformVectorNode';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
@@ -45,6 +46,9 @@ export function transformSceneNode(
       break;
     case 'TEXT':
       penpotNode = transformTextNode(registry, figmaNode, figmaNodeTransform);
+      break;
+    case 'TEXT_PATH':
+      penpotNode = transformTextPathNode(registry, figmaNode, figmaNodeTransform);
       break;
     case 'VECTOR':
       penpotNode = transformVectorNode(registry, figmaNode, closestFigmaFrameId, figmaNodeTransform);

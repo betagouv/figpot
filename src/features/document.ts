@@ -21,6 +21,7 @@ import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/
 import {
   FigmaDefinedColor,
   FigmaDefinedTypography,
+  collectTextPathNodeIds,
   countTotalElements,
   extractStylesTypographies,
   mergeStylesColors,
@@ -28,6 +29,7 @@ import {
   retrieveColors,
   retrieveDocument,
   retrieveStylesNodes,
+  retrieveTextPathImages,
 } from '@figpot/src/features/figma';
 import { restoreMappingFromRepository, saveMappingToRepository } from '@figpot/src/features/git';
 import { cleanHostedDocument } from '@figpot/src/features/penpot';
@@ -50,6 +52,7 @@ const __root_dirname = process.cwd();
 export const documentsFolderPath = path.resolve(__root_dirname, './data/documents/');
 export const fontsFolderPath = path.resolve(__root_dirname, './data/fonts/');
 export const mediasFolderPath = path.resolve(__root_dirname, './data/medias/');
+export const textPathsFolderPath = path.resolve(__root_dirname, './data/textpaths/');
 
 function formatSecondsHuman(totalSeconds: number): string {
   const days = Math.floor(totalSeconds / 86400);
@@ -176,6 +179,10 @@ export function getTransformedFigmaTreePath(figmaDocumentId: string, penpotDocum
 
 export function getFigmaMediaPath(mediaId: string) {
   return path.resolve(mediasFolderPath, mediaId);
+}
+
+export function getFigmaTextPathSvgPath(nodeId: string) {
+  return path.resolve(textPathsFolderPath, `${nodeId.replace(/[:;]/g, '_')}.svg`);
 }
 
 export async function readFigmaTreeFile(documentId: string): Promise<GetFileResponse> {
@@ -472,6 +479,30 @@ export async function retrieve(options: RetrieveOptionsType) {
         console.log(`downloading the image ${figmaImageId} from Figma`);
 
         await downloadFile(temporaryFileUrl, filePath);
+      }
+    }
+
+    // Figma "text on a path" (TEXT_PATH) has no Penpot equivalent. We fetch each one rendered by Figma as
+    // an SVG (glyphs outlined) and cache it on disk so the synchronous transform step can rebuild it as a
+    // Penpot `path`. This is the only async place for it (mirrors the image handling above).
+    const textPathNodeIdsToFetch = collectTextPathNodeIds(documentTree).filter((nodeId) => !fsSync.existsSync(getFigmaTextPathSvgPath(nodeId)));
+
+    if (textPathNodeIdsToFetch.length > 0) {
+      await fs.mkdir(textPathsFolderPath, { recursive: true });
+
+      const textPathImages = await retrieveTextPathImages(document.figmaDocument, textPathNodeIdsToFetch);
+
+      for (const nodeId of textPathNodeIdsToFetch) {
+        const svgUrl = textPathImages[nodeId];
+        if (!svgUrl) {
+          throw new Error(`Figma did not return an SVG render for the text-path node "${nodeId}"`);
+        }
+
+        console.log(`downloading the text-path SVG ${nodeId} from Figma`);
+
+        const svgResponse = await fetch(svgUrl);
+
+        await fs.writeFile(getFigmaTextPathSvgPath(nodeId), await svgResponse.text(), { encoding: 'utf-8' });
       }
     }
   }
@@ -1162,10 +1193,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
         // Penpot cannot move an object across pages, nor morph a shape `type` in place (e.g. circle -> path)
         // In both cases we combine a deletion and a re-creation instead of a modification
         // Note: only objects can be moved, not the root frame so not handlind this complex logic
-        if (
-          item.before._apiType === 'node' &&
-          (item.before._pageId !== item.after._pageId || item.before.type !== item.after.type)
-        ) {
+        if (item.before._apiType === 'node' && (item.before._pageId !== item.after._pageId || item.before.type !== item.after.type)) {
           operations.push({
             type: 'del-obj',
             id: item.before.id,

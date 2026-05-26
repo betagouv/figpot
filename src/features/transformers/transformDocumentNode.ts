@@ -77,20 +77,12 @@ export function transformDocumentNode(
   const registry = new Registry(mapping);
 
   // Figma variables become Penpot design tokens so nodes can directly use them
-  const {
-    tokenSets,
-    tokenThemes,
-    activeThemes,
-    variableTokenNames,
-    usedTokenNames,
-    inferredScopeNames,
-    suffixedVariableNames,
-    variableCollectionIds,
-    variableDefaultValues,
-  } = translateTokens(figmaVariables, mapping);
+  const { tokenSets, tokenThemes, activeThemes, variableTokenNames, usedTokenNames, inferredScopeNames, suffixedVariableNames } = translateTokens(
+    figmaVariables,
+    mapping
+  );
 
   registry.registerVariableTokenNames(variableTokenNames);
-  registry.registerVariableDefaults(variableCollectionIds, variableDefaultValues);
 
   if (inferredScopeNames.length > 0) {
     console.warn(

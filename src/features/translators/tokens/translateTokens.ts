@@ -18,8 +18,6 @@ export type TranslatedTokens = {
   usedTokenNames: Set<string>; // shared with effect-style tokens so collisions get suffixed globally
   inferredScopeNames: string[]; // variables whose Figma scope was ALL_SCOPES or empty
   suffixedVariableNames: string[]; // variables that ended up split into multiple typed tokens
-  variableCollectionIds: Map<string, string>; // Figma variable id -> the Figma collection it belongs to
-  variableDefaultValues: Map<string, number | string>; // composite key `${figmaVariableId}/${tokenType}` -> Penpot-shape default-mode value
 };
 
 type FigmaVariableValue = boolean | number | string | RGBA | VariableAlias;
@@ -122,77 +120,6 @@ function translateTokenValueForType(
   }
 }
 
-// Walks a variable's default-mode value, following alias chains until it hits a raw value (or
-// returns undefined when the chain leaves the file / loops on itself). Used at the post-pass below
-// to precompute per-variable "active theme value" for the registry
-function resolveDefaultModeRaw(
-  variable: LocalVariable,
-  variables: FigmaVariablesData['variables'],
-  collections: FigmaVariablesData['variableCollections'],
-  visited: Set<string> = new Set()
-): boolean | number | string | RGBA | undefined {
-  if (visited.has(variable.id)) {
-    return undefined;
-  }
-
-  visited.add(variable.id);
-
-  const collection = collections[variable.variableCollectionId];
-  if (!collection) {
-    return undefined;
-  }
-
-  const value = variable.valuesByMode[collection.defaultModeId];
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (typeof value === 'object' && value !== null && (value as VariableAlias).type === 'VARIABLE_ALIAS') {
-    const aliased = variables[(value as VariableAlias).id];
-
-    if (!aliased) {
-      return undefined;
-    }
-
-    return resolveDefaultModeRaw(aliased, variables, collections, visited);
-  }
-
-  return value as boolean | number | string | RGBA;
-}
-
-// Maps a default-mode raw value to the Penpot **shape** value (what gets written onto a node's
-// static property: `r1: 16`, `fillColor: '#ffffff'`, `opacity: 0.5`, ...). Per-type since the
-// numeric scaling and serialisation differs between Penpot properties
-function toPenpotShapeValue(raw: boolean | number | string | RGBA, type: TokenType, mapping: MappingType): number | string | undefined {
-  switch (type) {
-    case 'color':
-      // Penpot's shape `fillColor`/`strokeColor` schema accepts ONLY `#rrggbb` (6 chars). Alpha is
-      // carried by a separate `fillOpacity`/`strokeOpacity` field, so we drop the alpha component
-      // here. Token values use the alpha-suffixed form (DTCG-style) via `translateColorValue`
-      return typeof raw === 'object' && raw !== null && 'r' in raw ? rgbToHex(raw) : undefined;
-    case 'opacity':
-      return typeof raw === 'number' ? raw / 100 : undefined;
-    case 'borderRadius':
-    case 'sizing':
-    case 'spacing':
-    case 'borderWidth':
-    case 'fontSize':
-    case 'letterSpacing':
-    case 'number':
-      return typeof raw === 'number' ? raw : undefined;
-    case 'fontWeight':
-      return typeof raw === 'number' || typeof raw === 'string' ? raw : undefined;
-    case 'fontFamily':
-      // A Penpot text shape has TWO related slots: `fontFamily` (display name) and `fontId`
-      // (machine id). We can only override one from here, which would create a mismatch and show
-      // "Missing Font". The token's own application path drives the font on a theme switch, and
-      // we leave the static value alone so the initial render keeps whatever Figma resolved
-      return undefined;
-    default:
-      return undefined;
-  }
-}
-
 export function translateTokens(data: FigmaVariablesData, mapping: MappingType): TranslatedTokens {
   const tokenSets: Record<string, TokenSet> = {};
   const tokenThemes: Record<string, TokenTheme> = {};
@@ -201,8 +128,6 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
   const usedSetPaths = new Set<string>();
   const usedTokenNames = new Set<string>();
   const variableTokenNames = new Map<string, string>(); // composite key `${variableId}/${type}` -> name
-  const variableCollectionIds = new Map<string, string>();
-  const variableDefaultValues = new Map<string, number | string>();
   const inferredScopeNames: string[] = [];
   const suffixedVariableNames: string[] = [];
 
@@ -293,40 +218,12 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
         sets: [setPath],
       };
 
-      if (mode.modeId === collection.defaultModeId) {
-        activeThemes.push(setPath);
-      }
-    }
-  }
-
-  // Post-pass: precompute per-(variable, type) the Penpot-shape default-mode value, plus each
-  // variable's collection id. Stored on the registry so transformers can rewrite a node's static
-  // value (fills, corner radii, opacity, ...) to the active-theme value without re-walking Figma
-  for (const collection of Object.values(data.variableCollections)) {
-    if (collection.remote) {
-      continue;
-    }
-
-    for (const variableId of collection.variableIds) {
-      const variable = data.variables[variableId];
-      if (!variable || variable.remote) {
-        continue;
-      }
-
-      variableCollectionIds.set(variableId, collection.id);
-
-      const rawDefault = resolveDefaultModeRaw(variable, data.variables, data.variableCollections);
-      if (rawDefault === undefined) {
-        continue;
-      }
-
-      for (const type of translateScope(variable)) {
-        const shapeValue = toPenpotShapeValue(rawDefault, type, mapping);
-
-        if (shapeValue !== undefined) {
-          variableDefaultValues.set(`${variableId}/${type}`, shapeValue);
-        }
-      }
+      // Intentionally NOT auto-activating the Figma default mode as a Penpot theme on sync.
+      // Penpot's theme model is document-wide while Figma's per-frame `explicitVariableModes` can
+      // pick a different mode per frame. If we force a default theme on, the runtime applies its
+      // bound values to every node and frames that depended on a per-frame override visually drift
+      // from what Figma showed. With no theme active, Penpot displays whatever Figma rendered on
+      // sync (faithful), and the user can manually toggle a theme to preview a global state
     }
   }
 
@@ -338,7 +235,5 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
     usedTokenNames,
     inferredScopeNames,
     suffixedVariableNames,
-    variableCollectionIds,
-    variableDefaultValues,
   };
 }

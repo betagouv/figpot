@@ -93,7 +93,7 @@ export function transformSceneNode(
   }
 
   // Bind the node to design tokens for any property driven by a Figma variable
-  Object.assign(penpotNode, transformAppliedTokens(registry, figmaNode, penpotNode as unknown as Record<string, unknown>));
+  Object.assign(penpotNode, transformAppliedTokens(registry, figmaNode));
 
   return penpotNode;
 }

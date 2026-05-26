@@ -4,18 +4,13 @@ import { Fill } from '@figpot/src/models/entities/penpot/traits/fill';
 import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 import { rgbToHex } from '@figpot/src/utils/color';
 
-export function translateSolidFill(registry: BoundVariableRegistry, fill: SolidPaint): Fill {
-  // When the paint is bound to a colour variable, ask the registry for the variable's default-mode
-  // value (an already-Penpot-shape hex string). The static fill then matches whatever the active
-  // token theme would resolve to on load, instead of freezing on the per-frame-overridden value
-  // Figma sent us. Unconditional override is a no-op for variables not affected by a per-frame
-  // override (their Figma value already equals the default mode)
-  const colorAliasId = fill.boundVariables?.color?.id;
-  const defaultColorHex = colorAliasId !== undefined ? registry.getVariableDefaultValueForBinding(colorAliasId, 'color') : undefined;
-  const fillColor = typeof defaultColorHex === 'string' ? defaultColorHex : rgbToHex(fill.color);
-
+export function translateSolidFill(_registry: BoundVariableRegistry, fill: SolidPaint): Fill {
+  // We deliberately do NOT rewrite the colour to a variable's default-mode value at sync time:
+  // Penpot opens with no theme active so the canvas should mirror whatever Figma rendered for this
+  // node, including any per-frame `explicitVariableModes` override. Toggling a theme in Penpot
+  // later drives the rebind globally via `appliedTokens.fill`
   return {
-    fillColor: fillColor,
+    fillColor: rgbToHex(fill.color),
     fillOpacity: translateOpacityWithVisibility(fill),
   };
 }

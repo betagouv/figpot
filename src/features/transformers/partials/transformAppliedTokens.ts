@@ -13,22 +13,20 @@ function applyToken(
   penpotProperty: string,
   tokenType: TokenType,
   alias: VariableAlias | VariableAlias[] | undefined
-): VariableAlias | undefined {
+): void {
   if (!alias) {
-    return undefined;
+    return;
   }
 
   const single = Array.isArray(alias) ? alias[0] : alias;
   if (!single) {
-    return undefined;
+    return;
   }
 
   const tokenName = registry.getVariableTokenNames().get(`${single.id}/${tokenType}`);
   if (tokenName !== undefined) {
     appliedTokens[penpotProperty] = tokenName;
   }
-
-  return single;
 }
 
 // Figma layers paints front-to-back so the visible colour belongs to the topmost solid paint; the
@@ -38,105 +36,32 @@ function applyPaintColorToken(
   registry: BoundVariableRegistry,
   penpotProperty: string,
   paints: readonly Paint[] | undefined
-): VariableAlias | undefined {
+): void {
   if (!paints || paints.length === 0) {
-    return undefined;
+    return;
   }
 
   const topPaint = paints[paints.length - 1];
   if (topPaint.type !== 'SOLID') {
-    return undefined;
-  }
-
-  return applyToken(appliedTokens, registry, penpotProperty, 'color', topPaint.boundVariables?.color);
-}
-
-// Where each `record()` Penpot property lives on the shape. Keys whose path is `null` are skipped
-// for the static-value override: `fontFamily` has two related shape slots (fontFamily + fontId)
-// and we can only write one from here; `fill`/`strokeColor` are nested inside `fills[]`/`strokes[]`
-// and handled by `translateSolidFill` directly
-const PROPERTY_PATHS: Record<string, readonly string[] | null> = {
-  r1: ['r1'],
-  r2: ['r2'],
-  r3: ['r3'],
-  r4: ['r4'],
-  opacity: ['opacity'],
-  width: ['width'],
-  height: ['height'],
-  fontSize: ['fontSize'],
-  fontWeight: ['fontWeight'],
-  lineHeight: ['lineHeight'],
-  letterSpacing: ['letterSpacing'],
-  p1: ['layoutPadding', 'p1'],
-  p2: ['layoutPadding', 'p2'],
-  p3: ['layoutPadding', 'p3'],
-  p4: ['layoutPadding', 'p4'],
-  rowGap: ['layoutGap', 'rowGap'],
-  columnGap: ['layoutGap', 'columnGap'],
-  fontFamily: null,
-  fill: null,
-  strokeColor: null,
-};
-
-// Penpot requires every key of these nested objects to be present when the object itself is set.
-// On a partial override we have to fill in the siblings with whatever the shape already has, so
-// we do not collapse `layoutPadding` to a single-key map that fails the validator
-const REQUIRED_NESTED_KEYS: Record<string, readonly string[]> = {
-  layoutPadding: ['p1', 'p2', 'p3', 'p4'],
-  layoutGap: ['rowGap', 'columnGap'],
-};
-
-function writeOverride(penpotNode: Record<string, unknown>, penpotProperty: string, value: number | string): void {
-  const path = PROPERTY_PATHS[penpotProperty];
-  if (!path) {
     return;
   }
 
-  if (path.length === 1) {
-    penpotNode[path[0]] = value;
-    return;
-  }
-
-  // Two-level nested write: read the existing parent object, fill in any required sibling keys
-  // Penpot's schema demands, then override only the targeted leaf
-  const [parentKey, childKey] = path;
-  const existing = (penpotNode[parentKey] as Record<string, unknown> | undefined) ?? {};
-  const next: Record<string, unknown> = { ...existing };
-
-  for (const requiredKey of REQUIRED_NESTED_KEYS[parentKey] ?? []) {
-    if (next[requiredKey] === undefined) {
-      next[requiredKey] = 0;
-    }
-  }
-  next[childKey] = value;
-
-  penpotNode[parentKey] = next;
+  applyToken(appliedTokens, registry, penpotProperty, 'color', topPaint.boundVariables?.color);
 }
 
-// Binds the Penpot shape to design tokens for every property Figma drives through a variable, and
-// (when the node uses `explicitVariableModes`) rewrites the static value Figma sent over with the
-// variable's default-mode value — that way the initial rendering matches Penpot's active theme
-// instead of staying frozen on the per-frame override. Mutates `penpotNode` for the static
-// overrides (nested-aware) and returns the `appliedTokens` map for the caller to shallow-merge
+// Binds the Penpot shape to design tokens for every property Figma drives through a variable.
+// We do NOT rewrite the shape's static value at sync time — Penpot opens with no theme active
+// (see `translateTokens` for the rationale) so the static value mirrors what Figma rendered
+// (including any per-frame `explicitVariableModes` override). Toggling a theme in Penpot then
+// drives the rebind globally through `appliedTokens`
 export function transformAppliedTokens(
   registry: BoundVariableRegistry,
-  node: SubcanvasNodeWithSlot,
-  penpotNode: Record<string, unknown>
+  node: SubcanvasNodeWithSlot
 ): { appliedTokens?: Record<string, string> } {
   const appliedTokens: Record<string, string> = {};
-  const explicitVariableModes = node.explicitVariableModes;
-  const hasExplicitVariableModes = !!explicitVariableModes && Object.keys(explicitVariableModes).length > 0;
 
   function record(penpotProperty: string, tokenType: TokenType, alias: VariableAlias | VariableAlias[] | undefined): void {
-    const single = applyToken(appliedTokens, registry, penpotProperty, tokenType, alias);
-    if (!single || !hasExplicitVariableModes) {
-      return;
-    }
-
-    const defaultValue = registry.getVariableDefaultValueForBinding(single.id, tokenType, explicitVariableModes);
-    if (defaultValue !== undefined) {
-      writeOverride(penpotNode, penpotProperty, defaultValue);
-    }
+    applyToken(appliedTokens, registry, penpotProperty, tokenType, alias);
   }
 
   const boundVariables = node.boundVariables;
@@ -176,11 +101,12 @@ export function transformAppliedTokens(
   applyPaintColorToken(appliedTokens, registry, 'fill', 'fills' in node ? node.fills : undefined);
   applyPaintColorToken(appliedTokens, registry, 'strokeColor', 'strokes' in node ? node.strokes : undefined);
 
-  if (hasExplicitVariableModes && !hasWarnedExplicitVariableModes) {
+  const explicitVariableModes = node.explicitVariableModes;
+  if (!hasWarnedExplicitVariableModes && explicitVariableModes && Object.keys(explicitVariableModes).length > 0) {
     hasWarnedExplicitVariableModes = true;
 
     console.warn(
-      `at least one Figma node (for example "${node.name}") sets a per-frame variable mode override which Penpot cannot honour (theme switching is document-wide). figpot rewrites the bound shape values to the variable's default-mode value so the initial rendering matches Penpot's active theme — the per-frame override is therefore lost`
+      `at least one Figma node (for example "${node.name}") sets a per-frame variable mode override which Penpot cannot honour (theme switching is document-wide). figpot opens the Penpot file with no theme active, so the canvas mirrors whatever Figma rendered. Toggling a theme in Penpot will rebind every variable-driven property of every node at once — frames you laid out for different modes in Figma will all flip together`
     );
   }
 

@@ -23,9 +23,12 @@ describe('document comparaison', () => {
         colors: new Map(),
         typographies: new Map(),
         components: new Map(),
+        tokenSets: new Map(),
+        tokens: new Map(),
+        tokenThemes: new Map(),
       };
 
-      const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], [], mapping);
+      const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], [], { variables: {}, variableCollections: {} }, [], mapping);
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
@@ -46,9 +49,12 @@ describe('document comparaison', () => {
         colors: new Map(),
         typographies: new Map(),
         components: new Map(),
+        tokenSets: new Map(),
+        tokens: new Map(),
+        tokenThemes: new Map(),
       };
 
-      const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], [], mapping);
+      const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], [], { variables: {}, variableCollections: {} }, [], mapping);
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
@@ -76,9 +82,12 @@ describe('document comparaison', () => {
         colors: new Map(),
         typographies: new Map(),
         components: new Map(),
+        tokenSets: new Map(),
+        tokens: new Map(),
+        tokenThemes: new Map(),
       };
 
-      const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], [], mapping);
+      const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], [], { variables: {}, variableCollections: {} }, [], mapping);
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
@@ -99,9 +108,12 @@ describe('document comparaison', () => {
         colors: new Map(),
         typographies: new Map(),
         components: new Map(),
+        tokenSets: new Map(),
+        tokens: new Map(),
+        tokenThemes: new Map(),
       };
 
-      const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], [], mapping);
+      const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], [], { variables: {}, variableCollections: {} }, [], mapping);
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);

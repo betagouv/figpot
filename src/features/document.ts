@@ -20,20 +20,23 @@ import { PostGetFileResponse, postGetFile, postRenameFile, postUpdateFile } from
 import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/workaround';
 import {
   FigmaDefinedColor,
+  FigmaDefinedEffectStyle,
   FigmaDefinedTypography,
   collectTextPathNodeIds,
   countTotalElements,
+  extractStylesEffects,
   extractStylesTypographies,
   mergeStylesColors,
   patchDocument,
-  retrieveColors,
   retrieveDocument,
   retrieveStylesNodes,
   retrieveTextPathImages,
+  retrieveVariables,
 } from '@figpot/src/features/figma';
 import { restoreMappingFromRepository, saveMappingToRepository } from '@figpot/src/features/git';
 import { cleanHostedDocument } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
+import { FigmaVariablesData, emptyFigmaVariablesData } from '@figpot/src/features/translators/tokens/translateTokens';
 import { isPageRootFrame, isPageRootFrameFromId, registerFontId, rootFrameId } from '@figpot/src/features/translators/translateId';
 import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
@@ -41,6 +44,7 @@ import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
+import { Token, TokenSet, TokenTheme } from '@figpot/src/models/entities/penpot/traits/token';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot/src/utils/comparaison';
 import { config, figmaRateLimitContext, penpotApiBaseUrl } from '@figpot/src/utils/environment';
@@ -85,7 +89,17 @@ export type LiteTypography = LibraryTypography & {
 export type LiteComponent = LibraryComponent & {
   _apiType: 'component';
 };
-export type NodeLabel = LitePageNode | LiteNode | LiteColor | LiteTypography | LiteComponent;
+export type LiteTokenSet = Pick<TokenSet, 'id' | 'name' | 'description'> & {
+  _apiType: 'token-set';
+};
+export type LiteToken = Token & {
+  _apiType: 'token';
+  _setId: string; // The owning set id, needed by `set-token` operations
+};
+export type LiteTokenTheme = TokenTheme & {
+  _apiType: 'token-theme';
+};
+export type NodeLabel = LitePageNode | LiteNode | LiteColor | LiteTypography | LiteComponent | LiteTokenSet | LiteToken | LiteTokenTheme;
 
 export const Mapping = z.object({
   lastExport: z.date().nullable(),
@@ -96,6 +110,9 @@ export const Mapping = z.object({
   colors: FigmaToPenpotMapping,
   typographies: FigmaToPenpotMapping,
   components: FigmaToPenpotMapping,
+  tokenSets: FigmaToPenpotMapping,
+  tokens: FigmaToPenpotMapping,
+  tokenThemes: FigmaToPenpotMapping,
 });
 export type MappingType = z.infer<typeof Mapping>;
 
@@ -151,6 +168,14 @@ export function getFigmaDocumentColorsPath(documentId: string) {
 
 export function getFigmaDocumentTypographiesPath(documentId: string) {
   return path.resolve(getFigmaDocumentPath(documentId), 'typographies.json');
+}
+
+export function getFigmaDocumentVariablesPath(documentId: string) {
+  return path.resolve(getFigmaDocumentPath(documentId), 'variables.json');
+}
+
+export function getFigmaDocumentEffectsPath(documentId: string) {
+  return path.resolve(getFigmaDocumentPath(documentId), 'effects.json');
 }
 
 export function getPenpotDocumentPath(figmaDocumentId: string, penpotDocumentId: string) {
@@ -217,6 +242,30 @@ export async function readFigmaTypographiesFile(documentId: string): Promise<Fig
   const figmaTypographiesString = await fs.readFile(figmaTypographiesPath, 'utf-8');
 
   return JSON.parse(figmaTypographiesString) as FigmaDefinedTypography[];
+}
+
+export async function readFigmaVariablesFile(documentId: string): Promise<FigmaVariablesData> {
+  const figmaVariablesPath = getFigmaDocumentVariablesPath(documentId);
+
+  if (!fsSync.existsSync(figmaVariablesPath)) {
+    throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
+  }
+
+  const figmaVariablesString = await fs.readFile(figmaVariablesPath, 'utf-8');
+
+  return JSON.parse(figmaVariablesString) as FigmaVariablesData;
+}
+
+export async function readFigmaEffectsFile(documentId: string): Promise<FigmaDefinedEffectStyle[]> {
+  const figmaEffectsPath = getFigmaDocumentEffectsPath(documentId);
+
+  if (!fsSync.existsSync(figmaEffectsPath)) {
+    throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
+  }
+
+  const figmaEffectsString = await fs.readFile(figmaEffectsPath, 'utf-8');
+
+  return JSON.parse(figmaEffectsString) as FigmaDefinedEffectStyle[];
 }
 
 export async function readTransformedFigmaTreeFile(figmaDocumentId: string, penpotDocumentId: string): Promise<PenpotDocument> {
@@ -298,13 +347,17 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
 
     mapping = Mapping.parse({
       ...mappingJson,
-      fonts: new Map(Object.entries(mappingJson.fonts)),
-      assets: new Map(Object.entries(mappingJson.assets)),
-      nodes: new Map(Object.entries(mappingJson.nodes)),
-      documents: new Map(Object.entries(mappingJson.documents)),
-      colors: new Map(Object.entries(mappingJson.colors)),
-      typographies: new Map(Object.entries(mappingJson.typographies)),
-      components: new Map(Object.entries(mappingJson.components)),
+      // Default each field to `{}` so older mapping files (saved before any of these were tracked) still parse
+      fonts: new Map(Object.entries(mappingJson.fonts ?? {})),
+      assets: new Map(Object.entries(mappingJson.assets ?? {})),
+      nodes: new Map(Object.entries(mappingJson.nodes ?? {})),
+      documents: new Map(Object.entries(mappingJson.documents ?? {})),
+      colors: new Map(Object.entries(mappingJson.colors ?? {})),
+      typographies: new Map(Object.entries(mappingJson.typographies ?? {})),
+      components: new Map(Object.entries(mappingJson.components ?? {})),
+      tokenSets: new Map(Object.entries(mappingJson.tokenSets ?? {})),
+      tokens: new Map(Object.entries(mappingJson.tokens ?? {})),
+      tokenThemes: new Map(Object.entries(mappingJson.tokenThemes ?? {})),
     });
   }
 
@@ -321,6 +374,9 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
       colors: new Map(),
       typographies: new Map(),
       components: new Map(),
+      tokenSets: new Map(),
+      tokens: new Map(),
+      tokenThemes: new Map(),
     };
   }
 
@@ -345,6 +401,9 @@ export async function saveMapping(figmaDocumentId: string, penpotDocumentId: str
         colors: Object.fromEntries(mapping.colors),
         typographies: Object.fromEntries(mapping.typographies),
         components: Object.fromEntries(mapping.components),
+        tokenSets: Object.fromEntries(mapping.tokenSets),
+        tokens: Object.fromEntries(mapping.tokens),
+        tokenThemes: Object.fromEntries(mapping.tokenThemes),
       },
       null,
       2
@@ -367,10 +426,8 @@ export async function retrieve(options: RetrieveOptionsType) {
       fsSync.existsSync(getFigmaDocumentColorsPath(document.figmaDocument)) &&
       fsSync.existsSync(getFigmaDocumentTypographiesPath(document.figmaDocument));
 
-    // Get all predefined colors from Figma
-    // We do not use `getPublishedVariables()` because it contains only a part of the local ones, and without values
-    // Note: other variable kinds are not retrieved because Penpot cannot manage them (so using their raw value)
-    const figmaColors = useCache ? await readFigmaColorsFile(document.figmaDocument) : await retrieveColors(document.figmaDocument);
+    // Penpot library colors come only from Figma color styles whereas Figma color variables are exported as Penpot design tokens
+    const figmaColors: FigmaDefinedColor[] = useCache ? await readFigmaColorsFile(document.figmaDocument) : [];
 
     const customPenpotFontsVariants = (await postGetFontVariants({
       requestBody: {
@@ -444,7 +501,11 @@ export async function retrieve(options: RetrieveOptionsType) {
       // Ref: https://forum.figma.com/t/rest-api-get-color-and-text-styles/49216/4
       const stylesNodes = await retrieveStylesNodes(document.figmaDocument, stylesIds);
 
+      // Figma variables to become Penpot design tokens
+      const figmaVariables = await retrieveVariables(document.figmaDocument);
+
       const figmaTypographies = extractStylesTypographies(documentTree, stylesNodes);
+      const figmaEffects = extractStylesEffects(documentTree, stylesNodes);
       mergeStylesColors(figmaColors, documentTree, stylesNodes);
 
       const documentFolderPath = getFigmaDocumentPath(document.figmaDocument);
@@ -455,6 +516,12 @@ export async function retrieve(options: RetrieveOptionsType) {
         encoding: 'utf-8',
       });
       await fs.writeFile(getFigmaDocumentTypographiesPath(document.figmaDocument), JSON.stringify(figmaTypographies, null, 2), {
+        encoding: 'utf-8',
+      });
+      await fs.writeFile(getFigmaDocumentEffectsPath(document.figmaDocument), JSON.stringify(figmaEffects, null, 2), {
+        encoding: 'utf-8',
+      });
+      await fs.writeFile(getFigmaDocumentVariablesPath(document.figmaDocument), JSON.stringify(figmaVariables, null, 2), {
         encoding: 'utf-8',
       });
     }
@@ -521,10 +588,12 @@ export function transformDocument(
   documentTree: GetFileResponse,
   colors: FigmaDefinedColor[],
   typographies: FigmaDefinedTypography[],
+  variables: FigmaVariablesData,
+  effectStyles: FigmaDefinedEffectStyle[],
   mapping: MappingType
 ) {
   // Go from the Figma format to the Penpot one
-  const penpotTree = transformDocumentNode(documentTree, colors, typographies, mapping);
+  const penpotTree = transformDocumentNode(documentTree, colors, typographies, variables, effectStyles, mapping);
 
   // We have to patch the document since `{}` is not equal to `{ a: undefined }`,
   // and since we do comparaisons both in later stage or when doing tests we need to make sure
@@ -574,6 +643,8 @@ export async function transform(options: TransformOptionsType) {
     const figmaTree = await readFigmaTreeFile(document.figmaDocument);
     const figmaColors = await readFigmaColorsFile(document.figmaDocument);
     const figmaTypographies = await readFigmaTypographiesFile(document.figmaDocument);
+    const figmaVariables = await readFigmaVariablesFile(document.figmaDocument);
+    const figmaEffectStyles = await readFigmaEffectsFile(document.figmaDocument);
 
     patchDocument(figmaTree, figmaColors, figmaTypographies, options.excludePatterns, options.replaceFontPatterns);
 
@@ -602,7 +673,7 @@ export async function transform(options: TransformOptionsType) {
 
     const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument, options.prompting);
 
-    const penpotTree = transformDocument(figmaTree, figmaColors, figmaTypographies, mapping);
+    const penpotTree = transformDocument(figmaTree, figmaColors, figmaTypographies, figmaVariables, figmaEffectStyles, mapping);
 
     // Save mapping for later usage
     await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
@@ -907,6 +978,40 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
     }
   }
 
+  if (currentTree.data.tokenSets) {
+    for (const currentSet of Object.values(currentTree.data.tokenSets)) {
+      assert(currentSet.id);
+
+      flattenCurrentGlobalTree.set(currentSet.id, {
+        _apiType: 'token-set',
+        id: currentSet.id,
+        name: currentSet.name,
+        description: currentSet.description,
+      });
+
+      for (const currentToken of Object.values(currentSet.tokens)) {
+        assert(currentToken.id);
+
+        flattenCurrentGlobalTree.set(currentToken.id, {
+          _apiType: 'token',
+          _setId: currentSet.id,
+          ...currentToken,
+        });
+      }
+    }
+  }
+
+  if (currentTree.data.tokenThemes) {
+    for (const currentTheme of Object.values(currentTree.data.tokenThemes)) {
+      assert(currentTheme.id);
+
+      flattenCurrentGlobalTree.set(currentTheme.id, {
+        _apiType: 'token-theme',
+        ...currentTheme,
+      });
+    }
+  }
+
   if (currentTree.data.components) {
     for (const currentComponent of Object.values(currentTree.data.components)) {
       assert(currentComponent.id);
@@ -946,6 +1051,40 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
       // Trying to add the edge between 2 nodes, if not existing it will "pre-create" the node without content
       // And into the next iterations (since all must be in the list) it will add the needed node content (it avoids looping 2 times)
       newGraph.setEdge(liteNode._realPageParentId || liteNode.parentId, liteNode.id);
+    }
+  }
+
+  if (newTree.data.tokenSets) {
+    for (const newSet of Object.values(newTree.data.tokenSets)) {
+      assert(newSet.id);
+
+      flattenNewGlobalTree.set(newSet.id, {
+        _apiType: 'token-set',
+        id: newSet.id,
+        name: newSet.name,
+        description: newSet.description,
+      });
+
+      for (const newToken of Object.values(newSet.tokens)) {
+        assert(newToken.id);
+
+        flattenNewGlobalTree.set(newToken.id, {
+          _apiType: 'token',
+          _setId: newSet.id,
+          ...newToken,
+        });
+      }
+    }
+  }
+
+  if (newTree.data.tokenThemes) {
+    for (const newTheme of Object.values(newTree.data.tokenThemes)) {
+      assert(newTheme.id);
+
+      flattenNewGlobalTree.set(newTheme.id, {
+        _apiType: 'token-theme',
+        ...newTheme,
+      });
     }
   }
 
@@ -1023,6 +1162,44 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
             ...propertiesObj,
           },
         });
+      } else if (item.after._apiType === 'token-set') {
+        operations.push({
+          type: 'set-token-set',
+          id: item.after.id,
+          attrs: { id: item.after.id, name: item.after.name, description: item.after.description ?? '' },
+        });
+      } else if (item.after._apiType === 'token') {
+        // `set-token` carries the token name as an attribute (the JSON endpoint keywordizes object keys,
+        // so emitting tokens inline in `set-token-set.attrs.tokens` would fail validation)
+        operations.push({
+          type: 'set-token',
+          setId: item.after._setId,
+          tokenId: item.after.id,
+          attrs: {
+            id: item.after.id,
+            name: item.after.name,
+            // The Penpot JSON decoder converts camelCase strings (e.g. `borderRadius`) to its
+            // kebab Clojure keyword (`:border-radius`); sending the kebab string is rejected. Our
+            // openapi-generated union types are kebab-case, so cast here to bypass the TS literal
+            // check while keeping the value the API actually accepts
+            type: item.after.type as never,
+            value: item.after.value,
+            description: item.after.description ?? '',
+          },
+        });
+      } else if (item.after._apiType === 'token-theme') {
+        operations.push({
+          type: 'set-token-theme',
+          id: item.after.id,
+          attrs: {
+            id: item.after.id,
+            name: item.after.name,
+            group: item.after.group,
+            description: item.after.description ?? '',
+            isSource: item.after.isSource ?? false,
+            sets: item.after.sets,
+          },
+        });
       } else if (item.after._apiType === 'typography') {
         const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
 
@@ -1059,6 +1236,42 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           type: 'mod-color',
           color: {
             ...propertiesObj,
+          },
+        });
+      } else if (item.after._apiType === 'token-set') {
+        operations.push({
+          type: 'set-token-set',
+          id: item.after.id,
+          attrs: { id: item.after.id, name: item.after.name, description: item.after.description ?? '' },
+        });
+      } else if (item.after._apiType === 'token') {
+        operations.push({
+          type: 'set-token',
+          setId: item.after._setId,
+          tokenId: item.after.id,
+          attrs: {
+            id: item.after.id,
+            name: item.after.name,
+            // The Penpot JSON decoder converts camelCase strings (e.g. `borderRadius`) to its
+            // kebab Clojure keyword (`:border-radius`); sending the kebab string is rejected. Our
+            // openapi-generated union types are kebab-case, so cast here to bypass the TS literal
+            // check while keeping the value the API actually accepts
+            type: item.after.type as never,
+            value: item.after.value,
+            description: item.after.description ?? '',
+          },
+        });
+      } else if (item.after._apiType === 'token-theme') {
+        operations.push({
+          type: 'set-token-theme',
+          id: item.after.id,
+          attrs: {
+            id: item.after.id,
+            name: item.after.name,
+            group: item.after.group,
+            description: item.after.description ?? '',
+            isSource: item.after.isSource ?? false,
+            sets: item.after.sets,
           },
         });
       } else if (item.after._apiType === 'typography') {
@@ -1432,6 +1645,15 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           type: 'del-typography',
           id: item.before.id,
         });
+      } else if (item.before._apiType === 'token-set') {
+        // Penpot's DTCG export strips the real internal set id, so the deterministic uuidv5 we
+        // re-derive in `cleanHostedDocument` doesn't match any set that has been created from the UI.
+        // The user has to remove them manually (we cannot warn him since the server fails silently)
+        operations.push({ type: 'set-token-set', id: item.before.id, attrs: null });
+      } else if (item.before._apiType === 'token') {
+        operations.push({ type: 'set-token', setId: item.before._setId, tokenId: item.before.id, attrs: null });
+      } else if (item.before._apiType === 'token-theme') {
+        operations.push({ type: 'set-token-theme', id: item.before.id, attrs: null });
       }
     }
   }
@@ -1450,6 +1672,15 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
         index: i,
       });
     }
+  }
+
+  // Also adjust the active token themes
+  const currentActiveThemes = currentTree.data.activeTokenThemes ?? [];
+  const newActiveThemes = newTree.data.activeTokenThemes ?? [];
+  const activeThemesChanged =
+    currentActiveThemes.length !== newActiveThemes.length || currentActiveThemes.some((themePath, index) => themePath !== newActiveThemes[index]);
+  if (activeThemesChanged) {
+    operations.push({ type: 'set-active-token-themes', themePaths: newActiveThemes });
   }
 
   // Make the difference between hosted thumbnails and those we think should be kept

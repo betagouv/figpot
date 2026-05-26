@@ -1,14 +1,23 @@
 import { DropShadowEffect, Effect, InnerShadowEffect } from '@figpot/src/clients/figma';
-import { translateBoundVariables } from '@figpot/src/features/translators/translateBoundVariables';
 import { translateId } from '@figpot/src/features/translators/translateId';
 import { Shadow, ShadowStyle } from '@figpot/src/models/entities/penpot/traits/shadow';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { rgbToHex } from '@figpot/src/utils/color';
 
+let hasWarnedShadowColorVariable = false;
+
 export function translateShadowEffect(registry: AbstractRegistry, effect: Effect): Shadow | undefined {
   if (effect.type !== 'DROP_SHADOW' && effect.type !== 'INNER_SHADOW') {
     return;
+  }
+
+  if (!hasWarnedShadowColorVariable && effect.boundVariables?.color) {
+    hasWarnedShadowColorVariable = true;
+
+    console.warn(
+      `at least one Figma shadow has its colour bound to a variable, which Penpot cannot honour (no token slot on shadow colours). The shadow colour is exported as a plain value and will not react to token theme switches in Penpot`
+    );
   }
 
   return {
@@ -21,7 +30,6 @@ export function translateShadowEffect(registry: AbstractRegistry, effect: Effect
     color: {
       color: rgbToHex(effect.color),
       opacity: effect.color.a,
-      ...translateBoundVariables(registry, effect.color, effect.boundVariables),
     },
   };
 }

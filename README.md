@@ -74,6 +74,17 @@ It's possible to:
 
 Please refer to the "Frequently Asked Questions" or to the commands documentation with `npx figpot --help`.
 
+## Design tokens
+
+Since `v2`, Figma variables are no longer materialised as Penpot library colors, they become **Penpot design tokens** instead. Since Figma's variables can apply **per frame** and Penpot's design tokens apply **per document**: the two models are not fully compatible.
+
+To keep the synchronized file faithful to what Figma rendered, `figpot` translates each Figma variable into a Penpot token, grouped per collection mode into a token set, and does not enable any token set or theme by default.
+
+Due to this, our advices would be:
+
+1. If you intend to make the Penpot file a mirror of the Figma's one, never enable any token set (not even once)
+2. If you are migrating to Penpot, feel free to enable token sets and if the new design mismatches Figma's version, just adapt directly the Penpot file
+
 ## Frequently Asked Questions
 
 ### Some Figma information seems lost during the transfer?

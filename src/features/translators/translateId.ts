@@ -1,8 +1,14 @@
-import { v7 as uuidv7 } from 'uuid';
+import { v5 as uuidv5, v7 as uuidv7 } from 'uuid';
 
 import { TypeStyle } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
+
+// Fixed UUID namespace used for the deterministic `uuidv5` derivations of token set / token ids.
+// Tying the id to the set path / token name lets both the freshly-transformed Figma side and the
+// `tokensLib`-extracted Penpot side land on the same UUID, so the diff sees existing sets and
+// tokens as unchanged across syncs instead of re-emitting them every run
+const TOKEN_ID_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
 
 export const nullId = '00000000-0000-0000-0000-000000000000';
 
@@ -110,6 +116,23 @@ export function translateComponentId(figmaComponentId: string, mapping: MappingT
   mapping.components.set(figmaComponentId, penpotComponentId);
 
   return penpotComponentId;
+}
+
+// Token-related ids derive from the set/token path with `uuidv5`, no mapping persistence required:
+// the path is a stable string both the freshly-built Figma side and the `tokensLib`-extracted
+// Penpot side can produce, so the diff matches sets/tokens as unchanged across syncs. The
+// `mapping` parameter is kept for signature parity with the other `translateXId` functions even
+// though it goes unused
+export function translateTokenSetId(setPath: string, _mapping?: MappingType): string {
+  return uuidv5(`token-set/${setPath}`, TOKEN_ID_NAMESPACE);
+}
+
+export function translateTokenId(setPath: string, tokenName: string, _mapping?: MappingType): string {
+  return uuidv5(`token/${setPath}/${tokenName}`, TOKEN_ID_NAMESPACE);
+}
+
+export function translateTokenThemeId(themePath: string, _mapping?: MappingType): string {
+  return uuidv5(`token-theme/${themePath}`, TOKEN_ID_NAMESPACE);
 }
 
 export function formatPageRootFrameId(pageId: string) {

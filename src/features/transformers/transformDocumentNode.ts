@@ -1,7 +1,9 @@
 import { GetFileResponse, SubcanvasNode } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
-import { FigmaDefinedColor, FigmaDefinedTypography } from '@figpot/src/features/figma';
+import { FigmaDefinedColor, FigmaDefinedEffectStyle, FigmaDefinedTypography } from '@figpot/src/features/figma';
 import { transformPageNode } from '@figpot/src/features/transformers/transformPageNode';
+import { translateEffectStyleTokens } from '@figpot/src/features/translators/tokens/translateEffectStyleTokens';
+import { FigmaVariablesData, translateTokens } from '@figpot/src/features/translators/tokens/translateTokens';
 import { translateColor } from '@figpot/src/features/translators/translateColor';
 import { translateComponentId, translateId } from '@figpot/src/features/translators/translateId';
 import { translateTypography } from '@figpot/src/features/translators/translateTypography';
@@ -64,6 +66,8 @@ export function transformDocumentNode(
   figmaNode: GetFileResponse,
   figmaDefinedColors: FigmaDefinedColor[],
   figmaDefinedTypographies: FigmaDefinedTypography[],
+  figmaVariables: FigmaVariablesData,
+  figmaEffectStyles: FigmaDefinedEffectStyle[],
   mapping: MappingType
 ): PenpotDocument {
   // We use `GetFileResponse` type instead of the type `DocumentNode` to have the "document" title
@@ -72,25 +76,43 @@ export function transformDocumentNode(
 
   const registry = new Registry(mapping);
 
-  let colorVariablesWithoutValueCount = 0;
-  for (const figmaDefinedColor of figmaDefinedColors) {
-    // A color variable can be an alias to a variable hosted in another Figma file: `retrieveColors` is
-    // unable to resolve it (the variable is not part of this document response) so its `value` stays undefined.
-    // We skip it instead of crashing: it simply won't exist as a Penpot library color, and any node bound to
-    // it still falls back to its hardcoded color through `translateBoundVariables`.
-    if (!figmaDefinedColor.value) {
-      colorVariablesWithoutValueCount++;
+  // Figma variables become Penpot design tokens so nodes can directly use them
+  const {
+    tokenSets,
+    tokenThemes,
+    activeThemes,
+    variableTokenNames,
+    usedTokenNames,
+    inferredScopeNames,
+    suffixedVariableNames,
+    variableCollectionIds,
+    variableDefaultValues,
+  } = translateTokens(figmaVariables, mapping);
 
-      continue;
-    }
+  registry.registerVariableTokenNames(variableTokenNames);
+  registry.registerVariableDefaults(variableCollectionIds, variableDefaultValues);
 
-    registry.addColor(translateColor(registry, figmaDefinedColor));
+  if (inferredScopeNames.length > 0) {
+    console.warn(
+      `the following Figma variables had no explicit scope (or used "All scopes"), so figpot inferred their Penpot token type(s) — set explicit scopes in Figma to remove ambiguity: ${inferredScopeNames.join(', ')}`
+    );
+  }
+  if (suffixedVariableNames.length > 0) {
+    console.warn(
+      `the following Figma variables produced several Penpot tokens (one per inferred or declared scope) named with a "-typeName" suffix because Penpot tokens are single-type: ${suffixedVariableNames.join(', ')}`
+    );
   }
 
-  if (colorVariablesWithoutValueCount > 0) {
-    console.warn(
-      `${colorVariablesWithoutValueCount} color variable(s) were skipped because their value could not be resolved (most likely aliases to variables hosted in another Figma file)`
-    );
+  // Figma effect styles (drop/inner shadows) become `shadow` tokens in a dedicated set
+  const effectStyleTokens = translateEffectStyleTokens(figmaEffectStyles, mapping, new Set(Object.keys(tokenSets)), usedTokenNames);
+  if (effectStyleTokens) {
+    tokenSets[effectStyleTokens.tokenSet.name] = effectStyleTokens.tokenSet;
+    tokenThemes[effectStyleTokens.tokenSet.name] = effectStyleTokens.tokenTheme;
+    activeThemes.push(effectStyleTokens.tokenSet.name);
+  }
+
+  for (const figmaDefinedColor of figmaDefinedColors) {
+    registry.addColor(translateColor(registry, figmaDefinedColor));
   }
 
   for (const figmaDefinedTypography of figmaDefinedTypographies) {
@@ -212,6 +234,9 @@ export function transformDocumentNode(
   return {
     name: figmaNode.name,
     data: {
+      tokenSets: tokenSets,
+      tokenThemes: tokenThemes,
+      activeTokenThemes: activeThemes,
       pages: figmaNode.document.children.map((child) => translateId(child.id, registry.getMapping())),
       pagesIndex: Object.fromEntries(penpotPagesNodes.map((penpotPageNode) => [penpotPageNode.id, penpotPageNode])),
       colors: Object.fromEntries(

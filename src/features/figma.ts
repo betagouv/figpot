@@ -1,6 +1,7 @@
 import { checkbox, input, select } from '@inquirer/prompts';
 
 import {
+  Effect,
   ErrorResponsePayloadWithErrorBoolean,
   GetFileNodesResponse,
   GetFileResponse,
@@ -38,55 +39,13 @@ export type FigmaDefinedColor = {
   value?: Paint;
 };
 
-export function isColor(value: string | number | boolean | RGBA | VariableAlias): value is RGBA {
-  return typeof value === 'object' && 'r' in value;
-}
-
-// A Figma color variable does not always hold a raw color: it can be an alias pointing to another
-// variable (`{ type: 'VARIABLE_ALIAS', id: '...' }`). In that case `valuesByMode` stores the alias
-// instead of an `RGBA`, so we walk the alias chain until we reach a concrete color.
-// An alias can target a variable hosted in another Figma file: such a variable is not part of this
-// document response (`meta.variables`), so it stays unresolved and we return `undefined` for it.
-function resolveColorVariableValue(
-  variable: LocalVariable,
-  meta: GetLocalVariablesResponse['meta'],
-  visitedVariableIds: Set<string> = new Set()
-): RGBA | undefined {
-  // Guard against cyclic aliases (a variable aliasing itself directly or through a chain)
-  if (visitedVariableIds.has(variable.id)) {
-    return undefined;
-  }
-
-  visitedVariableIds.add(variable.id);
-
-  const collection = meta.variableCollections[variable.variableCollectionId];
-  if (!collection) {
-    return undefined;
-  }
-
-  // We rely on the default mode value (variable modes are not handled yet, see the TODO in `retrieveColors`)
-  const modeValue = variable.valuesByMode[collection.defaultModeId];
-  if (modeValue === undefined) {
-    return undefined;
-  }
-
-  if (isColor(modeValue)) {
-    return modeValue;
-  }
-
-  // Not a raw color, so it should be an alias to another variable that we follow recursively
-  if (typeof modeValue === 'object' && 'type' in modeValue && modeValue.type === 'VARIABLE_ALIAS') {
-    const aliasedVariable = meta.variables[modeValue.id];
-    if (!aliasedVariable) {
-      // The aliased variable lives in another Figma file, it's not part of this document response
-      return undefined;
-    }
-
-    return resolveColorVariableValue(aliasedVariable, meta, visitedVariableIds);
-  }
-
-  return undefined;
-}
+export type FigmaDefinedEffectStyle = {
+  id: LocalVariable['id'];
+  key: LocalVariable['key'];
+  name: LocalVariable['name'];
+  description: LocalVariable['description'];
+  effects: Effect[];
+};
 
 export function processDocumentsParametersFromInput(parameters: string[]): DocumentOptionsType[] {
   return parameters.map((parameter) => {
@@ -183,66 +142,30 @@ export async function retrieveTextPathImages(documentId: string, textPathNodeIds
   return images;
 }
 
-export async function retrieveColors(documentId: string): Promise<FigmaDefinedColor[]> {
-  const colors: FigmaDefinedColor[] = [];
-
+export async function retrieveVariables(documentId: string): Promise<GetLocalVariablesResponse['meta']> {
   try {
     const localVariablesResult = await getLocalVariables({ fileKey: documentId });
-    let unresolvedColorVariablesCount = 0;
 
-    for (const localVariable of Object.values(localVariablesResult.meta.variables)) {
-      if (localVariable.resolvedType === 'COLOR') {
-        // The value can be an alias to another variable (even one hosted in another file), `resolveColorVariableValue`
-        // walks the alias chain and returns `undefined` when the final color cannot be reached.
-        //
-        // TODO: variable modes are not handled yet, we only rely on the default mode of each collection
-        // Ref: https://forum.figma.com/t/how-to-access-variable-alias-value-from-another-collection/53203/4
-        const resolvedColor = resolveColorVariableValue(localVariable, localVariablesResult.meta);
-
-        if (!resolvedColor) {
-          unresolvedColorVariablesCount++;
-        }
-
-        colors.push({
-          id: localVariable.id,
-          key: localVariable.key,
-          name: localVariable.name,
-          description: localVariable.description,
-          value: resolvedColor
-            ? {
-                // Color variables can only manage a simple color so emulating to the appropriate Paint one
-                type: 'SOLID',
-                color: resolvedColor,
-                blendMode: 'NORMAL',
-              }
-            : undefined,
-        });
-      }
-    }
-
-    if (unresolvedColorVariablesCount > 0) {
-      console.warn(
-        `${unresolvedColorVariablesCount} color variable(s) could not be resolved to a concrete color (most likely aliases to variables hosted in another Figma file). They won't be transferred as Penpot library colors, but nodes using them keep their hardcoded color.`
-      );
-    }
+    return localVariablesResult.meta;
   } catch (error) {
     const body = (error as unknown as any).body as ErrorResponsePayloadWithErrorBoolean;
-
-    // Figma returns 403 on this endpoint when the caller's plan does not grant access to local variables.
-    // The response message has varied over time ("file_variables:read" scope-style, then "Limited by Figma plan"),
-    // so we match both known wordings (lower-cased to be resilient to casing changes) to avoid re-breaking when Figma rephrases.
     const lowerMessage = body.message.toLowerCase();
 
-    if (body.status === 403 && (lowerMessage.includes('file_variables:read') || lowerMessage.includes('limited by figma plan'))) {
-      console.warn(
-        `exact color variables names won't be transferred since Figma requires the most expensive plan just to get variables you defined (Enterprise plan you seem to not have)...`
-      );
-    } else {
-      throw error;
-    }
-  }
+    if (body.status === 403) {
+      if (lowerMessage.includes('file_variables:read')) {
+        console.warn(`"file_variables:read" scope is missing from the Figma access token used`);
+      } else if (lowerMessage.includes('limited by figma plan')) {
+        console.warn(`design tokens won't be transferred since Figma exposes variables through the API only on its Enterprise plan`);
+      } else {
+        // Figma rephrases scope/plan errors over time; warn generically so a new wording does not silently turn into "no tokens".
+        console.warn(`design tokens won't be transferred: Figma returned 403 on variables — ${body.message}`);
+      }
 
-  return colors;
+      return { variables: {}, variableCollections: {} };
+    }
+
+    throw error;
+  }
 }
 
 export function mergeStylesColors(colors: FigmaDefinedColor[], documentTree: GetFileResponse, stylesNodes: GetFileNodesResponse['nodes']) {
@@ -281,6 +204,26 @@ export function extractStylesTypographies(documentTree: GetFileResponse, stylesN
   }
 
   return typographies;
+}
+
+export function extractStylesEffects(documentTree: GetFileResponse, stylesNodes: GetFileNodesResponse['nodes']): FigmaDefinedEffectStyle[] {
+  const effectStyles: FigmaDefinedEffectStyle[] = [];
+
+  for (const [, styleNode] of Object.entries(stylesNodes)) {
+    const style = documentTree.styles[styleNode.document.id];
+
+    if (style?.styleType === 'EFFECT' && 'effects' in styleNode.document) {
+      effectStyles.push({
+        id: styleNode.document.id,
+        key: style.key,
+        name: style.name,
+        description: style.description,
+        effects: styleNode.document.effects,
+      });
+    }
+  }
+
+  return effectStyles;
 }
 
 export function countNestedTreeElements(figmaNode: SubcanvasNode): number {

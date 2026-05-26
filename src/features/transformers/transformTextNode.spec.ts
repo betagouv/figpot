@@ -23,6 +23,9 @@ describe('transformTextNode()', () => {
       colors: new Map(),
       typographies: new Map(),
       components: new Map(),
+      tokenSets: new Map(),
+      tokens: new Map(),
+      tokenThemes: new Map(),
     };
 
     const registry = new Registry(mapping);

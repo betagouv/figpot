@@ -5,6 +5,7 @@ import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { SyncGroups } from '@figpot/src/models/entities/penpot/traits/syncGroups';
+import { TokenType } from '@figpot/src/models/entities/penpot/traits/token';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 export interface BoundVariableRegistry {
@@ -12,6 +13,12 @@ export interface BoundVariableRegistry {
   getTypographies(): Map<string, LibraryTypography>;
   getComponents(): Map<string, LibraryComponent>;
   getMapping(): MappingType;
+  getVariableTokenNames(): Map<string, string>;
+  getVariableDefaultValueForBinding(
+    figmaVariableId: string,
+    tokenType: TokenType,
+    explicitVariableModes?: Record<string, string>
+  ): number | string | undefined;
 }
 
 export interface AbstractRegistry extends BoundVariableRegistry {
@@ -68,6 +75,18 @@ export class ComponentInstanceRegistry implements AbstractRegistry {
     return this.pageRegistry.getComponents();
   }
 
+  public getVariableTokenNames(): Map<string, string> {
+    return this.pageRegistry.getVariableTokenNames();
+  }
+
+  public getVariableDefaultValueForBinding(
+    figmaVariableId: string,
+    tokenType: TokenType,
+    explicitVariableModes?: Record<string, string>
+  ): number | string | undefined {
+    return this.pageRegistry.getVariableDefaultValueForBinding(figmaVariableId, tokenType, explicitVariableModes);
+  }
+
   public getOverrides(nodeId: string): Overrides['overriddenFields'] | null {
     return this.overrides.get(nodeId) || null;
   }
@@ -113,6 +132,18 @@ export class ComponentRegistry implements AbstractRegistry {
 
   public getComponents(): Map<string, LibraryComponent> {
     return this.pageRegistry.getComponents();
+  }
+
+  public getVariableTokenNames(): Map<string, string> {
+    return this.pageRegistry.getVariableTokenNames();
+  }
+
+  public getVariableDefaultValueForBinding(
+    figmaVariableId: string,
+    tokenType: TokenType,
+    explicitVariableModes?: Record<string, string>
+  ): number | string | undefined {
+    return this.pageRegistry.getVariableDefaultValueForBinding(figmaVariableId, tokenType, explicitVariableModes);
   }
 
   public getOverrides(nodeId: string): Overrides['overriddenFields'] | null {
@@ -162,6 +193,18 @@ export class PageRegistry implements AbstractRegistry {
     return this.globalRegistry.getComponents();
   }
 
+  public getVariableTokenNames(): Map<string, string> {
+    return this.globalRegistry.getVariableTokenNames();
+  }
+
+  public getVariableDefaultValueForBinding(
+    figmaVariableId: string,
+    tokenType: TokenType,
+    explicitVariableModes?: Record<string, string>
+  ): number | string | undefined {
+    return this.globalRegistry.getVariableDefaultValueForBinding(figmaVariableId, tokenType, explicitVariableModes);
+  }
+
   public getOverrides(nodeId: string): Overrides['overriddenFields'] | null {
     return null;
   }
@@ -172,6 +215,9 @@ export class Registry implements BoundVariableRegistry {
   protected readonly colors: Map<string, Color> = new Map();
   protected readonly typographies: Map<string, LibraryTypography> = new Map();
   protected readonly components: Map<string, LibraryComponent> = new Map();
+  protected readonly variableTokenNames: Map<string, string> = new Map();
+  protected readonly variableCollectionIds: Map<string, string> = new Map();
+  protected readonly variableDefaultValues: Map<string, number | string> = new Map();
   protected readonly mapping: MappingType;
 
   constructor(mapping: MappingType) {
@@ -214,6 +260,44 @@ export class Registry implements BoundVariableRegistry {
 
   public getComponents(): Map<string, LibraryComponent> {
     return this.components;
+  }
+
+  public registerVariableTokenNames(variableTokenNames: Map<string, string>) {
+    for (const [figmaVariableId, tokenName] of variableTokenNames) {
+      this.variableTokenNames.set(figmaVariableId, tokenName);
+    }
+  }
+
+  public getVariableTokenNames(): Map<string, string> {
+    return this.variableTokenNames;
+  }
+
+  public registerVariableDefaults(variableCollectionIds: Map<string, string>, variableDefaultValues: Map<string, number | string>) {
+    for (const [variableId, collectionId] of variableCollectionIds) {
+      this.variableCollectionIds.set(variableId, collectionId);
+    }
+
+    for (const [key, value] of variableDefaultValues) {
+      this.variableDefaultValues.set(key, value);
+    }
+  }
+
+  public getVariableDefaultValueForBinding(
+    figmaVariableId: string,
+    tokenType: TokenType,
+    explicitVariableModes?: Record<string, string>
+  ): number | string | undefined {
+    if (explicitVariableModes !== undefined) {
+      const collectionId = this.variableCollectionIds.get(figmaVariableId);
+
+      // The variable's owning collection is not part of the node's per-frame override set, so the
+      // Figma-resolved value already matches the default-mode value — nothing to override
+      if (!collectionId || explicitVariableModes[collectionId] === undefined) {
+        return undefined;
+      }
+    }
+
+    return this.variableDefaultValues.get(`${figmaVariableId}/${tokenType}`);
   }
 
   public getMapping() {

@@ -22,7 +22,7 @@ import {
   FigmaDefinedColor,
   FigmaDefinedEffectStyle,
   FigmaDefinedTypography,
-  collectTextPathNodeIds,
+  collectTextPathRefs,
   countTotalElements,
   extractStylesEffects,
   extractStylesTypographies,
@@ -206,8 +206,8 @@ export function getFigmaMediaPath(mediaId: string) {
   return path.resolve(mediasFolderPath, mediaId);
 }
 
-export function getFigmaTextPathSvgPath(nodeId: string) {
-  return path.resolve(textPathsFolderPath, `${nodeId.replace(/[:;]/g, '_')}.svg`);
+export function getFigmaTextPathSvgPath(nodeId: string, hash: string) {
+  return path.resolve(textPathsFolderPath, `${nodeId.replace(/[:;]/g, '_')}_${hash}.svg`);
 }
 
 export async function readFigmaTreeFile(documentId: string): Promise<GetFileResponse> {
@@ -550,28 +550,38 @@ export async function retrieve(options: RetrieveOptionsType) {
     }
 
     // Figma "text on a path" (TEXT_PATH) has no Penpot equivalent. We fetch each one rendered by Figma as
-    // an SVG (glyphs outlined) and cache it on disk so the synchronous transform step can rebuild it as a
-    // Penpot `path`. This is the only async place for it (mirrors the image handling above).
-    const textPathNodeIdsToFetch = collectTextPathNodeIds(documentTree).filter((nodeId) => !fsSync.existsSync(getFigmaTextPathSvgPath(nodeId)));
+    // an SVG (glyphs outlined) and cache it on disk under a content-hashed filename so a later edit
+    // of the text-path triggers a re-fetch (Figma's API has no per-node `modifiedAt`, hashing is
+    // the only way to invalidate the cache). This is the only async place for it
+    const textPathRefs = collectTextPathRefs(documentTree);
+    const textPathRefsToFetch = textPathRefs.filter((ref) => !fsSync.existsSync(getFigmaTextPathSvgPath(ref.nodeId, ref.hash)));
 
-    if (textPathNodeIdsToFetch.length > 0) {
+    if (textPathRefsToFetch.length > 0) {
       await fs.mkdir(textPathsFolderPath, { recursive: true });
 
-      const textPathImages = await retrieveTextPathImages(document.figmaDocument, textPathNodeIdsToFetch);
+      const textPathImages = await retrieveTextPathImages(
+        document.figmaDocument,
+        textPathRefsToFetch.map((ref) => ref.nodeId)
+      );
 
-      for (const nodeId of textPathNodeIdsToFetch) {
-        const svgUrl = textPathImages[nodeId];
+      for (const ref of textPathRefsToFetch) {
+        const svgUrl = textPathImages[ref.nodeId];
         if (!svgUrl) {
-          throw new Error(`Figma did not return an SVG render for the text-path node "${nodeId}"`);
+          throw new Error(`Figma did not return an SVG render for the text-path node "${ref.nodeId}"`);
         }
 
-        console.log(`downloading the text-path SVG ${nodeId} from Figma`);
+        console.log(`downloading the text-path SVG ${ref.nodeId} from Figma`);
 
         const svgResponse = await fetch(svgUrl);
 
-        await fs.writeFile(getFigmaTextPathSvgPath(nodeId), await svgResponse.text(), { encoding: 'utf-8' });
+        await fs.writeFile(getFigmaTextPathSvgPath(ref.nodeId, ref.hash), await svgResponse.text(), { encoding: 'utf-8' });
       }
     }
+
+    // Note: old `<nodeId>_<oldHash>.svg` files accumulate on disk when a text-path's content
+    // changes. We do not auto-clean because `textPathsFolderPath` is shared across documents and
+    // a per-document cleanup pass would need extra bookkeeping. Wipe the folder manually if its
+    // size becomes an issue — the next sync will re-fetch whatever is still in use
   }
 }
 

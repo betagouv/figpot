@@ -3,6 +3,7 @@ import svgPathParser from 'svg-path-parser';
 
 import { TextPathNode, Transform } from '@figpot/src/clients/figma';
 import { getFigmaTextPathSvgPath } from '@figpot/src/features/document';
+import { computeTextPathContentHash } from '@figpot/src/features/figma';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
@@ -39,7 +40,7 @@ export function transformTextPathNode(
     return undefined;
   }
 
-  const svgFilePath = getFigmaTextPathSvgPath(node.id);
+  const svgFilePath = getFigmaTextPathSvgPath(node.id, computeTextPathContentHash(node));
   if (!fsSync.existsSync(svgFilePath)) {
     throw new Error(`the SVG render of the text-path "${node.name}" (${node.id}) is missing, the retrieve step should have fetched it`);
   }

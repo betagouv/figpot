@@ -1,4 +1,5 @@
 import { checkbox, input, select } from '@inquirer/prompts';
+import { createHash } from 'crypto';
 
 import {
   Effect,
@@ -255,8 +256,32 @@ export function countTotalElements(tree: GetFileResponse, colors: FigmaDefinedCo
   return treeCount + colors.length + typographies.length;
 }
 
-export function collectTextPathNodeIds(tree: GetFileResponse): string[] {
-  const textPathNodeIds: string[] = [];
+export function computeTextPathContentHash(node: SubcanvasNode): string {
+  const textPathProps = node as Partial<{
+    characters: string;
+    style: unknown;
+    characterStyleOverrides: unknown;
+    styleOverrideTable: unknown;
+    absoluteBoundingBox: { width?: number; height?: number };
+  }>;
+
+  const visualInputs = {
+    characters: textPathProps.characters,
+    style: textPathProps.style,
+    characterStyleOverrides: textPathProps.characterStyleOverrides,
+    styleOverrideTable: textPathProps.styleOverrideTable,
+    // Resizing the shape changes the path the text follows (and so the wrap/curve of the glyphs)
+    width: textPathProps.absoluteBoundingBox?.width,
+    height: textPathProps.absoluteBoundingBox?.height,
+  };
+
+  return createHash('sha256').update(JSON.stringify(visualInputs)).digest('hex').slice(0, 12);
+}
+
+export type TextPathRef = { nodeId: string; hash: string };
+
+export function collectTextPathRefs(tree: GetFileResponse): TextPathRef[] {
+  const refs: TextPathRef[] = [];
 
   function deepCollect(figmaNode: SubcanvasNode) {
     if (figmaNode.type === 'TEXT_PATH') {
@@ -264,7 +289,7 @@ export function collectTextPathNodeIds(tree: GetFileResponse): string[] {
       // instead of the outlined text. Its SVG render is meaningless, so we neither fetch nor cache it (the
       // transform step skips such nodes too) — that way a missing local SVG always means "nothing usable".
       if (!figmaNode.fillGeometry || figmaNode.fillGeometry.length === 0) {
-        textPathNodeIds.push(figmaNode.id);
+        refs.push({ nodeId: figmaNode.id, hash: computeTextPathContentHash(figmaNode) });
       }
     }
 
@@ -281,7 +306,7 @@ export function collectTextPathNodeIds(tree: GetFileResponse): string[] {
     }
   }
 
-  return textPathNodeIds;
+  return refs;
 }
 
 // Reverse of the suffix→weight table in `translateFontWeight`: given a weight + style, produce a PostScript suffix that `extractFontFamilySuffix` will recognize

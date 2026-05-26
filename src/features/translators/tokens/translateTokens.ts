@@ -159,10 +159,6 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
 
     for (const mode of collection.modes) {
       const setPath = uniqueName(`${translateTokenSetPath(collection.name)}/${translateTokenSetPath(mode.name)}`, usedSetPaths);
-      const lastSlash = setPath.lastIndexOf('/');
-      const themeGroup = setPath.slice(0, lastSlash);
-      const themeName = setPath.slice(lastSlash + 1);
-
       const tokens: Record<string, Token> = {};
 
       for (const variableId of collection.variableIds) {
@@ -211,19 +207,23 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
         tokens: tokens,
       };
 
-      tokenThemes[setPath] = {
-        id: translateTokenThemeId(`${collection.id}/${mode.modeId}`, mapping),
-        name: themeName,
-        group: themeGroup,
-        sets: [setPath],
-      };
-
-      // Intentionally NOT auto-activating the Figma default mode as a Penpot theme on sync.
-      // Penpot's theme model is document-wide while Figma's per-frame `explicitVariableModes` can
-      // pick a different mode per frame. If we force a default theme on, the runtime applies its
-      // bound values to every node and frames that depended on a per-frame override visually drift
-      // from what Figma showed. With no theme active, Penpot displays whatever Figma rendered on
-      // sync (faithful), and the user can manually toggle a theme to preview a global state
+      // Token themes are intentionally NOT emitted at sync. Penpot's set picker is multi-select
+      // and works directly on sets — themes are purely user-defined bundles that toggle several
+      // sets at once. Figma's data has no cross-collection grouping we could read to deduce a
+      // useful bundle (e.g. "this Colors mode goes with this Spacing mode"), so any theme we
+      // auto-emit would just be a one-button alias for the matching set's checkbox — pure noise.
+      //
+      // The plumbing below is kept ready so that, if a user wants named themes (typical when a
+      // file is published once and not re-synced regularly), they can create them by hand in
+      // Penpot's UI; we still own the id mapping via `translateTokenThemeId` should we ever
+      // re-introduce automatic emission (e.g. via a future CLI hint or a Figma-side convention).
+      //
+      // tokenThemes[setPath] = {
+      //   id: translateTokenThemeId(`xxx`, mapping),
+      //   name: themeName,
+      //   group: themeGroup,
+      //   sets: [yyy],
+      // };
     }
   }
 

@@ -61,10 +61,12 @@ describe('translateTokens()', () => {
       type: 'color',
       value: '#ff0000',
     });
-    expect(tokenThemes['Primitives/Default']).toMatchObject({ name: 'Default', group: 'Primitives', sets: ['Primitives/Default'] });
+
+    // Themes are intentionally not auto-emitted; the user creates bundles in Penpot's UI on demand
+    expect(tokenThemes).toEqual({});
   });
 
-  it('creates one set and one theme per collection mode', () => {
+  it('creates one set per collection mode (themes are not auto-emitted)', () => {
     const collection = makeCollection({
       id: 'C1',
       name: 'Theme',
@@ -88,7 +90,7 @@ describe('translateTokens()', () => {
     expect(Object.keys(tokenSets).sort()).toEqual(['Theme/Dark', 'Theme/Light']);
     expect(tokenSets['Theme/Light'].tokens['bg'].value).toBe('#ffffff');
     expect(tokenSets['Theme/Dark'].tokens['bg'].value).toBe('#000000');
-    expect(Object.keys(tokenThemes).sort()).toEqual(['Theme/Dark', 'Theme/Light']);
+    expect(tokenThemes).toEqual({});
   });
 
   it('resolves a local alias to a token reference', () => {
@@ -250,6 +252,5 @@ describe('translateTokens()', () => {
 
     expect(second.tokenSets['C/M'].id).toBe(first.tokenSets['C/M'].id);
     expect(second.tokenSets['C/M'].tokens['c'].id).toBe(first.tokenSets['C/M'].tokens['c'].id);
-    expect(second.tokenThemes['C/M'].id).toBe(first.tokenThemes['C/M'].id);
   });
 });

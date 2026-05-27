@@ -5,12 +5,13 @@ import { transformPageNode } from '@figpot/src/features/transformers/transformPa
 import { translateEffectStyleTokens } from '@figpot/src/features/translators/tokens/translateEffectStyleTokens';
 import { FigmaVariablesData, translateTokens } from '@figpot/src/features/translators/tokens/translateTokens';
 import { translateColor } from '@figpot/src/features/translators/translateColor';
-import { translateComponentId, translateId } from '@figpot/src/features/translators/translateId';
+import { registerId, translateComponentId, translateId } from '@figpot/src/features/translators/translateId';
 import { translateTypography } from '@figpot/src/features/translators/translateTypography';
 import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { Registry } from '@figpot/src/models/entities/registry';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
+import { deterministicUuid } from '@figpot/src/utils/uuid';
 
 export function detectLocalFigmaComponents(foundComponentsIds: string[], figmaNode: SubcanvasNode) {
   if (figmaNode.type === 'COMPONENT') {
@@ -21,6 +22,31 @@ export function detectLocalFigmaComponents(foundComponentsIds: string[], figmaNo
   if ('children' in figmaNode) {
     for (const childNode of figmaNode.children) {
       detectLocalFigmaComponents(foundComponentsIds, childNode);
+    }
+  }
+}
+
+// Walks the page tree once and, for every Figma node that lives inside a COMPONENT or
+// COMPONENT_SET subtree, pre-populates `mapping.nodes` with a deterministic id derived from the
+// Figma node ID. So if any other is referencing them they will directly use the right ID
+function registerComponentSubtreeIds(figmaNode: GetFileResponse, mapping: MappingType): void {
+  function walk(node: SubcanvasNode, insideComponent: boolean): void {
+    if (insideComponent && node.type !== 'COMPONENT' && node.type !== 'COMPONENT_SET') {
+      registerId(node.id, deterministicUuid(node.id), mapping);
+    }
+
+    if ('children' in node && node.children) {
+      const childInside = insideComponent || node.type === 'COMPONENT' || node.type === 'COMPONENT_SET';
+
+      for (const child of node.children) {
+        walk(child, childInside);
+      }
+    }
+  }
+
+  for (const canvas of figmaNode.document.children) {
+    for (const node of canvas.children) {
+      walk(node, false);
     }
   }
 }
@@ -68,6 +94,9 @@ export function transformDocumentNode(
   figmaDefinedTypographies: FigmaDefinedTypography[],
   figmaVariables: FigmaVariablesData,
   figmaEffectStyles: FigmaDefinedEffectStyle[],
+  libraryFiles: Map<string, string>,
+  remoteComponentSourceFiles: Map<string, string>,
+  remoteStyleSourceFiles: Map<string, string>,
   mapping: MappingType
 ): PenpotDocument {
   // We use `GetFileResponse` type instead of the type `DocumentNode` to have the "document" title
@@ -75,6 +104,13 @@ export function transformDocumentNode(
   cleanFigmaDefects(figmaNode);
 
   const registry = new Registry(mapping);
+
+  // Cross-file binding is needed so instance nodes can reference their component definition, same for styles
+  registry.registerComponentBindings(figmaNode.components, libraryFiles, remoteComponentSourceFiles);
+  registry.registerStyleBindings(figmaNode.styles, libraryFiles, remoteStyleSourceFiles);
+
+  // Instance node must reference the original shape from within the component definition, so its nested nodes become deterministic (as the instance node initially)
+  registerComponentSubtreeIds(figmaNode, mapping);
 
   // Figma variables become Penpot design tokens so nodes can directly use them
   const { tokenSets, tokenThemes, activeThemes, variableTokenNames, usedTokenNames, inferredScopeNames, suffixedVariableNames } = translateTokens(
@@ -119,8 +155,7 @@ export function transformDocumentNode(
       continue;
     }
 
-    // We do not reuse the same Figma ID because we keep it for the "transformed" frame representing the component definition
-    const penpotComponentId = translateComponentId(`${componentId}_component`, mapping);
+    const penpotComponentId = translateComponentId(component.key);
     const penpotComponentInstanceId = translateId(componentId, mapping);
 
     // In case of a components group the component (being a variant) must have the name of the component (not the variation)

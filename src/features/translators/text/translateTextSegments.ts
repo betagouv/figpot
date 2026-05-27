@@ -8,7 +8,7 @@ import { translateLetterSpacing } from '@figpot/src/features/translators/text/pr
 import { translateLineHeight } from '@figpot/src/features/translators/text/properties/translateLineHeight';
 import { translateTextDecoration } from '@figpot/src/features/translators/text/properties/translateTextDecoration';
 import { translateTextTransform } from '@figpot/src/features/translators/text/properties/translateTextTransform';
-import { translateDocumentId, translateTypographyId } from '@figpot/src/features/translators/translateId';
+import { nullId, translateDocumentId, translateTypographyId } from '@figpot/src/features/translators/translateId';
 import { TextNode as PenpotTextNode, TextStyle } from '@figpot/src/models/entities/penpot/shapes/text';
 import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
@@ -46,14 +46,27 @@ export function dropTrailingLetterSpacing(segments: PenpotTextNode[]): PenpotTex
 export function transformTextStyle(registry: BoundVariableRegistry, node: TextNode, style: TypeStyle): TextStyle {
   const typographyStyleId = getTypographyStyleId(node);
 
+  if (!typographyStyleId) {
+    return partialTransformTextStyle(registry, style);
+  }
+
+  const binding = registry.resolveStyle(typographyStyleId);
+
+  let typographyRefId: string;
+  let typographyRefFile: string;
+
+  if (binding) {
+    typographyRefId = binding.file !== undefined ? binding.id : nullId;
+    typographyRefFile = binding.file ?? nullId;
+  } else {
+    typographyRefId = translateTypographyId(typographyStyleId, registry.getMapping());
+    typographyRefFile = translateDocumentId('current', registry.getMapping());
+  }
+
   return {
     ...partialTransformTextStyle(registry, style),
-    ...(typographyStyleId
-      ? {
-          typographyRefId: translateTypographyId(typographyStyleId, registry.getMapping()),
-          typographyRefFile: translateDocumentId('current', registry.getMapping()),
-        }
-      : {}),
+    typographyRefId,
+    typographyRefFile,
   };
 }
 

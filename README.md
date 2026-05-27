@@ -18,21 +18,21 @@ This library is **a Figma to Penpot converter and synchronizer supporting varian
 
 ### One-time transfer
 
-Prepare the minimal information:
+Open your [Figma](https://www.figma.com/files/) document inside the browser and copy its identifier _(for `https://www.figma.com/design/CptbnRHeDv3pzOai91abcd/` the ID is `CptbnRHeDv3pzOai91abcd`)_.
 
-1. Open your [Figma](https://www.figma.com/files/) document inside the browser and copy its identifier _(for `https://www.figma.com/design/CptbnRHeDv3pzOai91abcd/` the ID is `CptbnRHeDv3pzOai91abcd`)_
-2. Open [Penpot](https://design.penpot.app/) and create an empty file, and copy its identifier _(for `https://design.penpot.app/#/workspace?team-id=yyy&file-id=3d04e89b-bff0-8115-8004-bc14b0d50123&page-id=zzz` the ID is `3d04e89b-bff0-8115-8004-bc14b0d50123`)_
-
-Make sure to have [Node.js](https://nodejs.org/) installed and simply run:
+Then make sure to have [Node.js](https://nodejs.org/) installed and simply run:
 
 ```shell
 npx @betagouv/figpot deps # required to have a 100% complete synchronization, if not wanted use `--no-hydrate` on the following command
-npx @betagouv/figpot document synchronize -d CptbnRHeDv3pzOai91abcd:3d04e89b-bff0-8115-8004-bc14b0d50123
+npx @betagouv/figpot document synchronize -d CptbnRHeDv3pzOai91abcd
 ```
 
-The command will then ask you for tokens required to reach both Figma and Penpot. To avoid typing them each time, have a look at the `Usage > Advanced` section.
+The command will then ask you:
 
-_Note: Penpot user email and password are required to synchronize final details simulating a browser locally. If needed you can skip this with the parameter `--no-hydrate`. See the FAQ to better understand the hydratation process._
+- for access tokens required to reach both Figma and Penpot (to avoid typing them each time, have a look at the `Usage > Advanced` section)
+- where to locate the result into Penpot
+
+_Penpot user email and password are required to synchronize final details simulating a browser locally. If needed you can skip this with the parameter `--no-hydrate`. See the FAQ to better understand the hydratation process._
 
 ### Incremental transfers
 
@@ -41,6 +41,10 @@ To have a real incremental experience the library needs to remember the bindings
 If you intend to perform synchronizations from a new machine, or from a server that resets its storage at each start, you need to make sure saving and restoring this file each time.
 
 ### Avoid command prompts
+
+#### Command parameters
+
+Selecting the same Penpot file target over and over can be annoying. You can use the parameter `-d` as `-d <figmaId>:<penpotId>` to skip those prompts, and this is also true when specifying libraries with `-l <figmaId>:<penpotId>`.
 
 #### Variables
 
@@ -86,6 +90,13 @@ Due to this, our advices would be:
 2. If you are migrating to Penpot, feel free to enable token sets and if the new design mismatches Figma's version, just adapt directly the Penpot file
 
 ## Frequently Asked Questions
+
+### What the difference between parameters `-d` and `-l`?
+
+- `-d` stands for a document to synchronize into Penpot
+- `-l` stands for a library used by a document to properly reference the source definition (so optional, but helpful in practice)
+
+You may ask why not passing all Figma files as documents instead of libraries... **But marking an assets file as "document" will perform a full synchronization, whereas having it as a "library" is just making sure to reference components and styles belonging to it.** It's useful in case someone in your team handles the synchronization of let's say a design system, and you just want to target this as a library because your only interest is fully synchronizing your own application file.
 
 ### Some Figma information seems lost during the transfer?
 
@@ -157,9 +168,28 @@ If you encounter issues like `JavaScript heap out of memory`, try to:
 
 ### How to synchronize multiple Figma files while keeping their components references between each other?
 
-Currently when you convert a Figma file with `figpot`, all instances of remote components will loose their "component definition link" since the dependencies files are maybe not what you want to synchronize. To ease the user experience, we decided to keep this logic instead of assuming the library has to transfer all files (or almost all).
+`figpot` supports cross-file component, color and typography references via two mechanisms to automatically wires them:
 
-It may be implemented in the future, but it would require all expected files to be synchronized first, and the "binding operation" would appear after. This because Figma allows bidirectional dependencies ("file A" may rely on "file B" components, and "file B" may rely on "file A" components).
+1. Pass multiple Figma files in a single command using repeated `-d figmaId` flags
+2. For Figma libraries you do _not_ want to re-sync each time (e.g. a stable design system), declare them as libraries once with `-l figmaId`
+
+Example:
+
+```shell
+# Two co-synced files, where "consumer" uses components from "designSystem"
+figpot document synchronize \
+  -d <figmaDesignSystem>:<penpotDesignSystem> \
+  -d <figmaConsumer>:<penpotConsumer>
+
+# Only sync the consumer, but keep cross-file references to the existing design-system file
+figpot document synchronize \
+  -d <figmaConsumer>:<penpotConsumer> \
+  -l <figmaDesignSystem>:<penpotDesignSystem>
+```
+
+Whenever `figpot` discovers a referenced Figma library that is neither passed via `-d` nor `-l`, it prompts you with three choices: pick an existing Penpot file to bind to, skip referencing this library (useful if your Figma token has no access to the source), or stop the run so you can synchronize that library first. The "stop" option does _not_ trigger a recursive auto-sync. The latter choice is to keep you in control of how deep the cascade goes because a new document to sync may imply a large tree of nested documents. Also if you don't care about al cross-file references, pass `--skip-libraries`.
+
+_The Penpot-side IDs for components, color styles and text styles are deterministic, so cross-file bindings stay stable across re-syncs even if the local `mapping.json` is lost or even if it was done by someone else._
 
 ### How to manage Penpot error `referential-integrity`?
 
@@ -241,7 +271,7 @@ cp .env.model .env.local
 Open `.env.local` and fill it with information as for a normal library usage. Then you are able to run:
 
 ```shell
-npm run cli document synchronize --- -d CptbnRHeDv3pzOai91abcd:3d04e89b-bff0-8115-8004-bc14b0d50123
+npm run cli document synchronize --- -d CptbnRHeDv3pzOai91abcd
 ```
 
 **Do not use the default Penpot production instance (`https://design.penpot.app/`) while developing!** It would consume their resources whereas they allow anyone to play inside their staging environment `https://design.penpot.dev/` (this can be configured through the environment variable `PENPOT_BASE_URL`). _Also it's possible to use your own local Penpot instance but I feel it's overkill if you are not facing a mysterious issue you have to debug (see https://help.penpot.app/technical-guide/getting-started/#install-with-docker)._

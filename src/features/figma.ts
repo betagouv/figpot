@@ -2,6 +2,7 @@ import { checkbox, input, select } from '@inquirer/prompts';
 import { createHash } from 'crypto';
 
 import {
+  Component,
   Effect,
   ErrorResponsePayloadWithErrorBoolean,
   GetFileNodesResponse,
@@ -11,14 +12,20 @@ import {
   LocalVariable,
   Paint,
   RGBA,
+  Style,
   SubcanvasNode,
   TypeStyle,
   VariableAlias,
+  getComponent,
   getFile,
+  getFileComponents,
+  getFileMeta,
   getFileNodes,
+  getFileStyles,
   getImages,
   getLocalVariables,
   getProjectFiles,
+  getStyle,
   getTeamProjects,
 } from '@figpot/src/clients/figma';
 import { DocumentOptionsType, ExcludePatternsType, ReplaceFontPatternType } from '@figpot/src/features/document';
@@ -169,18 +176,183 @@ export async function retrieveVariables(documentId: string): Promise<GetLocalVar
   }
 }
 
+// For every remote (library) component referenced in `documentTree`, resolves which Figma file
+// publishes it. Returns a map `componentKey -> publisher figma file id`.
+//
+// `publishersByComponentKey` is an index built by the caller from every co-synced document's
+// `remote: false` components: a component that is *local* in some other file X means X is the
+// publisher. So when the consumer's remote component shares a key with that index, we know the
+// publisher without an API call
+export async function retrieveRemoteComponents(
+  figmaComponents: Record<string, Component>,
+  publishersByComponentKey: Map<string, string> = new Map()
+): Promise<Record<string, string>> {
+  const remoteComponentSourceFiles: Record<string, string> = {};
+  const keysToFetch = new Set<string>();
+
+  for (const component of Object.values(figmaComponents)) {
+    if (component.remote === true) {
+      const coSyncedPublisher = publishersByComponentKey.get(component.key);
+
+      if (coSyncedPublisher !== undefined) {
+        remoteComponentSourceFiles[component.key] = coSyncedPublisher;
+      } else {
+        keysToFetch.add(component.key);
+      }
+    }
+  }
+
+  let scopeWarningEmitted = false;
+  for (const componentKey of keysToFetch) {
+    try {
+      const result = await getComponent({ key: componentKey });
+
+      remoteComponentSourceFiles[componentKey] = result.meta.file_key;
+    } catch (error) {
+      const body = (error as unknown as { body?: ErrorResponsePayloadWithErrorBoolean }).body;
+
+      if (body?.status === 403 && !scopeWarningEmitted) {
+        console.warn(
+          `\nthe Figma access token is missing the "Library assets" scope (read-only) so cross-file component bindings cannot be resolved. Re-create the token with that scope to enable binding`
+        );
+
+        scopeWarningEmitted = true;
+      } else if (body?.status !== 403) {
+        console.warn(`\nthe source file of the remote component "${componentKey}" could not be resolved (it may be unpublished or inaccessible)`);
+      }
+    }
+  }
+
+  return remoteComponentSourceFiles;
+}
+
+// Lists every component published by the given Figma file. Cheap way to populate the
+// `publishersByComponentKey` index when the user declared a library via `-l/--library`: one call
+// returns all (key, file_key) pairs for that library, replacing many `GET /v1/components/:key` fallbacks
+export async function retrieveLibraryPublishedComponents(figmaLibraryFileKey: string): Promise<Array<{ key: string; file_key: string }>> {
+  try {
+    const result = await getFileComponents({ fileKey: figmaLibraryFileKey });
+
+    return result.meta.components.map((c) => ({ key: c.key, file_key: c.file_key }));
+  } catch (error) {
+    const body = (error as unknown as { body?: ErrorResponsePayloadWithErrorBoolean }).body;
+
+    if (body?.status === 403) {
+      console.warn(
+        `the Figma access token cannot list components published by "${figmaLibraryFileKey}" (missing "Library content" or "Library assets" scope?) — figpot will fall back to per-component lookups for this library`
+      );
+    } else {
+      console.warn(`could not list components published by Figma library "${figmaLibraryFileKey}" — figpot will fall back to per-component lookups`);
+    }
+
+    return [];
+  }
+}
+
+// Symmetric to `retrieveRemoteComponents`, but for FILL and TEXT styles
+export async function retrieveRemoteStyles(
+  figmaStyles: Record<string, Style>,
+  publishersByStyleKey: Map<string, string> = new Map()
+): Promise<Record<string, string>> {
+  const remoteStyleSourceFiles: Record<string, string> = {};
+  const keysToFetch = new Set<string>();
+
+  for (const style of Object.values(figmaStyles)) {
+    // Only FILL and TEXT styles here since EFFECT styles get translated as Penpot shadow tokens and GRID styles are not bound across files in Penpot
+    if (style.remote === true && (style.styleType === 'FILL' || style.styleType === 'TEXT')) {
+      const coSyncedPublisher = publishersByStyleKey.get(style.key);
+
+      if (coSyncedPublisher !== undefined) {
+        remoteStyleSourceFiles[style.key] = coSyncedPublisher;
+      } else {
+        keysToFetch.add(style.key);
+      }
+    }
+  }
+
+  let scopeWarningEmitted = false;
+  for (const styleKey of keysToFetch) {
+    try {
+      const result = await getStyle({ key: styleKey });
+
+      remoteStyleSourceFiles[styleKey] = result.meta.file_key;
+    } catch (error) {
+      const body = (error as unknown as { body?: ErrorResponsePayloadWithErrorBoolean }).body;
+
+      if (body?.status === 403 && !scopeWarningEmitted) {
+        console.warn(
+          `\nthe Figma access token is missing the "Library assets" scope (read-only) so cross-file style bindings cannot be resolved. Re-create the token with that scope to enable binding`
+        );
+
+        scopeWarningEmitted = true;
+      } else if (body?.status !== 403) {
+        console.warn(`\nthe source file of the remote style "${styleKey}" could not be resolved (it may be unpublished or inaccessible)`);
+      }
+    }
+  }
+
+  return remoteStyleSourceFiles;
+}
+
+// Symmetric to `retrieveLibraryPublishedComponents`: one `GET /v1/files/<lib>/styles` call returns
+// every (key, file_key) pair the library publishes, front-loading the publisher index so per-key
+// fallbacks downstream only fire for unknown libraries
+export async function retrieveLibraryPublishedStyles(figmaLibraryFileKey: string): Promise<Array<{ key: string; file_key: string }>> {
+  try {
+    const result = await getFileStyles({ fileKey: figmaLibraryFileKey });
+    return result.meta.styles.map((s) => ({ key: s.key, file_key: s.file_key }));
+  } catch (error) {
+    const body = (error as unknown as { body?: ErrorResponsePayloadWithErrorBoolean }).body;
+    if (body?.status === 403) {
+      console.warn(
+        `the Figma access token cannot list styles published by "${figmaLibraryFileKey}" (missing "Library content" or "Library assets" scope?) — figpot will fall back to per-style lookups for this library`
+      );
+    } else {
+      console.warn(`could not list styles published by Figma library "${figmaLibraryFileKey}" — figpot will fall back to per-style lookups`);
+    }
+    return [];
+  }
+}
+
+// Fetches just the Figma file's display name via `GET /v1/files/:key/meta`. Used by interactive
+// prompts so the user can recognise an unbound library by name instead of just an opaque file id.
+// Cheap call (no tree); returns `undefined` on access errors so callers can fall back to the id
+export async function retrieveFigmaFileName(fileKey: string): Promise<string | undefined> {
+  try {
+    // The OpenAPI-generated type is flattened wrongly, so we cast and read the real path
+    const result = (await getFileMeta({ fileKey })) as unknown as { file: { name: string } };
+
+    return result.file.name;
+  } catch (error) {
+    const body = (error as unknown as { body?: ErrorResponsePayloadWithErrorBoolean }).body;
+    if (body?.status === 403) {
+      // Library files often live on a different team or are shared via "library link" only —
+      // those grant component-level access but not direct file-metadata access via the REST API
+      console.warn(
+        `Cannot fetch Figma metadata for "${fileKey}" — the access token does not have permission to read the file (status 403). For library files this is expected when the library is shared as "library link" but not as a regular file. For your own files, make sure the token's "File metadata" scope is enabled and the file is accessible to the token's owner`
+      );
+    } else if (body?.status === 404) {
+      console.warn(`Cannot fetch Figma metadata for "${fileKey}" — the file does not exist or is no longer accessible (status 404)`);
+    } else {
+      console.warn(`Cannot fetch Figma metadata for "${fileKey}" — ${body?.message ?? (error as Error).message ?? 'unknown error'}`);
+    }
+
+    return undefined;
+  }
+}
+
 export function mergeStylesColors(colors: FigmaDefinedColor[], documentTree: GetFileResponse, stylesNodes: GetFileNodesResponse['nodes']) {
   for (const [, styleNode] of Object.entries(stylesNodes)) {
     if (documentTree.styles[styleNode.document.id]?.styleType === 'FILL' && styleNode.document.type === 'RECTANGLE') {
       // A Figma style can contains multiple colors so we have to split them to fit with the Penpot logic of "1 style = 1 color"
+      const baseKey = documentTree.styles[styleNode.document.id].key;
+      const multiPaint = styleNode.document.fills.length > 1;
+
       for (let i = 0; i < styleNode.document.fills.length; i++) {
         colors.push({
-          id: styleNode.document.fills.length > 1 ? `${styleNode.document.id}_${i}` : styleNode.document.id, // Add a suffix to differentiate them if needed
-          key: documentTree.styles[styleNode.document.id].key,
-          name:
-            styleNode.document.fills.length > 1
-              ? `${documentTree.styles[styleNode.document.id].name} ${i + 1}`
-              : documentTree.styles[styleNode.document.id].name,
+          id: multiPaint ? `${styleNode.document.id}_${i}` : styleNode.document.id, // Add a suffix to differentiate them if needed
+          key: multiPaint ? `${baseKey}_${i}` : baseKey,
+          name: multiPaint ? `${documentTree.styles[styleNode.document.id].name} ${i + 1}` : documentTree.styles[styleNode.document.id].name,
           description: documentTree.styles[styleNode.document.id].description,
           value: styleNode.document.fills[i],
         });

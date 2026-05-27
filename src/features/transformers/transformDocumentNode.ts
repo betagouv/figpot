@@ -68,6 +68,9 @@ export function transformDocumentNode(
   figmaDefinedTypographies: FigmaDefinedTypography[],
   figmaVariables: FigmaVariablesData,
   figmaEffectStyles: FigmaDefinedEffectStyle[],
+  libraryFiles: Map<string, string>,
+  remoteComponentSourceFiles: Map<string, string>,
+  remoteStyleSourceFiles: Map<string, string>,
   mapping: MappingType
 ): PenpotDocument {
   // We use `GetFileResponse` type instead of the type `DocumentNode` to have the "document" title
@@ -75,6 +78,10 @@ export function transformDocumentNode(
   cleanFigmaDefects(figmaNode);
 
   const registry = new Registry(mapping);
+
+  // Cross-file binding is needed so instance nodes can reference their component definition, same for styles
+  registry.registerComponentBindings(figmaNode.components, libraryFiles, remoteComponentSourceFiles);
+  registry.registerStyleBindings(figmaNode.styles, libraryFiles, remoteStyleSourceFiles);
 
   // Figma variables become Penpot design tokens so nodes can directly use them
   const { tokenSets, tokenThemes, activeThemes, variableTokenNames, usedTokenNames, inferredScopeNames, suffixedVariableNames } = translateTokens(
@@ -119,8 +126,7 @@ export function transformDocumentNode(
       continue;
     }
 
-    // We do not reuse the same Figma ID because we keep it for the "transformed" frame representing the component definition
-    const penpotComponentId = translateComponentId(`${componentId}_component`, mapping);
+    const penpotComponentId = translateComponentId(component.key);
     const penpotComponentInstanceId = translateId(componentId, mapping);
 
     // In case of a components group the component (being a variant) must have the name of the component (not the variation)

@@ -3,6 +3,7 @@ import { v5 as uuidv5, v7 as uuidv7 } from 'uuid';
 import { TypeStyle } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
+import { deterministicUuid } from '@figpot/src/utils/uuid';
 
 // Fixed UUID namespace used for the deterministic `uuidv5` derivations of token set / token ids.
 // Tying the id to the set path / token name lets both the freshly-transformed Figma side and the
@@ -76,6 +77,16 @@ export function registerDocumentId(figmaDocumentId: string, penpotDocumentId: st
   mapping.fonts.set(figmaDocumentId, penpotDocumentId);
 }
 
+// Color styles use deterministic IDs derived from the Figma `style.key` (a cross-file stable identifier published by the source file)
+export function translateColorIdFromKey(figmaStyleKey: string): string {
+  return deterministicUuid(`style/color/${figmaStyleKey}`);
+}
+
+// Typography styles use deterministic IDs derived from the Figma `style.key` (a cross-file stable identifier published by the source file)
+export function translateTypographyIdFromKey(figmaStyleKey: string): string {
+  return deterministicUuid(`style/typography/${figmaStyleKey}`);
+}
+
 export function translateColorId(figmaColorId: string, mapping: MappingType): string {
   const penpotMappedColorId = mapping.colors.get(figmaColorId);
   if (penpotMappedColorId) {
@@ -83,7 +94,7 @@ export function translateColorId(figmaColorId: string, mapping: MappingType): st
   }
 
   // Otherwise we create a new one, adding it to the mapping object
-  // Note: we use UUID v7 because Penpot seems to have one with timestamp at the beginning (even if they call if "v8", but this is to be free-form apparently)
+  // Note: we use UUID v7 because Penpot seems to have one with timestamp at the beginning (even if they call it "v8", but this is to be free-form apparently)
   const penpotColorId = uuidv7();
   mapping.colors.set(figmaColorId, penpotColorId);
 
@@ -91,31 +102,29 @@ export function translateColorId(figmaColorId: string, mapping: MappingType): st
 }
 
 export function translateTypographyId(figmaTypographyId: string, mapping: MappingType): string {
-  const penpotMappedTypographyId = mapping.colors.get(figmaTypographyId);
+  const penpotMappedTypographyId = mapping.typographies.get(figmaTypographyId);
   if (penpotMappedTypographyId) {
     return penpotMappedTypographyId;
   }
 
   // Otherwise we create a new one, adding it to the mapping object
-  // Note: we use UUID v7 because Penpot seems to have one with timestamp at the beginning (even if they call if "v8", but this is to be free-form apparently)
+  // Note: we use UUID v7 because Penpot seems to have one with timestamp at the beginning (even if they call it "v8", but this is to be free-form apparently)
   const penpotTypographyId = uuidv7();
-  mapping.colors.set(figmaTypographyId, penpotTypographyId);
+  mapping.typographies.set(figmaTypographyId, penpotTypographyId);
 
   return penpotTypographyId;
 }
 
-export function translateComponentId(figmaComponentId: string, mapping: MappingType): string {
-  const penpotMappedComponentId = mapping.components.get(figmaComponentId);
-  if (penpotMappedComponentId) {
-    return penpotMappedComponentId;
-  }
+// Component IDs are derived from the Figma component key that is stable globally to Figma
+// By adopting this pattern we are able to ease the cross-file binding work for the user (no need to provide `mapping.json` file)
+export function translateComponentId(figmaComponentKey: string): string {
+  return deterministicUuid(figmaComponentKey);
+}
 
-  // Otherwise we create a new one, adding it to the mapping object
-  // Note: we use UUID v7 because Penpot seems to have one with timestamp at the beginning (even if they call if "v8", but this is to be free-form apparently)
-  const penpotComponentId = uuidv7();
-  mapping.components.set(figmaComponentId, penpotComponentId);
-
-  return penpotComponentId;
+// Penpot's `mainInstanceId` property on an instance is targeting the "main instance" that is under the component node
+// and since the component node ID is deterministic to simplify cross-file referencing, we have to do the same for it's top child
+export function translateComponentMainShapeIdFromKey(figmaComponentKey: string): string {
+  return deterministicUuid(`id-${figmaComponentKey}`);
 }
 
 // Token-related ids derive from the set/token path with `uuidv5`, no mapping persistence required:

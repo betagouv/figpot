@@ -11,6 +11,7 @@ import {
   TransformOptions,
   compare,
   hydrate,
+  resolveDocumentDestinations,
   retrieve,
   set,
   synchronize,
@@ -28,6 +29,14 @@ const document = program.command('document').description('manage documents');
 const debugDocument = document.command('debug').description('manage documents step by step to debug');
 
 const documentsOption = new Option('-d, --document [documents...]', 'figma document id as source and penpot one as target (`-d figmaId:penpotId`)');
+const librariesOption = new Option(
+  '-l, --library [libraries...]',
+  'declare a Penpot library file used by your documents in the form `figmaId:penpotId` (required when your Figma file consumes published components from another Figma file)'
+);
+const skipLibrariesOption = new Option(
+  '--skip-libraries',
+  'skip remote-component resolution, instances of remote components will remain detached (helpful when the Figma access token lacks "Library assets" scope)'
+);
 const continuousIntegrationOption = new Option('-ci, --ci', 'answer "yes" to all command prompts, use it with caution');
 const syncMappingWithGitOption = new Option(
   '--sync-mapping-with-git',
@@ -125,6 +134,8 @@ document
   .command('synchronize')
   .description('synchronize Figma documents to Penpot ones')
   .addOption(documentsOption)
+  .addOption(librariesOption)
+  .addOption(skipLibrariesOption)
   .addOption(excludePagePatternsOption)
   .addOption(excludeNodePatternsOption)
   .addOption(excludeComponentPatternsOption)
@@ -146,21 +157,23 @@ document
 
     let documents: DocumentOptionsType[];
     if (!options.document || options.document === true) {
-      throw new Error('please specify both figma and penpot documents to synchronize');
-      // TODO: disabling this for now until we implement the documents retrieval from Penpot
-      // TODO: should deal with `options.ci` value
-      // documents = (await retrieveDocumentsFromInput()).map((figmaDocument) => {
-      //   return {
-      //     figmaDocument: figmaDocument,
-      //   };
-      // });
+      throw new Error('please specify at least one Figma document to synchronize');
     } else {
       documents = processDocumentsParametersFromInput(options.document);
     }
 
+    let libraries = Array.isArray(options.library) ? processDocumentsParametersFromInput(options.library) : [];
+
+    // Fill in any missing `:penpotId` (the user typed just `-d <figmaId>` or `-l <figmaId>`)
+    // Note: resolution needs to prompt the user so it can't happen inside `synchronize` after Zod has rejected the input
+    documents = await resolveDocumentDestinations(documents, !options.ci);
+    libraries = await resolveDocumentDestinations(libraries, !options.ci);
+
     await synchronize(
       SynchronizeOptions.parse({
         documents: documents,
+        libraries: libraries,
+        skipLibraries: options.skipLibraries || false,
         excludePatterns: {
           pageNamePatterns: Array.isArray(options.excludePagePattern) ? options.excludePagePattern : undefined,
           nodeNamePatterns: Array.isArray(options.excludeNodePattern) ? options.excludeNodePattern : undefined,
@@ -207,6 +220,8 @@ debugDocument
   .command('retrieve')
   .description('save Figma documents locally')
   .addOption(documentsOption)
+  .addOption(librariesOption)
+  .addOption(skipLibrariesOption)
   .addOption(syncMappingWithGitOption)
   .addOption(useCachedFigmaDataOption)
   .addOption(continuousIntegrationOption)
@@ -214,13 +229,16 @@ debugDocument
     await ensureAccessTokens(!options.ci);
 
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
+    const libraries = Array.isArray(options.library) ? processDocumentsParametersFromInput(options.library) : [];
 
     await retrieve(
       RetrieveOptions.parse({
         documents: documents,
+        libraries: libraries,
         syncMappingWithGit: options.syncMappingWithGit || false,
         prompting: !options.ci,
         useCachedFigmaData: options.useCachedFigmaData || false,
+        skipLibraries: options.skipLibraries || false,
       })
     );
   });
@@ -229,6 +247,7 @@ debugDocument
   .command('transform')
   .description('transform Figma documents format to Penpot one')
   .addOption(documentsOption)
+  .addOption(librariesOption)
   .addOption(excludePagePatternsOption)
   .addOption(excludeNodePatternsOption)
   .addOption(excludeComponentPatternsOption)
@@ -241,10 +260,12 @@ debugDocument
     await ensureAccessTokens(!options.ci);
 
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
+    const libraries = Array.isArray(options.library) ? processDocumentsParametersFromInput(options.library) : [];
 
     await transform(
       TransformOptions.parse({
         documents: documents,
+        libraries: libraries,
         excludePatterns: {
           pageNamePatterns: Array.isArray(options.excludePagePattern) ? options.excludePagePattern : undefined,
           nodeNamePatterns: Array.isArray(options.excludeNodePattern) ? options.excludeNodePattern : undefined,

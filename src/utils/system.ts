@@ -1,5 +1,13 @@
 import { programRequestedToShutDownError } from '@figpot/src/models/entities/errors';
 
+// Thrown by code paths where the user explicitly chose to abort
+export class UserCancellationExit extends Error {
+  constructor() {
+    super('user cancellation');
+    this.name = 'UserCancellationExit';
+  }
+}
+
 export let gracefulExitRequested: boolean = false;
 
 export function watchGracefulExitInLoop() {

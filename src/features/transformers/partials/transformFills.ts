@@ -1,6 +1,6 @@
 import { MinimalFillsTrait, Paint, Path, VectorNode } from '@figpot/src/clients/figma';
 import { translateFills } from '@figpot/src/features/translators/fills/translateFills';
-import { translateColorId, translateDocumentId } from '@figpot/src/features/translators/translateId';
+import { nullId, translateColorId, translateDocumentId } from '@figpot/src/features/translators/translateId';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 
@@ -9,18 +9,35 @@ export function transformFills(registry: BoundVariableRegistry, node: MinimalFil
 
   const fills = translateFills(registry, node.fills);
 
-  return {
-    fills: fillStyleId
-      ? fills.map((fill, i) => {
-          const uniqueColorId = fills.length > 1 ? `${fillStyleId}_${i}` : fillStyleId;
+  if (!fillStyleId) {
+    return { fills };
+  }
 
-          return {
-            ...fill,
-            fillColorRefId: translateColorId(uniqueColorId, registry.getMapping()),
-            fillColorRefFile: translateDocumentId('current', registry.getMapping()),
-          };
-        })
-      : fills,
+  return {
+    fills: fills.map((fill, i) => {
+      // Multi-paint published styles produce one Penpot color per paint
+      const paintIndex = fills.length > 1 ? i : undefined;
+      const binding = registry.resolveStyle(fillStyleId, paintIndex);
+
+      let fillColorRefId: string;
+      let fillColorRefFile: string;
+
+      if (binding) {
+        fillColorRefId = binding.file !== undefined ? binding.id : nullId;
+        fillColorRefFile = binding.file ?? nullId;
+      } else {
+        const localUniqueColorId = fills.length > 1 ? `${fillStyleId}_${i}` : fillStyleId;
+
+        fillColorRefId = translateColorId(localUniqueColorId, registry.getMapping());
+        fillColorRefFile = translateDocumentId('current', registry.getMapping());
+      }
+
+      return {
+        ...fill,
+        fillColorRefId,
+        fillColorRefFile,
+      };
+    }),
   };
 }
 

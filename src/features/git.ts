@@ -3,16 +3,14 @@ import { simpleGit } from 'simple-git';
 
 import { getFigmaToPenpotMappingPath } from '@figpot/src/features/document';
 
-const __root_dirname = process.cwd();
-
-export async function saveMappingToRepository(figmaDocumentId: string, penpotDocumentId: string) {
+export async function saveMappingToRepository(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
   const git = simpleGit();
   await git.addConfig('push.autoSetupRemote', 'true'); // If the remote branch does not exist the push will not fail
 
   const status = await simpleGit().status();
 
-  const mappingPath = getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId);
-  const relativeMappingPath = path.relative(__root_dirname, mappingPath);
+  const mappingPath = getFigmaToPenpotMappingPath(dataDir, figmaDocumentId, penpotDocumentId);
+  const relativeMappingPath = path.relative(process.cwd(), mappingPath);
 
   if (status.not_added.includes(relativeMappingPath) || status.modified.includes(relativeMappingPath)) {
     await git.add(relativeMappingPath);
@@ -25,7 +23,7 @@ export async function saveMappingToRepository(figmaDocumentId: string, penpotDoc
   }
 }
 
-export async function restoreMappingFromRepository(figmaDocumentId: string, penpotDocumentId: string) {
+export async function restoreMappingFromRepository(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
   const git = simpleGit();
 
   await git.fetch();
@@ -37,8 +35,8 @@ export async function restoreMappingFromRepository(figmaDocumentId: string, penp
   const tree = await git.raw(['ls-tree', '-r', currentBranch, '--name-only']);
   const trackedFiles = tree.split('\n');
 
-  const mappingPath = getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId);
-  const relativeMappingPath = path.relative(__root_dirname, mappingPath);
+  const mappingPath = getFigmaToPenpotMappingPath(dataDir, figmaDocumentId, penpotDocumentId);
+  const relativeMappingPath = path.relative(process.cwd(), mappingPath);
 
   if (trackedFiles.includes(relativeMappingPath)) {
     console.log('the latest mapping file has been retrieved from the Git remote branch');

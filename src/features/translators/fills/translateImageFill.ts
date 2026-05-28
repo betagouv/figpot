@@ -18,7 +18,7 @@ export function translateImageFill(registry: BoundVariableRegistry, fill: ImageP
 
   // The provided size of the image must be the file dimension (the parent node will manage the display size)
   // Note: it's synchronous to not break the whole chain of nested calls, this should remain really low at cost performance, but if needed this could be retrieved before browsing and just passed at parameters
-  const rootFilePath = getFigmaMediaPath(fill.imageRef);
+  const rootFilePath = getFigmaMediaPath(registry.getDataDir(), fill.imageRef);
   // `windowsPathsNoEscape` tells glob to treat `\` as a path separator rather than as the escape character,
   // so a Windows-native path returned by `path.resolve()` (e.g. `C:\Users\...\abc123`) matches correctly.
   const filesWithExtensionPaths = globSync(`${rootFilePath}.*`, { windowsPathsNoEscape: true });

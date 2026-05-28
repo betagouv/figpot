@@ -97,13 +97,14 @@ export function transformDocumentNode(
   libraryFiles: Map<string, string>,
   remoteComponentSourceFiles: Map<string, string>,
   remoteStyleSourceFiles: Map<string, string>,
-  mapping: MappingType
+  mapping: MappingType,
+  dataDir: string
 ): PenpotDocument {
   // We use `GetFileResponse` type instead of the type `DocumentNode` to have the "document" title
 
   cleanFigmaDefects(figmaNode);
 
-  const registry = new Registry(mapping);
+  const registry = new Registry(mapping, dataDir);
 
   // Cross-file binding is needed so instance nodes can reference their component definition, same for styles
   registry.registerComponentBindings(figmaNode.components, libraryFiles, remoteComponentSourceFiles);

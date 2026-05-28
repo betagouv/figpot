@@ -40,7 +40,7 @@ export function transformTextPathNode(
     return undefined;
   }
 
-  const svgFilePath = getFigmaTextPathSvgPath(node.id, computeTextPathContentHash(node));
+  const svgFilePath = getFigmaTextPathSvgPath(registry.getDataDir(), node.id, computeTextPathContentHash(node));
   if (!fsSync.existsSync(svgFilePath)) {
     throw new Error(`the SVG render of the text-path "${node.name}" (${node.id}) is missing, the retrieve step should have fetched it`);
   }

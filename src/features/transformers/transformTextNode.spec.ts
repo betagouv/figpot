@@ -28,7 +28,7 @@ describe('transformTextNode()', () => {
       tokenThemes: new Map(),
     };
 
-    const registry = new Registry(mapping);
+    const registry = new Registry(mapping, '/tmp/figpot-test-data');
     const registryPage = registry.newPage('random');
 
     const transformedNode = transformTextNode(registryPage, figmaNode as TextNodeImport as TextNode, neutralTransform);

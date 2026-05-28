@@ -76,12 +76,27 @@ import { config, figmaRateLimitContext, penpotApiBaseUrl } from '@figpot/src/uti
 import { downloadFile, openAsBlob, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
 import { UserCancellationExit } from '@figpot/src/utils/system';
 
-const __root_dirname = process.cwd();
+export const DEFAULT_DATA_DIR_NAME = 'data';
 
-export const documentsFolderPath = path.resolve(__root_dirname, './data/documents/');
-export const fontsFolderPath = path.resolve(__root_dirname, './data/fonts/');
-export const mediasFolderPath = path.resolve(__root_dirname, './data/medias/');
-export const textPathsFolderPath = path.resolve(__root_dirname, './data/textpaths/');
+export function resolveDefaultDataDir(): string {
+  return process.env.FIGPOT_DATA_DIR ? path.resolve(process.env.FIGPOT_DATA_DIR) : path.resolve(process.cwd(), DEFAULT_DATA_DIR_NAME);
+}
+
+export function getDocumentsFolderPath(dataDir: string) {
+  return path.resolve(dataDir, 'documents');
+}
+
+export function getFontsFolderPath(dataDir: string) {
+  return path.resolve(dataDir, 'fonts');
+}
+
+export function getMediasFolderPath(dataDir: string) {
+  return path.resolve(dataDir, 'medias');
+}
+
+export function getTextPathsFolderPath(dataDir: string) {
+  return path.resolve(dataDir, 'textpaths');
+}
 
 function formatSecondsHuman(totalSeconds: number): string {
   const days = Math.floor(totalSeconds / 86400);
@@ -165,6 +180,7 @@ export const DocumentOptions = z.object({
 export type DocumentOptionsType = z.infer<typeof DocumentOptions>;
 
 export const RetrieveOptions = z.object({
+  dataDir: z.string(),
   documents: z.array(DocumentOptions),
   prompting: Prompting,
   syncMappingWithGit: z.boolean(),
@@ -181,72 +197,72 @@ export type ChunkGroupMetadata = {
 
 export type OperationWithChunkGroupMetadata = appCommonFilesChanges$changeWithoutUnknown & ChunkGroupMetadata;
 
-export function getFigmaDocumentPath(documentId: string) {
-  return path.resolve(documentsFolderPath, `figma_${documentId}`);
+export function getFigmaDocumentPath(dataDir: string, documentId: string) {
+  return path.resolve(getDocumentsFolderPath(dataDir), `figma_${documentId}`);
 }
 
-export function getFigmaDocumentTreePath(documentId: string) {
-  return path.resolve(getFigmaDocumentPath(documentId), 'tree.json');
+export function getFigmaDocumentTreePath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'tree.json');
 }
 
-export function getFigmaDocumentColorsPath(documentId: string) {
-  return path.resolve(getFigmaDocumentPath(documentId), 'colors.json');
+export function getFigmaDocumentColorsPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'colors.json');
 }
 
-export function getFigmaDocumentTypographiesPath(documentId: string) {
-  return path.resolve(getFigmaDocumentPath(documentId), 'typographies.json');
+export function getFigmaDocumentTypographiesPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'typographies.json');
 }
 
-export function getFigmaDocumentVariablesPath(documentId: string) {
-  return path.resolve(getFigmaDocumentPath(documentId), 'variables.json');
+export function getFigmaDocumentVariablesPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'variables.json');
 }
 
-export function getFigmaDocumentEffectsPath(documentId: string) {
-  return path.resolve(getFigmaDocumentPath(documentId), 'effects.json');
+export function getFigmaDocumentEffectsPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'effects.json');
 }
 
-export function getFigmaDocumentRemoteComponentsPath(documentId: string) {
-  return path.resolve(getFigmaDocumentPath(documentId), 'remote-components.json');
+export function getFigmaDocumentRemoteComponentsPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'remote-components.json');
 }
 
-export function getFigmaDocumentRemoteStylesPath(documentId: string) {
-  return path.resolve(getFigmaDocumentPath(documentId), 'remote-styles.json');
+export function getFigmaDocumentRemoteStylesPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'remote-styles.json');
 }
 
-export function getPenpotDocumentPath(figmaDocumentId: string, penpotDocumentId: string) {
-  return path.resolve(getFigmaDocumentPath(figmaDocumentId), 'export', `penpot_${penpotDocumentId}`);
+export function getPenpotDocumentPath(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, figmaDocumentId), 'export', `penpot_${penpotDocumentId}`);
 }
 
-export function getPenpotHostedDocumentTreePath(figmaDocumentId: string, penpotDocumentId: string) {
-  return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'hosted-tree.json');
+export function getPenpotHostedDocumentTreePath(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), 'hosted-tree.json');
 }
 
-export function getFigmaToPenpotMetaPath(figmaDocumentId: string, penpotDocumentId: string) {
-  return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'meta.json');
+export function getFigmaToPenpotMetaPath(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), 'meta.json');
 }
 
-export function getFigmaToPenpotMappingPath(figmaDocumentId: string, penpotDocumentId: string) {
-  return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'mapping.json');
+export function getFigmaToPenpotMappingPath(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), 'mapping.json');
 }
 
-export function getFigmaToPenpotDiffPath(figmaDocumentId: string, penpotDocumentId: string) {
-  return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'diff.json');
+export function getFigmaToPenpotDiffPath(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), 'diff.json');
 }
 
-export function getTransformedFigmaTreePath(figmaDocumentId: string, penpotDocumentId: string) {
-  return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'transformed-tree.json');
+export function getTransformedFigmaTreePath(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), 'transformed-tree.json');
 }
 
-export function getFigmaMediaPath(mediaId: string) {
-  return path.resolve(mediasFolderPath, mediaId);
+export function getFigmaMediaPath(dataDir: string, mediaId: string) {
+  return path.resolve(getMediasFolderPath(dataDir), mediaId);
 }
 
-export function getFigmaTextPathSvgPath(nodeId: string, hash: string) {
-  return path.resolve(textPathsFolderPath, `${nodeId.replace(/[:;]/g, '_')}_${hash}.svg`);
+export function getFigmaTextPathSvgPath(dataDir: string, nodeId: string, hash: string) {
+  return path.resolve(getTextPathsFolderPath(dataDir), `${nodeId.replace(/[:;]/g, '_')}_${hash}.svg`);
 }
 
-export async function readFigmaTreeFile(documentId: string): Promise<GetFileResponse> {
-  const figmaTreePath = getFigmaDocumentTreePath(documentId);
+export async function readFigmaTreeFile(dataDir: string, documentId: string): Promise<GetFileResponse> {
+  const figmaTreePath = getFigmaDocumentTreePath(dataDir, documentId);
 
   if (!fsSync.existsSync(figmaTreePath)) {
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
@@ -255,8 +271,8 @@ export async function readFigmaTreeFile(documentId: string): Promise<GetFileResp
   return (await readBigJsonFile(figmaTreePath)) as GetFileResponse; // We did not implement a zod schema, hoping they keep the structure stable enough
 }
 
-export async function readFigmaColorsFile(documentId: string): Promise<FigmaDefinedColor[]> {
-  const figmaColorsPath = getFigmaDocumentColorsPath(documentId);
+export async function readFigmaColorsFile(dataDir: string, documentId: string): Promise<FigmaDefinedColor[]> {
+  const figmaColorsPath = getFigmaDocumentColorsPath(dataDir, documentId);
 
   if (!fsSync.existsSync(figmaColorsPath)) {
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
@@ -267,8 +283,8 @@ export async function readFigmaColorsFile(documentId: string): Promise<FigmaDefi
   return JSON.parse(figmaColorsString) as FigmaDefinedColor[];
 }
 
-export async function readFigmaTypographiesFile(documentId: string): Promise<FigmaDefinedTypography[]> {
-  const figmaTypographiesPath = getFigmaDocumentTypographiesPath(documentId);
+export async function readFigmaTypographiesFile(dataDir: string, documentId: string): Promise<FigmaDefinedTypography[]> {
+  const figmaTypographiesPath = getFigmaDocumentTypographiesPath(dataDir, documentId);
 
   if (!fsSync.existsSync(figmaTypographiesPath)) {
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
@@ -279,8 +295,8 @@ export async function readFigmaTypographiesFile(documentId: string): Promise<Fig
   return JSON.parse(figmaTypographiesString) as FigmaDefinedTypography[];
 }
 
-export async function readFigmaVariablesFile(documentId: string): Promise<FigmaVariablesData> {
-  const figmaVariablesPath = getFigmaDocumentVariablesPath(documentId);
+export async function readFigmaVariablesFile(dataDir: string, documentId: string): Promise<FigmaVariablesData> {
+  const figmaVariablesPath = getFigmaDocumentVariablesPath(dataDir, documentId);
 
   if (!fsSync.existsSync(figmaVariablesPath)) {
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
@@ -291,8 +307,8 @@ export async function readFigmaVariablesFile(documentId: string): Promise<FigmaV
   return JSON.parse(figmaVariablesString) as FigmaVariablesData;
 }
 
-export async function readFigmaEffectsFile(documentId: string): Promise<FigmaDefinedEffectStyle[]> {
-  const figmaEffectsPath = getFigmaDocumentEffectsPath(documentId);
+export async function readFigmaEffectsFile(dataDir: string, documentId: string): Promise<FigmaDefinedEffectStyle[]> {
+  const figmaEffectsPath = getFigmaDocumentEffectsPath(dataDir, documentId);
 
   if (!fsSync.existsSync(figmaEffectsPath)) {
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
@@ -303,8 +319,8 @@ export async function readFigmaEffectsFile(documentId: string): Promise<FigmaDef
   return JSON.parse(figmaEffectsString) as FigmaDefinedEffectStyle[];
 }
 
-export async function readFigmaRemoteComponentsFile(documentId: string): Promise<Record<string, string>> {
-  const remoteComponentsPath = getFigmaDocumentRemoteComponentsPath(documentId);
+export async function readFigmaRemoteComponentsFile(dataDir: string, documentId: string): Promise<Record<string, string>> {
+  const remoteComponentsPath = getFigmaDocumentRemoteComponentsPath(dataDir, documentId);
 
   // Empty when the file has no remote components, when `--skip-libraries` was used during retrieve, or when the Figma token did not grant access to component metadata
   if (!fsSync.existsSync(remoteComponentsPath)) {
@@ -316,8 +332,8 @@ export async function readFigmaRemoteComponentsFile(documentId: string): Promise
   return JSON.parse(remoteComponentsString) as Record<string, string>;
 }
 
-export async function readFigmaRemoteStylesFile(documentId: string): Promise<Record<string, string>> {
-  const remoteStylesPath = getFigmaDocumentRemoteStylesPath(documentId);
+export async function readFigmaRemoteStylesFile(dataDir: string, documentId: string): Promise<Record<string, string>> {
+  const remoteStylesPath = getFigmaDocumentRemoteStylesPath(dataDir, documentId);
 
   // Empty when the file has no remote styles, when `--skip-libraries` was used during retrieve, or when the Figma token did not grant access to style metadata
   if (!fsSync.existsSync(remoteStylesPath)) {
@@ -329,8 +345,8 @@ export async function readFigmaRemoteStylesFile(documentId: string): Promise<Rec
   return JSON.parse(remoteStylesString) as Record<string, string>;
 }
 
-export async function readTransformedFigmaTreeFile(figmaDocumentId: string, penpotDocumentId: string): Promise<PenpotDocument> {
-  const transformedFigmaTreePath = getTransformedFigmaTreePath(figmaDocumentId, penpotDocumentId);
+export async function readTransformedFigmaTreeFile(dataDir: string, figmaDocumentId: string, penpotDocumentId: string): Promise<PenpotDocument> {
+  const transformedFigmaTreePath = getTransformedFigmaTreePath(dataDir, figmaDocumentId, penpotDocumentId);
 
   if (!fsSync.existsSync(transformedFigmaTreePath)) {
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${figmaDocumentId}" before using any other command`);
@@ -339,8 +355,8 @@ export async function readTransformedFigmaTreeFile(figmaDocumentId: string, penp
   return (await readBigJsonFile(transformedFigmaTreePath)) as PenpotDocument; // We did not implement a zod schema, hoping they keep the structure stable enough
 }
 
-export async function readFigmaToPenpotDiffFile(figmaDocumentId: string, penpotDocumentId: string): Promise<Differences> {
-  const diffPath = getFigmaToPenpotDiffPath(figmaDocumentId, penpotDocumentId);
+export async function readFigmaToPenpotDiffFile(dataDir: string, figmaDocumentId: string, penpotDocumentId: string): Promise<Differences> {
+  const diffPath = getFigmaToPenpotDiffPath(dataDir, figmaDocumentId, penpotDocumentId);
 
   if (!fsSync.existsSync(diffPath)) {
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${figmaDocumentId}" before using any other command`);
@@ -349,8 +365,8 @@ export async function readFigmaToPenpotDiffFile(figmaDocumentId: string, penpotD
   return (await readBigJsonFile(diffPath)) as Differences; // We did not implement a zod schema, hoping they keep the structure stable enough
 }
 
-export async function restoreMeta(figmaDocumentId: string, penpotDocumentId: string): Promise<MetadataType> {
-  const metaPath = getFigmaToPenpotMetaPath(figmaDocumentId, penpotDocumentId);
+export async function restoreMeta(dataDir: string, figmaDocumentId: string, penpotDocumentId: string): Promise<MetadataType> {
+  const metaPath = getFigmaToPenpotMetaPath(dataDir, figmaDocumentId, penpotDocumentId);
   let meta: MetadataType | null = null;
 
   if (fsSync.existsSync(metaPath)) {
@@ -379,14 +395,19 @@ export async function restoreMeta(figmaDocumentId: string, penpotDocumentId: str
   return meta;
 }
 
-export async function saveMeta(figmaDocumentId: string, penpotDocumentId: string, meta: MetadataType): Promise<void> {
-  await fs.writeFile(getFigmaToPenpotMetaPath(figmaDocumentId, penpotDocumentId), JSON.stringify(meta, null, 2), {
+export async function saveMeta(dataDir: string, figmaDocumentId: string, penpotDocumentId: string, meta: MetadataType): Promise<void> {
+  await fs.writeFile(getFigmaToPenpotMetaPath(dataDir, figmaDocumentId, penpotDocumentId), JSON.stringify(meta, null, 2), {
     encoding: 'utf-8',
   });
 }
 
-export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: string, prompting: boolean = true): Promise<MappingType> {
-  const mappingPath = getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId);
+export async function restoreMapping(
+  dataDir: string,
+  figmaDocumentId: string,
+  penpotDocumentId: string,
+  prompting: boolean = true
+): Promise<MappingType> {
+  const mappingPath = getFigmaToPenpotMappingPath(dataDir, figmaDocumentId, penpotDocumentId);
   let mapping: MappingType | null = null;
 
   if (!fsSync.existsSync(mappingPath)) {
@@ -449,11 +470,11 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
   return mapping;
 }
 
-export async function saveMapping(figmaDocumentId: string, penpotDocumentId: string, mapping: MappingType): Promise<void> {
-  await fs.mkdir(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), { recursive: true });
+export async function saveMapping(dataDir: string, figmaDocumentId: string, penpotDocumentId: string, mapping: MappingType): Promise<void> {
+  await fs.mkdir(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), { recursive: true });
 
   await fs.writeFile(
-    getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId),
+    getFigmaToPenpotMappingPath(dataDir, figmaDocumentId, penpotDocumentId),
     JSON.stringify(
       {
         ...mapping,
@@ -485,12 +506,12 @@ export async function retrieve(options: RetrieveOptionsType) {
     // `getImageFills` below is still executed because it's a cheap call and handling it from the tree alone would add surface for bugs.
     const useCache =
       options.useCachedFigmaData &&
-      fsSync.existsSync(getFigmaDocumentTreePath(document.figmaDocument)) &&
-      fsSync.existsSync(getFigmaDocumentColorsPath(document.figmaDocument)) &&
-      fsSync.existsSync(getFigmaDocumentTypographiesPath(document.figmaDocument));
+      fsSync.existsSync(getFigmaDocumentTreePath(options.dataDir, document.figmaDocument)) &&
+      fsSync.existsSync(getFigmaDocumentColorsPath(options.dataDir, document.figmaDocument)) &&
+      fsSync.existsSync(getFigmaDocumentTypographiesPath(options.dataDir, document.figmaDocument));
 
     // Penpot library colors come only from Figma color styles whereas Figma color variables are exported as Penpot design tokens
-    const figmaColors: FigmaDefinedColor[] = useCache ? await readFigmaColorsFile(document.figmaDocument) : [];
+    const figmaColors: FigmaDefinedColor[] = useCache ? await readFigmaColorsFile(options.dataDir, document.figmaDocument) : [];
 
     const customPenpotFontsVariants = (await postGetFontVariants({
       requestBody: {
@@ -499,10 +520,10 @@ export async function retrieve(options: RetrieveOptionsType) {
     })) as unknown as any[];
 
     if (options.syncMappingWithGit) {
-      await restoreMappingFromRepository(document.figmaDocument, document.penpotDocument);
+      await restoreMappingFromRepository(options.dataDir, document.figmaDocument, document.penpotDocument);
     }
 
-    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument, options.prompting);
+    const mapping = await restoreMapping(options.dataDir, document.figmaDocument, document.penpotDocument, options.prompting);
 
     for (const customPenpotFontVariant of customPenpotFontsVariants) {
       const simulatedFigmaFontVariantId = `${customPenpotFontVariant.fontFamily}-${customPenpotFontVariant.fontStyle}-${customPenpotFontVariant.fontWeight}`;
@@ -511,12 +532,12 @@ export async function retrieve(options: RetrieveOptionsType) {
       registerFontId(simulatedFigmaFontVariantId, penpotFontId, mapping);
     }
 
-    await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
+    await saveMapping(options.dataDir, document.figmaDocument, document.penpotDocument, mapping);
 
     // Save the document tree locally (or reuse the last saved one to skip the expensive Figma fetch during debugging)
     let documentTree: GetFileResponse;
     if (useCache) {
-      documentTree = await readFigmaTreeFile(document.figmaDocument);
+      documentTree = await readFigmaTreeFile(options.dataDir, document.figmaDocument);
     } else {
       const treeSpinner = ora(`Retrieving Figma document tree for "${document.figmaDocument}"…`).start();
 
@@ -557,10 +578,10 @@ export async function retrieve(options: RetrieveOptionsType) {
     }
 
     // Use metadata for future usage
-    const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
+    const meta = await restoreMeta(options.dataDir, document.figmaDocument, document.penpotDocument);
     meta.figmaDocumentId = documentTree.mainFileKey || document.figmaDocument;
     meta.figmaLastModified = new Date(documentTree.lastModified);
-    await saveMeta(document.figmaDocument, document.penpotDocument, meta);
+    await saveMeta(options.dataDir, document.figmaDocument, document.penpotDocument, meta);
 
     // Process attached styles (skipped when using the cached data — `typographies.json` is already the final output and is re-read later by `transform()`)
     if (!useCache) {
@@ -588,20 +609,20 @@ export async function retrieve(options: RetrieveOptionsType) {
       const figmaEffects = extractStylesEffects(documentTree, stylesNodes);
       mergeStylesColors(figmaColors, documentTree, stylesNodes);
 
-      const documentFolderPath = getFigmaDocumentPath(document.figmaDocument);
+      const documentFolderPath = getFigmaDocumentPath(options.dataDir, document.figmaDocument);
       await fs.mkdir(documentFolderPath, { recursive: true });
 
-      await writeBigJsonFile(getFigmaDocumentTreePath(document.figmaDocument), documentTree);
-      await fs.writeFile(getFigmaDocumentColorsPath(document.figmaDocument), JSON.stringify(figmaColors, null, 2), {
+      await writeBigJsonFile(getFigmaDocumentTreePath(options.dataDir, document.figmaDocument), documentTree);
+      await fs.writeFile(getFigmaDocumentColorsPath(options.dataDir, document.figmaDocument), JSON.stringify(figmaColors, null, 2), {
         encoding: 'utf-8',
       });
-      await fs.writeFile(getFigmaDocumentTypographiesPath(document.figmaDocument), JSON.stringify(figmaTypographies, null, 2), {
+      await fs.writeFile(getFigmaDocumentTypographiesPath(options.dataDir, document.figmaDocument), JSON.stringify(figmaTypographies, null, 2), {
         encoding: 'utf-8',
       });
-      await fs.writeFile(getFigmaDocumentEffectsPath(document.figmaDocument), JSON.stringify(figmaEffects, null, 2), {
+      await fs.writeFile(getFigmaDocumentEffectsPath(options.dataDir, document.figmaDocument), JSON.stringify(figmaEffects, null, 2), {
         encoding: 'utf-8',
       });
-      await fs.writeFile(getFigmaDocumentVariablesPath(document.figmaDocument), JSON.stringify(figmaVariables, null, 2), {
+      await fs.writeFile(getFigmaDocumentVariablesPath(options.dataDir, document.figmaDocument), JSON.stringify(figmaVariables, null, 2), {
         encoding: 'utf-8',
       });
     }
@@ -611,10 +632,10 @@ export async function retrieve(options: RetrieveOptionsType) {
       fileKey: document.figmaDocument,
     });
 
-    await fs.mkdir(mediasFolderPath, { recursive: true });
+    await fs.mkdir(getMediasFolderPath(options.dataDir), { recursive: true });
 
     for (const [figmaImageId, temporaryFileUrl] of Object.entries(imagesList.meta.images)) {
-      const filePath = getFigmaMediaPath(figmaImageId);
+      const filePath = getFigmaMediaPath(options.dataDir, figmaImageId);
 
       // It should always be the same extension so simplifying with the wildcard pattern
       // (the extension is retrieved from HTTP headers when downloading)
@@ -634,10 +655,10 @@ export async function retrieve(options: RetrieveOptionsType) {
     // of the text-path triggers a re-fetch (Figma's API has no per-node `modifiedAt`, hashing is
     // the only way to invalidate the cache). This is the only async place for it
     const textPathRefs = collectTextPathRefs(documentTree);
-    const textPathRefsToFetch = textPathRefs.filter((ref) => !fsSync.existsSync(getFigmaTextPathSvgPath(ref.nodeId, ref.hash)));
+    const textPathRefsToFetch = textPathRefs.filter((ref) => !fsSync.existsSync(getFigmaTextPathSvgPath(options.dataDir, ref.nodeId, ref.hash)));
 
     if (textPathRefsToFetch.length > 0) {
-      await fs.mkdir(textPathsFolderPath, { recursive: true });
+      await fs.mkdir(getTextPathsFolderPath(options.dataDir), { recursive: true });
 
       const textPathImages = await retrieveTextPathImages(
         document.figmaDocument,
@@ -654,7 +675,7 @@ export async function retrieve(options: RetrieveOptionsType) {
 
         const svgResponse = await fetch(svgUrl);
 
-        await fs.writeFile(getFigmaTextPathSvgPath(ref.nodeId, ref.hash), await svgResponse.text(), { encoding: 'utf-8' });
+        await fs.writeFile(getFigmaTextPathSvgPath(options.dataDir, ref.nodeId, ref.hash), await svgResponse.text(), { encoding: 'utf-8' });
       }
     }
 
@@ -667,8 +688,8 @@ export async function retrieve(options: RetrieveOptionsType) {
   // Cross-file binding resolution run after trees fetching to be sure having all libraries information needed
   if (options.skipLibraries) {
     for (const document of options.documents) {
-      await fs.writeFile(getFigmaDocumentRemoteComponentsPath(document.figmaDocument), '{}', { encoding: 'utf-8' });
-      await fs.writeFile(getFigmaDocumentRemoteStylesPath(document.figmaDocument), '{}', { encoding: 'utf-8' });
+      await fs.writeFile(getFigmaDocumentRemoteComponentsPath(options.dataDir, document.figmaDocument), '{}', { encoding: 'utf-8' });
+      await fs.writeFile(getFigmaDocumentRemoteStylesPath(options.dataDir, document.figmaDocument), '{}', { encoding: 'utf-8' });
     }
   } else {
     const crossFileSpinner = ora('Resolving cross-file component and style bindings…').start();
@@ -685,7 +706,7 @@ export async function retrieve(options: RetrieveOptionsType) {
       crossFileSpinner.text = `Resolving cross-file bindings: scanning ${options.documents.length} co-synced document(s)…`;
 
       for (const document of options.documents) {
-        const tree = await readFigmaTreeFile(document.figmaDocument);
+        const tree = await readFigmaTreeFile(options.dataDir, document.figmaDocument);
         figmaComponentsByDocument.set(document.figmaDocument, tree.components);
         figmaStylesByDocument.set(document.figmaDocument, tree.styles);
 
@@ -725,14 +746,22 @@ export async function retrieve(options: RetrieveOptionsType) {
         const figmaStyles = figmaStylesByDocument.get(document.figmaDocument)!;
 
         const remoteComponentSourceFiles = await retrieveRemoteComponents(figmaComponents, publishersByComponentKey);
-        await fs.writeFile(getFigmaDocumentRemoteComponentsPath(document.figmaDocument), JSON.stringify(remoteComponentSourceFiles, null, 2), {
-          encoding: 'utf-8',
-        });
+        await fs.writeFile(
+          getFigmaDocumentRemoteComponentsPath(options.dataDir, document.figmaDocument),
+          JSON.stringify(remoteComponentSourceFiles, null, 2),
+          {
+            encoding: 'utf-8',
+          }
+        );
 
         const remoteStyleSourceFiles = await retrieveRemoteStyles(figmaStyles, publishersByStyleKey);
-        await fs.writeFile(getFigmaDocumentRemoteStylesPath(document.figmaDocument), JSON.stringify(remoteStyleSourceFiles, null, 2), {
-          encoding: 'utf-8',
-        });
+        await fs.writeFile(
+          getFigmaDocumentRemoteStylesPath(options.dataDir, document.figmaDocument),
+          JSON.stringify(remoteStyleSourceFiles, null, 2),
+          {
+            encoding: 'utf-8',
+          }
+        );
       }
 
       crossFileSpinner.succeed('Resolved cross-file component and style bindings');
@@ -753,7 +782,8 @@ export function transformDocument(
   libraryFiles: Map<string, string>,
   remoteComponentSourceFiles: Map<string, string>,
   remoteStyleSourceFiles: Map<string, string>,
-  mapping: MappingType
+  mapping: MappingType,
+  dataDir: string
 ) {
   // Go from the Figma format to the Penpot one
   const penpotTree = transformDocumentNode(
@@ -765,7 +795,8 @@ export function transformDocument(
     libraryFiles,
     remoteComponentSourceFiles,
     remoteStyleSourceFiles,
-    mapping
+    mapping,
+    dataDir
   );
 
   // We have to patch the document since `{}` is not equal to `{ a: undefined }`,
@@ -800,6 +831,7 @@ export const ReplaceFontPattern = z.object({
 export type ReplaceFontPatternType = z.infer<typeof ReplaceFontPattern>;
 
 export const TransformOptions = z.object({
+  dataDir: z.string(),
   documents: z.array(DocumentOptions),
   excludePatterns: ExcludePatterns,
   replaceFontPatterns: z.array(ReplaceFontPattern),
@@ -825,13 +857,13 @@ export async function transform(options: TransformOptionsType) {
   // Note: order of processing the dependencies tree is irrelevant because published entities have a stable UUIDs
   // and the associated `fileId` with them would be patched in any case
   for (const document of options.documents) {
-    const figmaTree = await readFigmaTreeFile(document.figmaDocument);
-    const figmaColors = await readFigmaColorsFile(document.figmaDocument);
-    const figmaTypographies = await readFigmaTypographiesFile(document.figmaDocument);
-    const figmaVariables = await readFigmaVariablesFile(document.figmaDocument);
-    const figmaEffectStyles = await readFigmaEffectsFile(document.figmaDocument);
-    const figmaRemoteComponents = await readFigmaRemoteComponentsFile(document.figmaDocument);
-    const figmaRemoteStyles = await readFigmaRemoteStylesFile(document.figmaDocument);
+    const figmaTree = await readFigmaTreeFile(options.dataDir, document.figmaDocument);
+    const figmaColors = await readFigmaColorsFile(options.dataDir, document.figmaDocument);
+    const figmaTypographies = await readFigmaTypographiesFile(options.dataDir, document.figmaDocument);
+    const figmaVariables = await readFigmaVariablesFile(options.dataDir, document.figmaDocument);
+    const figmaEffectStyles = await readFigmaEffectsFile(options.dataDir, document.figmaDocument);
+    const figmaRemoteComponents = await readFigmaRemoteComponentsFile(options.dataDir, document.figmaDocument);
+    const figmaRemoteStyles = await readFigmaRemoteStylesFile(options.dataDir, document.figmaDocument);
 
     const remoteComponentSourceFiles = new Map(Object.entries(figmaRemoteComponents));
     const remoteStyleSourceFiles = new Map(Object.entries(figmaRemoteStyles));
@@ -861,7 +893,7 @@ export async function transform(options: TransformOptionsType) {
       }
     }
 
-    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument, options.prompting);
+    const mapping = await restoreMapping(options.dataDir, document.figmaDocument, document.penpotDocument, options.prompting);
 
     const penpotTree = transformDocument(
       figmaTree,
@@ -872,19 +904,20 @@ export async function transform(options: TransformOptionsType) {
       libraryFiles,
       remoteComponentSourceFiles,
       remoteStyleSourceFiles,
-      mapping
+      mapping,
+      options.dataDir
     );
 
     // Save mapping for later usage
-    await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
+    await saveMapping(options.dataDir, document.figmaDocument, document.penpotDocument, mapping);
 
     // Try to push to Git directly in case updating Penpot would fail, like that if elements have been partially pushed to Penpot
     // they can be kept since having the same IDs on the next retry... helpful in case the failure was due to the amount of modifications :)
     if (options.syncMappingWithGit) {
-      await saveMappingToRepository(document.figmaDocument, document.penpotDocument);
+      await saveMappingToRepository(options.dataDir, document.figmaDocument, document.penpotDocument);
     }
 
-    await writeBigJsonFile(getTransformedFigmaTreePath(document.figmaDocument, document.penpotDocument), penpotTree);
+    await writeBigJsonFile(getTransformedFigmaTreePath(options.dataDir, document.figmaDocument, document.penpotDocument), penpotTree);
   }
 }
 
@@ -1901,6 +1934,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 }
 
 export const CompareOptions = z.object({
+  dataDir: z.string(),
   documents: z.array(DocumentOptions),
 });
 export type CompareOptionsType = z.infer<typeof CompareOptions>;
@@ -1910,7 +1944,7 @@ export async function compare(options: CompareOptionsType) {
   // Get documents from Penpot if already synchronized in the past
   // Calculate operations needed on the current hosted tree to match the Figma documents state
   for (const document of options.documents) {
-    const figmaDocumentFolderPath = getFigmaDocumentPath(document.figmaDocument);
+    const figmaDocumentFolderPath = getFigmaDocumentPath(options.dataDir, document.figmaDocument);
     let figmaDocumentFolderExists = fsSync.existsSync(figmaDocumentFolderPath);
 
     if (!figmaDocumentFolderExists) {
@@ -1921,7 +1955,7 @@ export async function compare(options: CompareOptionsType) {
       );
     }
 
-    const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
+    const meta = await restoreMeta(options.dataDir, document.figmaDocument, document.penpotDocument);
 
     let currentThumbnails: Awaited<ReturnType<typeof postGetFileObjectThumbnails>>;
     let hostedDocument: Awaited<ReturnType<typeof postGetFile>>;
@@ -1948,17 +1982,17 @@ export async function compare(options: CompareOptionsType) {
       throw error;
     }
 
-    const penpotDocumentFolderPath = getPenpotDocumentPath(document.figmaDocument, document.penpotDocument);
+    const penpotDocumentFolderPath = getPenpotDocumentPath(options.dataDir, document.figmaDocument, document.penpotDocument);
     await fs.mkdir(penpotDocumentFolderPath, { recursive: true });
 
-    await writeBigJsonFile(getPenpotHostedDocumentTreePath(document.figmaDocument, document.penpotDocument), hostedDocument);
+    await writeBigJsonFile(getPenpotHostedDocumentTreePath(options.dataDir, document.figmaDocument, document.penpotDocument), hostedDocument);
 
-    const transformedDocument = await readTransformedFigmaTreeFile(document.figmaDocument, document.penpotDocument);
+    const transformedDocument = await readTransformedFigmaTreeFile(options.dataDir, document.figmaDocument, document.penpotDocument);
 
     const hostedCoreDocument = cleanHostedDocument(hostedDocument);
     const diff = getDifferences(document.penpotDocument, hostedCoreDocument, transformedDocument, Object.keys(currentThumbnails));
 
-    await writeBigJsonFile(getFigmaToPenpotDiffPath(document.figmaDocument, document.penpotDocument), diff);
+    await writeBigJsonFile(getFigmaToPenpotDiffPath(options.dataDir, document.figmaDocument, document.penpotDocument), diff);
 
     // Use metadata for future usage
     // Note: `lastModified` and `pages` may have not much value since they are retrieved because the modifications are pushed
@@ -1968,7 +2002,7 @@ export async function compare(options: CompareOptionsType) {
     meta.penpotDocumentId = hostedDocument.id;
     meta.penpotLastModified = new Date(hostedDocument.modifiedAt);
     meta.penpotPages = transformedDocument.data.pages;
-    await saveMeta(document.figmaDocument, document.penpotDocument, meta);
+    await saveMeta(options.dataDir, document.figmaDocument, document.penpotDocument, meta);
   }
 }
 
@@ -1990,6 +2024,7 @@ export async function processOperationsChunk(
 }
 
 export async function processDifferences(
+  dataDir: string,
   figmaDocumentId: string,
   penpotDocumentId: string,
   differences: Differences,
@@ -2012,7 +2047,7 @@ export async function processDifferences(
   // We first upload files because they are used by nodes
   if (differences.newMedias.length > 0) {
     // Retrieve the original Figma IDs to upload files
-    const mapping = await restoreMapping(figmaDocumentId, penpotDocumentId, prompting);
+    const mapping = await restoreMapping(dataDir, figmaDocumentId, penpotDocumentId, prompting);
 
     for (const penpotMediaId of differences.newMedias) {
       // We check all files we need to use have been retrieved locally before
@@ -2030,7 +2065,7 @@ export async function processDifferences(
         throw new Error(`the Penpot file ${penpotMediaId} must have been mapped previously to be uploaded`);
       }
 
-      const filePath = getFigmaMediaPath(figmaMediaId);
+      const filePath = getFigmaMediaPath(dataDir, figmaMediaId);
       // `windowsPathsNoEscape` so backslashes from `path.resolve()` on Windows are treated as separators, not as the escape character
       const potentielExistingFilesPaths = await glob(`${filePath}.*`, { windowsPathsNoEscape: true });
 
@@ -2173,7 +2208,7 @@ export async function processDifferences(
         try {
           differences.newTreeOperations.splice(0, succeededOperations - 1);
 
-          await writeBigJsonFile(getFigmaToPenpotDiffPath(figmaDocumentId, penpotDocumentId), differences);
+          await writeBigJsonFile(getFigmaToPenpotDiffPath(dataDir, figmaDocumentId, penpotDocumentId), differences);
         } catch (writeError) {
           console.error(
             `it has failed removing processed chunks, please rerun the synchronization from the start to be sure the comparaison is done with the updated Penpot document`
@@ -2227,6 +2262,7 @@ export async function processDifferences(
 }
 
 export const SetOptions = z.object({
+  dataDir: z.string(),
   documents: z.array(DocumentOptions),
   serverValidation: ServerValidation,
   prompting: Prompting,
@@ -2237,9 +2273,9 @@ export async function set(options: SetOptionsType) {
   // Execute operations onto Penpot instance to match the Figma documents
   // and adjust local mapping with deleted/modified/created nodes
   for (const document of options.documents) {
-    const diff = await readFigmaToPenpotDiffFile(document.figmaDocument, document.penpotDocument);
+    const diff = await readFigmaToPenpotDiffFile(options.dataDir, document.figmaDocument, document.penpotDocument);
 
-    await processDifferences(document.figmaDocument, document.penpotDocument, diff, options.serverValidation, options.prompting);
+    await processDifferences(options.dataDir, document.figmaDocument, document.penpotDocument, diff, options.serverValidation, options.prompting);
   }
 }
 
@@ -2251,7 +2287,11 @@ export const Duration = z.string().transform((val) => {
 export type DurationType = z.infer<typeof Duration>;
 
 // The CLI allows --document and --library to only specify the Figma part, so we need to prompt the user the Penpot destination
-export async function resolveDocumentDestinations(documents: DocumentOptionsType[], prompting: boolean): Promise<DocumentOptionsType[]> {
+export async function resolveDocumentDestinations(
+  dataDir: string,
+  documents: DocumentOptionsType[],
+  prompting: boolean
+): Promise<DocumentOptionsType[]> {
   const needsPrompt = documents.filter((doc) => !doc.penpotDocument);
   if (needsPrompt.length === 0) {
     return documents;
@@ -2308,7 +2348,7 @@ export async function resolveDocumentDestinations(documents: DocumentOptionsType
       cachedFileChoices = await fetchAllPenpotFileChoices();
     }
 
-    const previouslySyncedPenpotIds = await findRecommendedPenpotIdsForLibrary(doc.figmaDocument);
+    const previouslySyncedPenpotIds = await findRecommendedPenpotIdsForLibrary(dataDir, doc.figmaDocument);
 
     const sortedChoices = [...cachedFileChoices].sort((a, b) => {
       const aRec = previouslySyncedPenpotIds.has(a.value) ? 0 : 1;
@@ -2342,7 +2382,7 @@ export async function resolveDocumentDestinations(documents: DocumentOptionsType
 }
 
 // For every document or library passed as `figmaId:new`, prompts the user where to locate this new file
-export async function resolveNewPenpotFiles(documents: DocumentOptionsType[], prompting: boolean): Promise<DocumentOptionsType[]> {
+export async function resolveNewPenpotFiles(dataDir: string, documents: DocumentOptionsType[], prompting: boolean): Promise<DocumentOptionsType[]> {
   const newCount = documents.filter((doc) => doc.penpotDocument === 'new' || !doc.penpotDocument).length;
   if (newCount === 0) {
     return documents;
@@ -2399,7 +2439,7 @@ export async function resolveNewPenpotFiles(documents: DocumentOptionsType[], pr
     // Touch an empty mapping for this freshly created file so the subsequent `restoreMapping`
     // doesn't trigger the "Are you sure to continue by overriding the target document?" prompt:
     // we just created the Penpot file ourselves and know it has no existing content to override
-    await saveMapping(doc.figmaDocument, penpotFileId, {
+    await saveMapping(dataDir, doc.figmaDocument, penpotFileId, {
       lastExport: null,
       fonts: new Map(),
       assets: new Map(),
@@ -2471,9 +2511,9 @@ async function fetchAllPenpotFileChoices(): Promise<Array<{ name: string; value:
 }
 
 // Returns the set of Penpot file ids this user previously synced this Figma source into
-async function findRecommendedPenpotIdsForLibrary(figmaFileKey: string): Promise<Set<string>> {
+async function findRecommendedPenpotIdsForLibrary(dataDir: string, figmaFileKey: string): Promise<Set<string>> {
   const recommended = new Set<string>();
-  const exportPath = path.resolve(getFigmaDocumentPath(figmaFileKey), 'export');
+  const exportPath = path.resolve(getFigmaDocumentPath(dataDir, figmaFileKey), 'export');
 
   if (!fsSync.existsSync(exportPath)) {
     return recommended;
@@ -2495,6 +2535,7 @@ async function findRecommendedPenpotIdsForLibrary(figmaFileKey: string): Promise
 //
 // Options will be to bind to an existing Penpot file, skip referencing it or stop the run to first synchronize that library separately
 export async function resolveBindingsInteractively(
+  dataDir: string,
   documents: DocumentOptionsType[],
   declaredLibraries: DocumentOptionsType[],
   prompting: boolean
@@ -2503,7 +2544,7 @@ export async function resolveBindingsInteractively(
 
   const unboundFigmaFiles = new Set<string>();
   for (const doc of documents) {
-    const remoteComponents = await readFigmaRemoteComponentsFile(doc.figmaDocument);
+    const remoteComponents = await readFigmaRemoteComponentsFile(dataDir, doc.figmaDocument);
 
     for (const sourceFigmaFile of Object.values(remoteComponents)) {
       if (!declaredFigmaFiles.has(sourceFigmaFile)) {
@@ -2565,7 +2606,7 @@ export async function resolveBindingsInteractively(
     // "Recommended" hint: if `data/documents/<figmaFileKey>/export/penpot_<id>/` exists, that
     // Penpot file was synced from this Figma library in the past. It's a strong signal it's the right
     // target. Picks up every past sync this user ran from the same working directory
-    const previouslySyncedPenpotIds = await findRecommendedPenpotIdsForLibrary(figmaFileKey);
+    const previouslySyncedPenpotIds = await findRecommendedPenpotIdsForLibrary(dataDir, figmaFileKey);
 
     const sortedFileChoices = [...fileChoices].sort((a, b) => {
       const aRec = previouslySyncedPenpotIds.has(a.value) ? 0 : 1;
@@ -2664,6 +2705,7 @@ export async function resolveBindingsInteractively(
 }
 
 export const SynchronizeOptions = z.object({
+  dataDir: z.string(),
   documents: z.array(DocumentOptions),
   excludePatterns: ExcludePatterns,
   replaceFontPatterns: z.array(ReplaceFontPattern),
@@ -2683,11 +2725,12 @@ export async function synchronize(options: SynchronizeOptionsType) {
   // Note: the CLI made sure missing penpot value got promoted to either `'new'` or a real UUID
   const resolvedOptions: SynchronizeOptionsType = {
     ...options,
-    documents: await resolveNewPenpotFiles(options.documents, options.prompting === true),
-    libraries: await resolveNewPenpotFiles(options.libraries, options.prompting === true),
+    documents: await resolveNewPenpotFiles(options.dataDir, options.documents, options.prompting === true),
+    libraries: await resolveNewPenpotFiles(options.dataDir, options.libraries, options.prompting === true),
   };
 
   await retrieve({
+    dataDir: resolvedOptions.dataDir,
     documents: resolvedOptions.documents,
     libraries: resolvedOptions.libraries,
     prompting: resolvedOptions.prompting,
@@ -2699,11 +2742,17 @@ export async function synchronize(options: SynchronizeOptionsType) {
   // Bind any unresolved library files interactively before transform sees them
   const interactiveBindings = resolvedOptions.skipLibraries
     ? []
-    : await resolveBindingsInteractively(resolvedOptions.documents, resolvedOptions.libraries, resolvedOptions.prompting === true);
+    : await resolveBindingsInteractively(
+        resolvedOptions.dataDir,
+        resolvedOptions.documents,
+        resolvedOptions.libraries,
+        resolvedOptions.prompting === true
+      );
 
   const allLibraries = [...resolvedOptions.libraries, ...interactiveBindings];
 
   await transform({
+    dataDir: resolvedOptions.dataDir,
     documents: resolvedOptions.documents,
     excludePatterns: resolvedOptions.excludePatterns,
     replaceFontPatterns: resolvedOptions.replaceFontPatterns,
@@ -2756,6 +2805,7 @@ export async function synchronize(options: SynchronizeOptionsType) {
   }
 
   await hydrate({
+    dataDir: resolvedOptions.dataDir,
     documents: resolvedOptions.documents,
     timeout: resolvedOptions.hydrateTimeout,
   });
@@ -2766,6 +2816,7 @@ export function formatPenpotPageUrl(baseUrl: string, teamId: string, documentId:
 }
 
 export const HydrateOptions = z.object({
+  dataDir: z.string(),
   documents: z.array(DocumentOptions),
   timeout: Duration.nullable(),
 });
@@ -2849,7 +2900,7 @@ export async function hydrate(options: HydrateOptionsType) {
         `a chomium window will open to perform the hydratation, please do not close it or change url (note it has to be visible otherwise it would not pass the cloudflare protection on the penpot production)`
       );
 
-      const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
+      const meta = await restoreMeta(options.dataDir, document.figmaDocument, document.penpotDocument);
 
       // Check we have the needed information into the `meta.json`
       if (meta.penpotTeamId === 'not_known_yet') {

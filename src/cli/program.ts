@@ -1,5 +1,6 @@
 import { Command, Option } from '@commander-js/extra-typings';
 import { $ } from 'execa';
+import path from 'path';
 
 import {
   CompareOptions,
@@ -11,6 +12,7 @@ import {
   TransformOptions,
   compare,
   hydrate,
+  resolveDefaultDataDir,
   resolveDocumentDestinations,
   retrieve,
   set,
@@ -50,6 +52,14 @@ const useCachedFigmaDataOption = new Option(
   '--use-cached-figma-data',
   'reuse the previously retrieved Figma data (tree, colors, typographies) from local cache instead of fetching it again (useful to avoid Figma rate limits or plan-based restrictions during iteration)'
 );
+const dataDirOption = new Option(
+  '--data-dir <dataDir>',
+  'override the directory used for figpot\'s local state (cached Figma trees, mappings, exports, media, text-paths). Falls back to FIGPOT_DATA_DIR, then to "./data" relative to the current working directory'
+);
+
+function resolveDataDirectoryFromCli(cliValue: string | undefined): string {
+  return cliValue ? path.resolve(cliValue) : resolveDefaultDataDir();
+}
 
 const patternInfo = '(use single quotes around the parameter to prevent your terminal to replace special characters)';
 const excludePagePatternsOption = new Option(
@@ -145,6 +155,7 @@ document
   .addOption(syncMappingWithGitOption)
   .addOption(serverValidationOption)
   .addOption(useCachedFigmaDataOption)
+  .addOption(dataDirOption)
   .addOption(continuousIntegrationOption)
   .option('-nh, --no-hydrate', 'prevent performing hydratation after the synchronization')
   .option('-ht, --hydrate-timeout <hydrateTimeout>', 'specify a maximum of duration for hydratation')
@@ -154,6 +165,8 @@ document
     if (options.hydrate) {
       await ensureCredentials(!options.ci);
     }
+
+    const dataDir = resolveDataDirectoryFromCli(options.dataDir);
 
     let documents: DocumentOptionsType[];
     if (!options.document || options.document === true) {
@@ -166,11 +179,12 @@ document
 
     // Fill in any missing `:penpotId` (the user typed just `-d <figmaId>` or `-l <figmaId>`)
     // Note: resolution needs to prompt the user so it can't happen inside `synchronize` after Zod has rejected the input
-    documents = await resolveDocumentDestinations(documents, !options.ci);
-    libraries = await resolveDocumentDestinations(libraries, !options.ci);
+    documents = await resolveDocumentDestinations(dataDir, documents, !options.ci);
+    libraries = await resolveDocumentDestinations(dataDir, libraries, !options.ci);
 
     await synchronize(
       SynchronizeOptions.parse({
+        dataDir: dataDir,
         documents: documents,
         libraries: libraries,
         skipLibraries: options.skipLibraries || false,
@@ -197,9 +211,12 @@ document
   .description('hydrate Penpot documents after a synchronization')
   .addOption(documentsOption)
   .option('-t, --timeout <timeout>', 'specify a maximum of duration for hydratation')
+  .addOption(dataDirOption)
   .addOption(continuousIntegrationOption)
   .action(async (options) => {
     await ensureCredentials(!options.ci);
+
+    const dataDir = resolveDataDirectoryFromCli(options.dataDir);
 
     let documents: DocumentOptionsType[];
     if (!options.document || options.document === true) {
@@ -210,6 +227,7 @@ document
 
     await hydrate(
       HydrateOptions.parse({
+        dataDir: dataDir,
         documents: documents,
         timeout: options.timeout || null,
       })
@@ -224,15 +242,18 @@ debugDocument
   .addOption(skipLibrariesOption)
   .addOption(syncMappingWithGitOption)
   .addOption(useCachedFigmaDataOption)
+  .addOption(dataDirOption)
   .addOption(continuousIntegrationOption)
   .action(async (options) => {
     await ensureAccessTokens(!options.ci);
 
+    const dataDir = resolveDataDirectoryFromCli(options.dataDir);
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
     const libraries = Array.isArray(options.library) ? processDocumentsParametersFromInput(options.library) : [];
 
     await retrieve(
       RetrieveOptions.parse({
+        dataDir: dataDir,
         documents: documents,
         libraries: libraries,
         syncMappingWithGit: options.syncMappingWithGit || false,
@@ -255,15 +276,18 @@ debugDocument
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
   .addOption(syncMappingWithGitOption)
+  .addOption(dataDirOption)
   .addOption(continuousIntegrationOption)
   .action(async (options) => {
     await ensureAccessTokens(!options.ci);
 
+    const dataDir = resolveDataDirectoryFromCli(options.dataDir);
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
     const libraries = Array.isArray(options.library) ? processDocumentsParametersFromInput(options.library) : [];
 
     await transform(
       TransformOptions.parse({
+        dataDir: dataDir,
         documents: documents,
         libraries: libraries,
         excludePatterns: {
@@ -284,14 +308,17 @@ debugDocument
   .command('compare')
   .description('compare Figma and Penpot documents to know what to operate')
   .addOption(documentsOption)
+  .addOption(dataDirOption)
   .addOption(continuousIntegrationOption)
   .action(async (options) => {
     await ensureAccessTokens(!options.ci);
 
+    const dataDir = resolveDataDirectoryFromCli(options.dataDir);
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
 
     await compare(
       CompareOptions.parse({
+        dataDir: dataDir,
         documents: documents,
       })
     );
@@ -302,14 +329,17 @@ debugDocument
   .description('execute operations')
   .addOption(documentsOption)
   .addOption(serverValidationOption)
+  .addOption(dataDirOption)
   .addOption(continuousIntegrationOption)
   .action(async (options) => {
     await ensureAccessTokens(!options.ci);
 
+    const dataDir = resolveDataDirectoryFromCli(options.dataDir);
     const documents = Array.isArray(options.document) ? processDocumentsParametersFromInput(options.document) : [];
 
     await set(
       SetOptions.parse({
+        dataDir: dataDir,
         documents: documents,
         serverValidation: options.serverValidation,
         prompting: !options.ci,

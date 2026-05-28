@@ -34,6 +34,7 @@ export interface BoundVariableRegistry {
   getVariableTokenNames(): Map<string, string>;
   resolveComponent(figmaComponentNodeId: string): ComponentBinding | undefined;
   resolveStyle(figmaStyleNodeId: string, paintIndex?: number): StyleBinding | undefined;
+  getDataDir(): string;
 }
 
 export interface AbstractRegistry extends BoundVariableRegistry {
@@ -102,6 +103,10 @@ export class ComponentInstanceRegistry implements AbstractRegistry {
     return this.pageRegistry.resolveStyle(figmaStyleNodeId, paintIndex);
   }
 
+  public getDataDir(): string {
+    return this.pageRegistry.getDataDir();
+  }
+
   public getOverrides(nodeId: string): Overrides['overriddenFields'] | null {
     return this.overrides.get(nodeId) || null;
   }
@@ -159,6 +164,10 @@ export class ComponentRegistry implements AbstractRegistry {
 
   public resolveStyle(figmaStyleNodeId: string, paintIndex?: number): StyleBinding | undefined {
     return this.pageRegistry.resolveStyle(figmaStyleNodeId, paintIndex);
+  }
+
+  public getDataDir(): string {
+    return this.pageRegistry.getDataDir();
   }
 
   public getOverrides(nodeId: string): Overrides['overriddenFields'] | null {
@@ -220,6 +229,10 @@ export class PageRegistry implements AbstractRegistry {
     return this.globalRegistry.resolveStyle(figmaStyleNodeId, paintIndex);
   }
 
+  public getDataDir(): string {
+    return this.globalRegistry.getDataDir();
+  }
+
   public getOverrides(nodeId: string): Overrides['overriddenFields'] | null {
     return null;
   }
@@ -237,9 +250,15 @@ export class Registry implements BoundVariableRegistry {
   protected figmaStyles: Record<string, Style> = {};
   protected remoteStyleSourceFiles: Map<string, string> = new Map();
   protected readonly mapping: MappingType;
+  protected readonly dataDir: string;
 
-  constructor(mapping: MappingType) {
+  constructor(mapping: MappingType, dataDir: string) {
     this.mapping = mapping;
+    this.dataDir = dataDir;
+  }
+
+  public getDataDir(): string {
+    return this.dataDir;
   }
 
   public newPage(penpotPageId: string): PageRegistry {

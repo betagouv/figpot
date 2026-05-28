@@ -52,12 +52,18 @@ export function transformTextStyle(registry: BoundVariableRegistry, node: TextNo
 
   const binding = registry.resolveStyle(typographyStyleId);
 
+  // Binding with file ID being unknown is making the font section in the UI empty and buggy,
+  // for example clicking "edit library style" is crashing the whole... so better avoid the link (unlike for components)
+  if (binding && binding.file === undefined) {
+    return partialTransformTextStyle(registry, style);
+  }
+
   let typographyRefId: string;
   let typographyRefFile: string;
 
   if (binding) {
-    typographyRefId = binding.file !== undefined ? binding.id : nullId;
-    typographyRefFile = binding.file ?? nullId;
+    typographyRefId = binding.id;
+    typographyRefFile = binding.file as string;
   } else {
     typographyRefId = translateTypographyId(typographyStyleId, registry.getMapping());
     typographyRefFile = translateDocumentId('current', registry.getMapping());

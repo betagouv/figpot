@@ -9,6 +9,10 @@ export function translateCustomFont(
   fontName: TypeStyle,
   fontWeight: string
 ): Pick<TextTypography, 'fontId' | 'fontVariantId' | 'fontWeight'> | undefined {
+  if (!fontName.fontFamily) {
+    return undefined;
+  }
+
   const penpotFontVariantId = translateFontVariantId(fontName, fontWeight);
   const simulatedFigmaFontVariantId = `${fontName.fontFamily}-${penpotFontVariantId}`; // Use to be consistent across synchronizations
 

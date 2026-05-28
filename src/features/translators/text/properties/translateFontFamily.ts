@@ -3,8 +3,6 @@ import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 // Extract `ExtraLight` from `OpenSans-ExtraLight` or `Open Sans-Extra Light` for example
 export function extractFontFamilySuffix(fontName: Pick<TypeStyle, 'fontPostScriptName' | 'fontFamily'>): string {
-  assert(fontName.fontFamily);
-
   if (fontName.fontPostScriptName) {
     // Remove spaces and split
     const parts = fontName.fontPostScriptName.replace(/\s/g, '').split('-');

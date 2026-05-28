@@ -3,7 +3,6 @@ import { LocalFont } from '@figpot/src/features/translators/text/font/local/loca
 import localFontsFile from '@figpot/src/features/translators/text/font/local/localFonts.json';
 import { translateFontVariantId } from '@figpot/src/features/translators/text/font/local/translateFontVariantId';
 import { TextTypography } from '@figpot/src/models/entities/penpot/shapes/text';
-import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 const localFonts = localFontsFile.items;
 
@@ -19,7 +18,9 @@ export function translateLocalFont(
   fontName: TypeStyle,
   fontWeight: string
 ): Pick<TextTypography, 'fontId' | 'fontVariantId' | 'fontWeight'> | undefined {
-  assert(fontName.fontFamily);
+  if (!fontName.fontFamily) {
+    return undefined;
+  }
 
   const localFont = getLocalFont(fontName.fontFamily);
 

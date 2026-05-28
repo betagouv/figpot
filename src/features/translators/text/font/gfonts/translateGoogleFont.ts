@@ -5,7 +5,6 @@ import gfontsFile from '@figpot/src/features/translators/text/font/gfonts/gfonts
 import { GoogleFont } from '@figpot/src/features/translators/text/font/gfonts/googleFont';
 import { translateFontVariantId } from '@figpot/src/features/translators/text/font/gfonts/translateFontVariantId';
 import { TextTypography } from '@figpot/src/models/entities/penpot/shapes/text';
-import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { Cache } from '@figpot/src/utils/cache';
 
 const gfonts = gfontsFile.items;
@@ -23,12 +22,14 @@ export function translateGoogleFont(
   fontName: TypeStyle,
   fontWeight: string
 ): Pick<TextTypography, 'fontId' | 'fontVariantId' | 'fontWeight'> | undefined {
-  assert(fontName.fontFamily);
+  if (!fontName.fontFamily) {
+    return undefined;
+  }
 
   const googleFont = getGoogleFont(fontName.fontFamily);
 
   if (googleFont === undefined) {
-    return;
+    return undefined;
   }
 
   return {

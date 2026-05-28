@@ -77,16 +77,22 @@ export function transformTextStyle(registry: BoundVariableRegistry, node: TextNo
 }
 
 export function partialTransformTextStyle(registry: BoundVariableRegistry, fontName: TypeStyle): TextStyle {
+  // Figma can expose `fontFamily` as '' for empty text runs or scaled-instance edge cases whereas Penpot's text schema rejects it,
+  // so we fall back to the bundled "Source Sans Pro" (Penpot's default)
+  const effectiveFontName: TypeStyle = fontName.fontFamily
+    ? fontName
+    : { ...fontName, fontFamily: 'Source Sans Pro', fontPostScriptName: 'SourceSansPro-Regular' };
+
   return {
-    ...translateFontName(registry, fontName),
-    fontFamily: fontName.fontFamily,
-    fontSize: fontName.fontSize?.toString(),
-    fontStyle: translateFontStyle(fontName),
-    textDecoration: translateTextDecoration(fontName),
-    letterSpacing: translateLetterSpacing(fontName),
-    lineHeight: translateLineHeight(fontName),
-    textTransform: translateTextTransform(fontName),
-    textAlign: translateHorizontalAlign(fontName.textAlignHorizontal),
+    ...translateFontName(registry, effectiveFontName),
+    fontFamily: effectiveFontName.fontFamily,
+    fontSize: effectiveFontName.fontSize?.toString(),
+    fontStyle: translateFontStyle(effectiveFontName),
+    textDecoration: translateTextDecoration(effectiveFontName),
+    letterSpacing: translateLetterSpacing(effectiveFontName),
+    lineHeight: translateLineHeight(effectiveFontName),
+    textTransform: translateTextTransform(effectiveFontName),
+    textAlign: translateHorizontalAlign(effectiveFontName.textAlignHorizontal),
   };
 }
 

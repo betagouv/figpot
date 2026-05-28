@@ -499,6 +499,11 @@ export async function saveMapping(dataDir: string, figmaDocumentId: string, penp
 }
 
 export async function retrieve(options: RetrieveOptionsType) {
+  // Keep specifically this lightweight metadata in memory because reading the Figma tree file in the `retrieve` step
+  // just to retrieve it later was crashing the program when the tree is huge
+  const figmaComponentsByDocument = new Map<string, Record<string, Component>>();
+  const figmaStylesByDocument = new Map<string, Record<string, Style>>();
+
   for (const document of options.documents) {
     // When `--use-cached-figma-data` is set and every cache artifact is present on disk, skip the three Figma calls
     // (`retrieveColors` / `retrieveDocument` / `retrieveStylesNodes`) and reuse the processed outputs. `colors.json` and
@@ -683,6 +688,9 @@ export async function retrieve(options: RetrieveOptionsType) {
     // changes. We do not auto-clean because `textPathsFolderPath` is shared across documents and
     // a per-document cleanup pass would need extra bookkeeping. Wipe the folder manually if its
     // size becomes an issue — the next sync will re-fetch whatever is still in use
+
+    figmaComponentsByDocument.set(document.figmaDocument, documentTree.components);
+    figmaStylesByDocument.set(document.figmaDocument, documentTree.styles);
   }
 
   // Cross-file binding resolution run after trees fetching to be sure having all libraries information needed
@@ -698,24 +706,21 @@ export async function retrieve(options: RetrieveOptionsType) {
       // A component or style that is `remote: false` in document X means X is the publisher of that
       // key. So walking every co-synced doc's local components+styles gives us a free
       // `key -> publisher` index for anything published by another doc in this same sync command
-      const figmaComponentsByDocument = new Map<string, Record<string, Component>>();
-      const figmaStylesByDocument = new Map<string, Record<string, Style>>();
       const publishersByComponentKey = new Map<string, string>();
       const publishersByStyleKey = new Map<string, string>();
 
       crossFileSpinner.text = `Resolving cross-file bindings: scanning ${options.documents.length} co-synced document(s)…`;
 
       for (const document of options.documents) {
-        const tree = await readFigmaTreeFile(options.dataDir, document.figmaDocument);
-        figmaComponentsByDocument.set(document.figmaDocument, tree.components);
-        figmaStylesByDocument.set(document.figmaDocument, tree.styles);
+        const components = figmaComponentsByDocument.get(document.figmaDocument)!;
+        const styles = figmaStylesByDocument.get(document.figmaDocument)!;
 
-        for (const component of Object.values(tree.components)) {
+        for (const component of Object.values(components)) {
           if (component.remote !== true) {
             publishersByComponentKey.set(component.key, document.figmaDocument);
           }
         }
-        for (const style of Object.values(tree.styles)) {
+        for (const style of Object.values(styles)) {
           if (style.remote !== true) {
             publishersByStyleKey.set(style.key, document.figmaDocument);
           }

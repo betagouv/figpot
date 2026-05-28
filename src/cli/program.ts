@@ -39,6 +39,10 @@ const skipLibrariesOption = new Option(
   '--skip-libraries',
   'skip remote-component resolution, instances of remote components will remain detached (helpful when the Figma access token lacks "Library assets" scope)'
 );
+const skipInferringLibrariesOption = new Option(
+  '--skip-inferring-libraries',
+  "consider only the libraries explicitly declared with -l/--library; do not try to infer library file IDs from remote component and style keys. It may help saving a lot of requests for subsequent runs when we know keys inference won't bring more libraries"
+);
 const continuousIntegrationOption = new Option('-ci, --ci', 'answer "yes" to all command prompts, use it with caution');
 const syncMappingWithGitOption = new Option(
   '--sync-mapping-with-git',
@@ -146,6 +150,7 @@ document
   .addOption(documentsOption)
   .addOption(librariesOption)
   .addOption(skipLibrariesOption)
+  .addOption(skipInferringLibrariesOption)
   .addOption(excludePagePatternsOption)
   .addOption(excludeNodePatternsOption)
   .addOption(excludeComponentPatternsOption)
@@ -188,6 +193,7 @@ document
         documents: documents,
         libraries: libraries,
         skipLibraries: options.skipLibraries || false,
+        skipInferringLibraries: options.skipInferringLibraries || false,
         excludePatterns: {
           pageNamePatterns: Array.isArray(options.excludePagePattern) ? options.excludePagePattern : undefined,
           nodeNamePatterns: Array.isArray(options.excludeNodePattern) ? options.excludeNodePattern : undefined,
@@ -240,6 +246,7 @@ debugDocument
   .addOption(documentsOption)
   .addOption(librariesOption)
   .addOption(skipLibrariesOption)
+  .addOption(skipInferringLibrariesOption)
   .addOption(syncMappingWithGitOption)
   .addOption(useCachedFigmaDataOption)
   .addOption(dataDirOption)
@@ -260,6 +267,7 @@ debugDocument
         prompting: !options.ci,
         useCachedFigmaData: options.useCachedFigmaData || false,
         skipLibraries: options.skipLibraries || false,
+        skipInferringLibraries: options.skipInferringLibraries || false,
       })
     );
   });

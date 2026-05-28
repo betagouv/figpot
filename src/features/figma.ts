@@ -185,7 +185,8 @@ export async function retrieveVariables(documentId: string): Promise<GetLocalVar
 // publisher without an API call
 export async function retrieveRemoteComponents(
   figmaComponents: Record<string, Component>,
-  publishersByComponentKey: Map<string, string> = new Map()
+  publishersByComponentKey: Map<string, string> = new Map(),
+  skipInferring: boolean = false
 ): Promise<Record<string, string>> {
   const remoteComponentSourceFiles: Record<string, string> = {};
   const keysToFetch = new Set<string>();
@@ -200,6 +201,15 @@ export async function retrieveRemoteComponents(
         keysToFetch.add(component.key);
       }
     }
+  }
+
+  // Skipping inferring libraries helps saving requests when it's a recurrent command and we have explicitly listed them
+  if (skipInferring) {
+    if (keysToFetch.size > 0) {
+      console.warn(`\nskip searching libraries from the ${keysToFetch.size} remote component key(s), those local instances will remain detached`);
+    }
+
+    return remoteComponentSourceFiles;
   }
 
   let scopeWarningEmitted = false;
@@ -252,7 +262,8 @@ export async function retrieveLibraryPublishedComponents(figmaLibraryFileKey: st
 // Symmetric to `retrieveRemoteComponents`, but for FILL and TEXT styles
 export async function retrieveRemoteStyles(
   figmaStyles: Record<string, Style>,
-  publishersByStyleKey: Map<string, string> = new Map()
+  publishersByStyleKey: Map<string, string> = new Map(),
+  skipInferring: boolean = false
 ): Promise<Record<string, string>> {
   const remoteStyleSourceFiles: Record<string, string> = {};
   const keysToFetch = new Set<string>();
@@ -268,6 +279,17 @@ export async function retrieveRemoteStyles(
         keysToFetch.add(style.key);
       }
     }
+  }
+
+  // Skipping inferring libraries helps saving requests when it's a recurrent command and we have explicitly listed them
+  if (skipInferring) {
+    if (keysToFetch.size > 0) {
+      console.warn(
+        `\nskip searching libraries from the ${keysToFetch.size} remote style key(s), those local fills/text will not carry cross-file-references`
+      );
+    }
+
+    return remoteStyleSourceFiles;
   }
 
   let scopeWarningEmitted = false;

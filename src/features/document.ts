@@ -187,6 +187,7 @@ export const RetrieveOptions = z.object({
   useCachedFigmaData: z.boolean(),
   libraries: z.array(DocumentOptions).default([]),
   skipLibraries: z.boolean().default(false),
+  skipInferringLibraries: z.boolean().default(false),
 });
 export type RetrieveOptionsType = z.infer<typeof RetrieveOptions>;
 
@@ -750,7 +751,7 @@ export async function retrieve(options: RetrieveOptionsType) {
         const figmaComponents = figmaComponentsByDocument.get(document.figmaDocument)!;
         const figmaStyles = figmaStylesByDocument.get(document.figmaDocument)!;
 
-        const remoteComponentSourceFiles = await retrieveRemoteComponents(figmaComponents, publishersByComponentKey);
+        const remoteComponentSourceFiles = await retrieveRemoteComponents(figmaComponents, publishersByComponentKey, options.skipInferringLibraries);
         await fs.writeFile(
           getFigmaDocumentRemoteComponentsPath(options.dataDir, document.figmaDocument),
           JSON.stringify(remoteComponentSourceFiles, null, 2),
@@ -759,7 +760,7 @@ export async function retrieve(options: RetrieveOptionsType) {
           }
         );
 
-        const remoteStyleSourceFiles = await retrieveRemoteStyles(figmaStyles, publishersByStyleKey);
+        const remoteStyleSourceFiles = await retrieveRemoteStyles(figmaStyles, publishersByStyleKey, options.skipInferringLibraries);
         await fs.writeFile(
           getFigmaDocumentRemoteStylesPath(options.dataDir, document.figmaDocument),
           JSON.stringify(remoteStyleSourceFiles, null, 2),
@@ -2723,6 +2724,7 @@ export const SynchronizeOptions = z.object({
   useCachedFigmaData: z.boolean(),
   libraries: z.array(DocumentOptions).default([]),
   skipLibraries: z.boolean().default(false),
+  skipInferringLibraries: z.boolean().default(false),
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;
 
@@ -2743,6 +2745,7 @@ export async function synchronize(options: SynchronizeOptionsType) {
     syncMappingWithGit: resolvedOptions.syncMappingWithGit,
     useCachedFigmaData: resolvedOptions.useCachedFigmaData,
     skipLibraries: resolvedOptions.skipLibraries,
+    skipInferringLibraries: resolvedOptions.skipInferringLibraries,
   });
 
   // Bind any unresolved library files interactively before transform sees them

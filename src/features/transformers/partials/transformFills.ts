@@ -19,12 +19,18 @@ export function transformFills(registry: BoundVariableRegistry, node: MinimalFil
       const paintIndex = fills.length > 1 ? i : undefined;
       const binding = registry.resolveStyle(fillStyleId, paintIndex);
 
+      // Binding with file ID being unknown is making the font section in the UI empty and buggy,
+      // for example clicking "edit library style" is crashing the whole... so better avoid the link (unlike for components)
+      if (binding && binding.file === undefined) {
+        return fill;
+      }
+
       let fillColorRefId: string;
       let fillColorRefFile: string;
 
       if (binding) {
-        fillColorRefId = binding.file !== undefined ? binding.id : nullId;
-        fillColorRefFile = binding.file ?? nullId;
+        fillColorRefId = binding.id;
+        fillColorRefFile = binding.file as string;
       } else {
         const localUniqueColorId = fills.length > 1 ? `${fillStyleId}_${i}` : fillStyleId;
 

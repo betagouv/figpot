@@ -2550,8 +2550,9 @@ export async function resolveBindingsInteractively(
   const unboundFigmaFiles = new Set<string>();
   for (const doc of documents) {
     const remoteComponents = await readFigmaRemoteComponentsFile(dataDir, doc.figmaDocument);
+    const remoteStyles = await readFigmaRemoteStylesFile(dataDir, doc.figmaDocument);
 
-    for (const sourceFigmaFile of Object.values(remoteComponents)) {
+    for (const sourceFigmaFile of [...Object.values(remoteComponents), ...Object.values(remoteStyles)]) {
       if (!declaredFigmaFiles.has(sourceFigmaFile)) {
         unboundFigmaFiles.add(sourceFigmaFile);
       }

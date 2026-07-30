@@ -336,27 +336,67 @@ export async function retrieveLibraryPublishedStyles(figmaLibraryFileKey: string
   }
 }
 
+// Fetches Figma file metadata (name + role + editorType) — used to give meaningful diagnostics
+// when the cheap `GET /v1/files/:key` heavy export fails with 403 "File not exportable" (which
+// fires both for non-Design file types AND for viewer-only roles, with the same opaque message)
+export type FigmaFileAccessInfo = { name?: string; role?: string; editorType?: string };
+
+// Explicit per-sync cache that callers thread in to deduplicate `GET /v1/files/:key/meta` calls
+// across the multiple code paths that ask for a file's name or access info (prompts, error catches,
+// library binding flow). Holds promises so concurrent callers share the same in-flight request and
+// remembers which keys we've already warned about so duplicate emit is suppressed
+export class FigmaFileMetaCache {
+  private readonly promises = new Map<string, Promise<FigmaFileAccessInfo>>();
+  private readonly warnedKeys = new Set<string>();
+
+  load(fileKey: string): Promise<FigmaFileAccessInfo> {
+    const existing = this.promises.get(fileKey);
+    if (existing) return existing;
+    const p = (async () => {
+      // The OpenAPI-generated type is flattened wrongly, so we cast and read the real path
+      const result = (await getFileMeta({ fileKey })) as unknown as { file?: { name?: string; role?: string; editorType?: string } };
+      return { name: result.file?.name, role: result.file?.role, editorType: result.file?.editorType };
+    })();
+    this.promises.set(fileKey, p);
+    return p;
+  }
+
+  markWarned(fileKey: string): boolean {
+    if (this.warnedKeys.has(fileKey)) return false;
+    this.warnedKeys.add(fileKey);
+    return true;
+  }
+}
+
+export async function retrieveFigmaFileAccessInfo(cache: FigmaFileMetaCache, fileKey: string): Promise<FigmaFileAccessInfo | undefined> {
+  try {
+    return await cache.load(fileKey);
+  } catch {
+    return undefined;
+  }
+}
+
 // Fetches just the Figma file's display name via `GET /v1/files/:key/meta`. Used by interactive
 // prompts so the user can recognise an unbound library by name instead of just an opaque file id.
 // Cheap call (no tree); returns `undefined` on access errors so callers can fall back to the id
-export async function retrieveFigmaFileName(fileKey: string): Promise<string | undefined> {
+export async function retrieveFigmaFileName(cache: FigmaFileMetaCache, fileKey: string): Promise<string | undefined> {
   try {
-    // The OpenAPI-generated type is flattened wrongly, so we cast and read the real path
-    const result = (await getFileMeta({ fileKey })) as unknown as { file: { name: string } };
-
-    return result.file.name;
+    const meta = await cache.load(fileKey);
+    return meta.name;
   } catch (error) {
-    const body = (error as unknown as { body?: ErrorResponsePayloadWithErrorBoolean }).body;
-    if (body?.status === 403) {
-      // Library files often live on a different team or are shared via "library link" only —
-      // those grant component-level access but not direct file-metadata access via the REST API
-      console.warn(
-        `Cannot fetch Figma metadata for "${fileKey}" — the access token does not have permission to read the file (status 403). For library files this is expected when the library is shared as "library link" but not as a regular file. For your own files, make sure the token's "File metadata" scope is enabled and the file is accessible to the token's owner`
-      );
-    } else if (body?.status === 404) {
-      console.warn(`Cannot fetch Figma metadata for "${fileKey}" — the file does not exist or is no longer accessible (status 404)`);
-    } else {
-      console.warn(`Cannot fetch Figma metadata for "${fileKey}" — ${body?.message ?? (error as Error).message ?? 'unknown error'}`);
+    if (cache.markWarned(fileKey)) {
+      const body = (error as unknown as { body?: ErrorResponsePayloadWithErrorBoolean }).body;
+      if (body?.status === 403) {
+        // Library files often live on a different team or are shared via "library link" only —
+        // those grant component-level access but not direct file-metadata access via the REST API
+        console.warn(
+          `Cannot fetch Figma metadata for "${fileKey}" — the access token does not have permission to read the file (status 403). For library files this is expected when the library is shared as "library link" but not as a regular file. For your own files, make sure the token's "File metadata" scope is enabled and the file is accessible to the token's owner`
+        );
+      } else if (body?.status === 404) {
+        console.warn(`Cannot fetch Figma metadata for "${fileKey}" — the file does not exist or is no longer accessible (status 404)`);
+      } else {
+        console.warn(`Cannot fetch Figma metadata for "${fileKey}" — ${body?.message ?? (error as Error).message ?? 'unknown error'}`);
+      }
     }
 
     return undefined;

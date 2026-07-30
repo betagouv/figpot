@@ -19,7 +19,7 @@ import {
   synchronize,
   transform,
 } from '@figpot/src/features/document';
-import { processDocumentsParametersFromInput, retrieveDocumentsFromInput } from '@figpot/src/features/figma';
+import { FigmaFileMetaCache, processDocumentsParametersFromInput, retrieveDocumentsFromInput } from '@figpot/src/features/figma';
 import { ensureAccessTokens, ensureCredentials } from '@figpot/src/utils/environment';
 
 export const program = new Command();
@@ -182,10 +182,13 @@ document
 
     let libraries = Array.isArray(options.library) ? processDocumentsParametersFromInput(options.library) : [];
 
+    // Shared cache so every `GET /v1/files/:key/meta` is fired at most once for the whole CLI command
+    const figmaMetaCache = new FigmaFileMetaCache();
+
     // Fill in any missing `:penpotId` (the user typed just `-d <figmaId>` or `-l <figmaId>`)
     // Note: resolution needs to prompt the user so it can't happen inside `synchronize` after Zod has rejected the input
-    documents = await resolveDocumentDestinations(dataDir, documents, !options.ci);
-    libraries = await resolveDocumentDestinations(dataDir, libraries, !options.ci);
+    documents = await resolveDocumentDestinations(dataDir, documents, !options.ci, figmaMetaCache);
+    libraries = await resolveDocumentDestinations(dataDir, libraries, !options.ci, figmaMetaCache);
 
     await synchronize(
       SynchronizeOptions.parse({
@@ -208,7 +211,8 @@ document
         serverValidation: options.serverValidation,
         prompting: !options.ci,
         useCachedFigmaData: options.useCachedFigmaData || false,
-      })
+      }),
+      figmaMetaCache
     );
   });
 

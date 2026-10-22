@@ -1,6 +1,7 @@
 import { GetFileResponse, SubcanvasNode } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { FigmaDefinedColor, FigmaDefinedEffectStyle, FigmaDefinedTypography } from '@figpot/src/features/figma';
+import { initializeInstanceSwaps } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
 import { transformUnboundInstances } from '@figpot/src/features/transformers/partials/transformUnboundInstances';
 import { transformPageNode } from '@figpot/src/features/transformers/transformPageNode';
 import { translateEffectStyleTokens } from '@figpot/src/features/translators/tokens/translateEffectStyleTokens';
@@ -105,6 +106,9 @@ export function transformDocumentNode(
   // We use `GetFileResponse` type instead of the type `DocumentNode` to have the "document" title
 
   cleanFigmaDefects(figmaNode);
+
+  // Swapped instances are detected by comparing nested instances with the shapes they replace in their near main
+  initializeInstanceSwaps(figmaNode.document as unknown as SubcanvasNode, figmaNode.components);
 
   const registry = new Registry(mapping, dataDir);
 

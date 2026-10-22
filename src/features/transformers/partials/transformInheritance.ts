@@ -1,4 +1,5 @@
 import { SubcanvasNode } from '@figpot/src/clients/figma';
+import { getRelatedNodeId } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
 import { transformOverrides } from '@figpot/src/features/transformers/partials/transformOverrides';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
@@ -11,14 +12,13 @@ export function transformInheritance(registry: AbstractRegistry, node: Pick<Subc
   //
   // Note: by using a valid `shapeRef` the frontend will automatically override instance properties with those from the main component
   // so it's important the `touched` property is specified to keep those changes
-  const parts = node.id.split(';');
+  // Note: inside a swapped instance, the reference is relative to the new component (see `transformInstanceSwaps`)
+  const relatedNodeId = getRelatedNodeId(node.id);
 
-  const mainInstanceFound = parts.length > 1;
-
-  if (mainInstanceFound) {
+  if (relatedNodeId) {
     // It must target the component definition equivalent, so it's deterministic
     return {
-      shapeRef: deterministicUuid(parts.splice(1).join(';')),
+      shapeRef: deterministicUuid(relatedNodeId),
       ...transformOverrides(registry, node), // The overrides have sense only if we have linked a `shapeRef`
     };
   } else {

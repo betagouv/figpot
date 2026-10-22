@@ -1,4 +1,5 @@
 import { InstanceNode, Transform } from '@figpot/src/clients/figma';
+import { registerInstanceSwap } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
 import { transformFrameNode } from '@figpot/src/features/transformers/transformFrameNode';
 import { nullId } from '@figpot/src/features/translators/translateId';
 import { syncAttributes } from '@figpot/src/features/translators/translateTouched';
@@ -11,6 +12,9 @@ export function transformInstanceNode(registry: AbstractRegistry, node: Instance
     // If the first instance from a page registry it means that's the root
     componentRoot = true;
   }
+
+  // Must be done before transforming children since their references depend on it
+  const swapSlot = registerInstanceSwap(node);
 
   // Help the children knowing their are part of an instance to manage overrides for example
   registry = registry.newComponentInstanceScope(node.overrides);
@@ -46,9 +50,13 @@ export function transformInstanceNode(registry: AbstractRegistry, node: Instance
 
       // `transformInheritance` works in all cases except for instance nodes since Figma may set
       // them a node ID without the original shape, so as a fallback we use the main instance
-      // node ID to match Penpot's expectations
-      if (!instanceFrame.shapeRef) {
+      // node ID to match Penpot's expectations. A swapped instance refers to its new component
+      if (!instanceFrame.shapeRef || swapSlot) {
         instanceFrame.shapeRef = boundLocalComponent.mainInstanceId;
+      }
+
+      if (swapSlot) {
+        instanceFrame.touched = [...(instanceFrame.touched ?? []), `swap-slot-${swapSlot}`];
       }
 
       return instanceFrame;
@@ -59,9 +67,14 @@ export function transformInstanceNode(registry: AbstractRegistry, node: Instance
     instanceFrame.componentFile = binding.file;
     instanceFrame.componentId = binding.id;
 
-    // If `transformInheritance()` has considered it's the main instance, this value is already set
-    if (!instanceFrame.shapeRef) {
+    // If `transformInheritance()` has considered it's the main instance, this value is already set (except for a swapped
+    // instance that refers to its new component)
+    if (!instanceFrame.shapeRef || swapSlot) {
       instanceFrame.shapeRef = binding.mainShapeId;
+    }
+
+    if (swapSlot) {
+      instanceFrame.touched = [...(instanceFrame.touched ?? []), `swap-slot-${swapSlot}`];
     }
 
     return instanceFrame;

@@ -29,8 +29,8 @@ export type TokenType =
 // value of a `shadow` token (Figma effect style)
 export type ShadowTokenValue = {
   color: string;
-  x: string;
-  y: string;
+  offsetX: string;
+  offsetY: string;
   blur: string;
   spread: string;
   inset: boolean;

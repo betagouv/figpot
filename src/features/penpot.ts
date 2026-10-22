@@ -1,7 +1,13 @@
 import svgPathParser from 'svg-path-parser';
 
 import { PostGetFileResponse } from '@figpot/src/clients/penpot';
-import { formatPageRootFrameId, rootFrameId, translateTokenId, translateTokenSetId } from '@figpot/src/features/translators/translateId';
+import {
+  formatPageRootFrameId,
+  rootFrameId,
+  translateTokenId,
+  translateTokenSetId,
+  translateTokenThemeId,
+} from '@figpot/src/features/translators/translateId';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { Token, TokenSet, TokenTheme, TokenType } from '@figpot/src/models/entities/penpot/traits/token';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
@@ -24,6 +30,36 @@ type DtcgTheme = {
 };
 type DtcgMetadata = { tokenSetOrder?: string[]; activeThemes?: string[]; activeSets?: string[] };
 
+// Since Penpot v2.19 the activation status is stored apart from the tokens library, with identifiers
+type TokensStatus = { activeThemeIds?: string[]; activeSetIds?: string[] };
+
+// Theme Penpot creates on its own to hold the sets activated without any theme, it's not ours to manage
+const PENPOT_HIDDEN_THEME_NAME = '__PENPOT__HIDDEN__TOKEN__THEME__';
+
+// DTCG reserved properties of a group or a token (token names may start with `$` too, like `$shadow-md`)
+const DTCG_RESERVED_PROPERTIES = new Set(['$value', '$type', '$description', '$extensions']);
+
+function isDtcgToken(value: unknown): value is DtcgToken {
+  return typeof value === 'object' && value !== null && '$value' in value;
+}
+
+// Tokens whose name contains dots are nested by Penpot into groups (`a.b.c` is stored as `{ a: { b: { c: token } } }`)
+function flattenDtcgTokens(group: Record<string, unknown>, prefix: string, tokens: Record<string, DtcgToken>) {
+  for (const [key, value] of Object.entries(group)) {
+    if (DTCG_RESERVED_PROPERTIES.has(key) || typeof value !== 'object' || value === null) {
+      continue;
+    }
+
+    const name = prefix ? `${prefix}.${key}` : key;
+
+    if (isDtcgToken(value)) {
+      tokens[name] = value;
+    } else {
+      flattenDtcgTokens(value as Record<string, unknown>, name, tokens);
+    }
+  }
+}
+
 type TokensLib = {
   $themes?: DtcgTheme[];
   $metadata?: DtcgMetadata;
@@ -42,7 +78,10 @@ function normalizeTokenType(dtcgType: string): TokenType {
   return (PLURAL_TO_SINGULAR_TOKEN_TYPE[dtcgType] ?? dtcgType) as TokenType;
 }
 
-function extractTokenLibrary(tokensLib: TokensLib | undefined): {
+function extractTokenLibrary(
+  tokensLib: TokensLib | undefined,
+  tokensStatus: TokensStatus | undefined
+): {
   tokenSets: Record<string, TokenSet>;
   tokenThemes: Record<string, TokenTheme>;
   activeTokenThemes: string[];
@@ -65,10 +104,12 @@ function extractTokenLibrary(tokensLib: TokensLib | undefined): {
     }
 
     const setPath = key;
-    const dtcgSet = rawValue as { [tokenName: string]: DtcgToken };
+    const dtcgTokens: Record<string, DtcgToken> = {};
     const tokens: Record<string, Token> = {};
 
-    for (const [tokenName, dtcgToken] of Object.entries(dtcgSet)) {
+    flattenDtcgTokens(rawValue as Record<string, unknown>, '', dtcgTokens);
+
+    for (const [tokenName, dtcgToken] of Object.entries(dtcgTokens)) {
       const token: Token = {
         id: translateTokenId(setPath, tokenName),
         name: tokenName,
@@ -91,18 +132,27 @@ function extractTokenLibrary(tokensLib: TokensLib | undefined): {
   }
 
   for (const dtcgTheme of tokensLib.$themes ?? []) {
+    if (dtcgTheme.name === PENPOT_HIDDEN_THEME_NAME) {
+      continue;
+    }
+
     const themePath = dtcgTheme.group ? `${dtcgTheme.group}/${dtcgTheme.name}` : dtcgTheme.name;
     const sets = Object.entries(dtcgTheme.selectedTokenSets ?? {})
       .filter(([, status]) => status === 'enabled' || status === 'source')
       .map(([setPath]) => setPath);
 
+    // The DTCG `id` is an external identifier (not the one used by operations), so the theme identifier is derived
+    // like on the Figma side
     const theme: TokenTheme = {
-      id: dtcgTheme.id,
+      id: translateTokenThemeId(themePath),
       name: dtcgTheme.name,
       group: dtcgTheme.group ?? '',
-      isSource: dtcgTheme.isSource ?? false,
       sets: sets,
     };
+
+    if (dtcgTheme.isSource) {
+      theme.isSource = true;
+    }
 
     if (dtcgTheme.description) {
       theme.description = dtcgTheme.description;
@@ -111,7 +161,13 @@ function extractTokenLibrary(tokensLib: TokensLib | undefined): {
     tokenThemes[themePath] = theme;
   }
 
-  const activeTokenThemes = tokensLib.$metadata?.activeThemes ?? [];
+  let activeTokenThemes = tokensLib.$metadata?.activeThemes ?? [];
+
+  if (tokensStatus?.activeThemeIds) {
+    activeTokenThemes = Object.entries(tokenThemes)
+      .filter(([, theme]) => tokensStatus.activeThemeIds?.includes(theme.id))
+      .map(([themePath]) => themePath);
+  }
 
   return { tokenSets, tokenThemes, activeTokenThemes };
 }
@@ -207,7 +263,8 @@ export function cleanHostedDocument(hostedTree: PostGetFileResponse): PenpotDocu
     }
   }
 
-  const { tokenSets, tokenThemes, activeTokenThemes } = extractTokenLibrary((hostedTree.data as { tokensLib?: TokensLib } | undefined)?.tokensLib);
+  const hostedTokensData = hostedTree.data as { tokensLib?: TokensLib; tokensStatus?: TokensStatus } | undefined;
+  const { tokenSets, tokenThemes, activeTokenThemes } = extractTokenLibrary(hostedTokensData?.tokensLib, hostedTokensData?.tokensStatus);
 
   return {
     name: hostedTree.name,

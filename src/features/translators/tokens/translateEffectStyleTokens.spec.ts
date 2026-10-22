@@ -28,7 +28,15 @@ describe('translateEffectStyleTokens()', () => {
         name: 'Elevation/Card',
         description: '',
         effects: [
-          { type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 2 }, radius: 8, spread: 0, visible: true, blendMode: 'NORMAL' },
+          {
+            type: 'DROP_SHADOW',
+            color: { r: 0, g: 0, b: 0, a: 0.25 },
+            offset: { x: 0, y: 2 },
+            radius: 8,
+            spread: 0,
+            visible: true,
+            blendMode: 'NORMAL',
+          },
         ] as unknown as Effect[],
       },
     ];
@@ -38,7 +46,7 @@ describe('translateEffectStyleTokens()', () => {
     expect(result?.tokenSet.name).toBe('FigmaStyles');
     expect(result?.tokenSet.tokens['Elevation.Card']).toMatchObject({
       type: 'shadow',
-      value: [{ color: '#00000040', x: '0', y: '2', blur: '8', spread: '0', inset: false }],
+      value: [{ color: '#00000040', offsetX: '0', offsetY: '2', blur: '8', spread: '0', inset: false }],
     });
     expect(result?.tokenTheme).toMatchObject({ name: 'FigmaStyles', group: '', sets: ['FigmaStyles'] });
   });
@@ -55,7 +63,15 @@ describe('translateEffectStyleTokens()', () => {
         name: 'Inset',
         description: '',
         effects: [
-          { type: 'INNER_SHADOW', color: { r: 1, g: 0, b: 0, a: 1 }, offset: { x: 1, y: 1 }, radius: 4, spread: 2, visible: true, blendMode: 'NORMAL' },
+          {
+            type: 'INNER_SHADOW',
+            color: { r: 1, g: 0, b: 0, a: 1 },
+            offset: { x: 1, y: 1 },
+            radius: 4,
+            spread: 2,
+            visible: true,
+            blendMode: 'NORMAL',
+          },
           { type: 'LAYER_BLUR', radius: 10, visible: true },
         ] as unknown as Effect[],
       },
@@ -63,6 +79,6 @@ describe('translateEffectStyleTokens()', () => {
 
     const result = translateEffectStyleTokens(effectStyles, makeMapping(), new Set(), new Set());
 
-    expect(result?.tokenSet.tokens['Inset'].value).toEqual([{ color: '#ff0000', x: '1', y: '1', blur: '4', spread: '2', inset: true }]);
+    expect(result?.tokenSet.tokens['Inset'].value).toEqual([{ color: '#ff0000', offsetX: '1', offsetY: '1', blur: '4', spread: '2', inset: true }]);
   });
 });

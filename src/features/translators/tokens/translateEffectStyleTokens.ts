@@ -25,8 +25,9 @@ function translateShadow(effect: Effect): ShadowTokenValue | undefined {
 
   return {
     color: color,
-    x: String(effect.offset.x),
-    y: String(effect.offset.y),
+    // Penpot ignores the `x` / `y` aliases sent through the API, only `offsetX` / `offsetY` are kept
+    offsetX: String(effect.offset.x),
+    offsetY: String(effect.offset.y),
     blur: String(effect.radius),
     spread: String(effect.spread ?? 0),
     inset: effect.type === 'INNER_SHADOW',

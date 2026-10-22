@@ -1561,11 +1561,29 @@ export function getDifferences(
         });
       } else if (item.after._apiType === 'component') {
         const { _apiType, variantId, variantProperties, ...propertiesObj } = item.after; // Instruction to omit some properties
+        const before = item.before._apiType === 'component' ? item.before : null;
 
-        operations.push({
-          type: 'mod-component',
-          ...propertiesObj,
-        });
+        if (!before || before.mainInstanceId !== propertiesObj.mainInstanceId || before.mainInstancePage !== propertiesObj.mainInstancePage) {
+          // [WORKAROUND] `mod-component` applies `main-instance-id` and `main-instance-page` but its schema does not declare them,
+          // so Penpot stores them as strings instead of UUIDs and then fails to resolve the main instance (breaking all copies)
+          // `add-component` declares them properly and replaces an existing component, so it is used when they change
+          // Note: since it replaces the whole component, the current variant bindings are kept until the delayed `mod-component`
+          // below applies the new ones, otherwise the variant would be invalid in between (if chunks are validated separately)
+          operations.push({
+            type: 'add-component',
+            ...propertiesObj,
+            ...(before?.variantId ? { variantId: before.variantId } : {}),
+            ...(before?.variantProperties ? { variantProperties: before.variantProperties } : {}),
+          });
+        } else {
+          // Only pass properties declared by the schema, the others would be stored without being decoded (see above)
+          operations.push({
+            type: 'mod-component',
+            id: propertiesObj.id,
+            name: propertiesObj.name,
+            path: propertiesObj.path,
+          });
+        }
 
         // As for the `add-component` change we have to delay the bindings since variant node has to exist first
         if (variantId || variantProperties) {

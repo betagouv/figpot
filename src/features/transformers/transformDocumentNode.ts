@@ -1,6 +1,7 @@
 import { GetFileResponse, SubcanvasNode } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { FigmaDefinedColor, FigmaDefinedEffectStyle, FigmaDefinedTypography } from '@figpot/src/features/figma';
+import { transformUnboundInstances } from '@figpot/src/features/transformers/partials/transformUnboundInstances';
 import { transformPageNode } from '@figpot/src/features/transformers/transformPageNode';
 import { translateEffectStyleTokens } from '@figpot/src/features/translators/tokens/translateEffectStyleTokens';
 import { FigmaVariablesData, translateTokens } from '@figpot/src/features/translators/tokens/translateTokens';
@@ -209,7 +210,10 @@ export function transformDocumentNode(
   const penpotPagesNodes = figmaNode.document.children.map((child) => {
     const pageRegistry = registry.newPage(child.id);
 
-    return transformPageNode(pageRegistry, child);
+    const penpotPageNode = transformPageNode(pageRegistry, child);
+    transformUnboundInstances(penpotPageNode);
+
+    return penpotPageNode;
   });
 
   // Patch components with information gotten while browing the entire tree

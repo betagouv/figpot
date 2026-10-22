@@ -1,56 +1,52 @@
+import { TypePropertiesTrait } from '@figpot/src/clients/figma';
 import { ListTypeFactory } from '@figpot/src/features/translators/text/paragraph/ListTypeFactory';
-import { TextSegment } from '@figpot/src/features/translators/text/paragraph/translateParagraphProperties';
 import { TextNode as PenpotTextNode } from '@figpot/src/models/entities/penpot/shapes/text';
 
+type LineType = TypePropertiesTrait['lineTypes'][0];
+
 type Level = {
-  style: PenpotTextNode;
   counter: number;
-  type: ListType;
+  type: LineType;
 };
 
-type ListType = 'ORDERED' | 'UNORDERED' | 'NONE';
-
+// Penpot has no list feature, so like the Penpot Figma plugin the list symbol is emulated with a text node (using the
+// paragraph style) at the beginning of each list paragraph, with tabs for nested levels. The Figma REST API gives the list
+// type and the indentation per line (each line being a paragraph separated by `\n`)
 export class List {
-  // private levels: Map<number, Level> = new Map();
-  // private indentation = 0;
-  // protected counter: number[] = [];
-  // private listTypeFactory = new ListTypeFactory();
-  // public update(textNode: PenpotTextNode, segment: TextSegment): void {
-  //   if (segment.indentation < this.indentation) {
-  //     for (let i = segment.indentation + 1; i <= this.indentation; i++) {
-  //       this.levels.delete(i);
-  //     }
-  //   }
-  //   let level = this.levels.get(segment.indentation);
-  //   if (!level || level.type !== segment.listOptions.type) {
-  //     level = {
-  //       style: this.createStyle(textNode, segment.indentation),
-  //       counter: 0,
-  //       type: segment.listOptions.type,
-  //     };
-  //     this.levels.set(segment.indentation, level);
-  //   }
-  //   level.counter++;
-  //   this.indentation = segment.indentation;
-  // }
-  // public getCurrentList(textNode: PenpotTextNode, segment: TextSegment): PenpotTextNode {
-  //   const level = this.levels.get(segment.indentation);
-  //   if (level === undefined) {
-  //     throw new Error('Levels not updated');
-  //   }
-  //   const listType = this.listTypeFactory.getListType(segment.listOptions);
-  //   return this.updateCurrentSymbol(listType.getCurrentSymbol(level.counter, segment.indentation), level.style);
-  // }
-  // private createStyle(node: PenpotTextNode, indentation: number): PenpotTextNode {
-  //   return {
-  //     ...node,
-  //     text: `${'\t'.repeat(Math.max(0, indentation - 1))}{currentSymbol}`,
-  //   };
-  // }
-  // private updateCurrentSymbol(character: string, currentStyle: PenpotTextNode): PenpotTextNode {
-  //   return {
-  //     ...currentStyle,
-  //     text: currentStyle.text.replace('{currentSymbol}', character),
-  //   };
-  // }
+  private levels: Map<number, Level> = new Map();
+  private indentation = 0;
+  private listTypeFactory = new ListTypeFactory();
+
+  // Must be called for every paragraph in order, so counters are right
+  public getSymbolNode(firstTextNode: PenpotTextNode, lineType: LineType | undefined, indentation: number | undefined): PenpotTextNode | null {
+    const type: LineType = lineType ?? 'NONE';
+    const currentIndentation = indentation ?? 0;
+
+    if (currentIndentation < this.indentation) {
+      for (let i = currentIndentation + 1; i <= this.indentation; i++) {
+        this.levels.delete(i);
+      }
+    }
+
+    let level = this.levels.get(currentIndentation);
+
+    if (!level || level.type !== type) {
+      level = { counter: 0, type: type };
+      this.levels.set(currentIndentation, level);
+    }
+
+    level.counter++;
+    this.indentation = currentIndentation;
+
+    if (type === 'NONE') {
+      return null;
+    }
+
+    const symbol = this.listTypeFactory.getListType(type).getCurrentSymbol(level.counter, currentIndentation);
+
+    return {
+      ...firstTextNode,
+      text: `${'\t'.repeat(Math.max(0, currentIndentation - 1))}${symbol}`,
+    };
+  }
 }

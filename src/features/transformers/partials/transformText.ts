@@ -1,5 +1,6 @@
 import { TextNode } from '@figpot/src/clients/figma';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
+import { List } from '@figpot/src/features/translators/text/paragraph/List';
 import { TextSegment } from '@figpot/src/features/translators/text/paragraph/translateParagraphProperties';
 import { translateGrowType } from '@figpot/src/features/translators/text/properties/translateGrowType';
 import { translateVerticalAlign } from '@figpot/src/features/translators/text/properties/translateVerticalAlign';
@@ -79,6 +80,7 @@ export function transformText(registry: AbstractRegistry, node: TextNode): TextA
 
   // The trailing letter-spacing only mis-places the glyphs when the line is not left-anchored
   const dropTrailingSpacing = node.style.textAlignHorizontal === 'CENTER' || node.style.textAlignHorizontal === 'RIGHT';
+  const list = new List();
 
   return {
     content: {
@@ -89,8 +91,17 @@ export function transformText(registry: AbstractRegistry, node: TextNode): TextA
             {
               type: 'paragraph-set',
               children: styledParagraphs.length
-                ? styledParagraphs.map((paragraph) => {
+                ? styledParagraphs.map((paragraph, paragraphIndex) => {
                     const segments = translateTextSegments(registry, node, paragraph);
+
+                    // Each Figma line (paragraph) has its own list type and indentation
+                    const listSymbol =
+                      segments.length > 0
+                        ? list.getSymbolNode(segments[0], node.lineTypes?.[paragraphIndex], node.lineIndentations?.[paragraphIndex])
+                        : null;
+                    if (listSymbol) {
+                      segments.unshift(listSymbol);
+                    }
 
                     return {
                       type: 'paragraph',

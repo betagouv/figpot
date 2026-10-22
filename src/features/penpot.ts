@@ -5,6 +5,7 @@ import { formatPageRootFrameId, rootFrameId, translateTokenId, translateTokenSet
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { Token, TokenSet, TokenTheme, TokenType } from '@figpot/src/models/entities/penpot/traits/token';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
+import { penpotBaseUrl } from '@figpot/src/utils/environment';
 
 import { translateNonRotatedCommands } from './translators/vectors/translateNonRotatedCommands';
 
@@ -221,4 +222,37 @@ export function cleanHostedDocument(hostedTree: PostGetFileResponse): PenpotDocu
       activeTokenThemes: activeTokenThemes,
     },
   };
+}
+
+let penpotVersionPromise: Promise<{ major: number; minor: number } | null> | null = null;
+
+// The Penpot API is not versioned, so some operations depend on the instance version (exposed by the frontend)
+export function retrievePenpotVersion(): Promise<{ major: number; minor: number } | null> {
+  if (!penpotVersionPromise) {
+    penpotVersionPromise = (async () => {
+      try {
+        const response = await fetch(`${penpotBaseUrl}/version.txt`);
+        const match = response.ok ? (await response.text()).match(/^(\d+)\.(\d+)/) : null;
+
+        return match ? { major: parseInt(match[1], 10), minor: parseInt(match[2], 10) } : null;
+      } catch {
+        return null;
+      }
+    })();
+  }
+
+  return penpotVersionPromise;
+}
+
+// Since Penpot v2.19 the activation of token themes is done with `set-tokens-status` (with identifiers) instead of `set-active-token-themes` (with paths)
+export async function penpotSupportsTokensStatus(): Promise<boolean> {
+  const version = await retrievePenpotVersion();
+
+  if (!version) {
+    console.warn(`the Penpot version of "${penpotBaseUrl}" cannot be retrieved, considering it older than v2.19`);
+
+    return false;
+  }
+
+  return version.major > 2 || (version.major === 2 && version.minor >= 19);
 }

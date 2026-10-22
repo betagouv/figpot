@@ -42,13 +42,13 @@ import {
   FigmaDefinedColor,
   FigmaDefinedEffectStyle,
   FigmaDefinedTypography,
+  FigmaFileMetaCache,
   collectTextPathRefs,
   countTotalElements,
   extractStylesEffects,
   extractStylesTypographies,
   mergeStylesColors,
   patchDocument,
-  FigmaFileMetaCache,
   retrieveDocument,
   retrieveFigmaFileAccessInfo,
   retrieveFigmaFileName,
@@ -61,7 +61,7 @@ import {
   retrieveVariables,
 } from '@figpot/src/features/figma';
 import { restoreMappingFromRepository, saveMappingToRepository } from '@figpot/src/features/git';
-import { cleanHostedDocument } from '@figpot/src/features/penpot';
+import { cleanHostedDocument, penpotSupportsTokensStatus } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
 import { FigmaVariablesData, emptyFigmaVariablesData } from '@figpot/src/features/translators/tokens/translateTokens';
 import { isPageRootFrame, isPageRootFrameFromId, registerFontId, rootFrameId } from '@figpot/src/features/translators/translateId';
@@ -1189,7 +1189,18 @@ export function performBasicNodeCreation(
   }
 }
 
-export function getDifferences(documentId: string, currentTree: PenpotDocument, newTree: PenpotDocument, currentThumbnails: string[]): Differences {
+export interface DifferencesOptions {
+  // Penpot v2.19+ activates token themes with `set-tokens-status` instead of `set-active-token-themes`
+  tokensStatus?: boolean;
+}
+
+export function getDifferences(
+  documentId: string,
+  currentTree: PenpotDocument,
+  newTree: PenpotDocument,
+  currentThumbnails: string[],
+  options: DifferencesOptions = {}
+): Differences {
   const newDocumentName = currentTree.name !== newTree.name ? newTree.name : undefined;
   const newMediasToUpload: string[] = [];
 
@@ -1945,7 +1956,22 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
   const activeThemesChanged =
     currentActiveThemes.length !== newActiveThemes.length || currentActiveThemes.some((themePath, index) => themePath !== newActiveThemes[index]);
   if (activeThemesChanged) {
-    operations.push({ type: 'set-active-token-themes', themePaths: newActiveThemes });
+    if (options.tokensStatus) {
+      // Themes are referenced by path (`group/name`) and their sets by name, whereas this operation needs identifiers
+      const themes = Object.values(newTree.data.tokenThemes ?? {});
+      const sets = Object.values(newTree.data.tokenSets ?? {});
+      const activeThemes = themes.filter((theme) => newActiveThemes.includes(theme.group ? `${theme.group}/${theme.name}` : theme.name));
+      const activeSetNames = new Set(activeThemes.flatMap((theme) => theme.sets));
+
+      // The generated client is based on the API of the official instance, which may not know this operation yet
+      operations.push({
+        type: 'set-tokens-status',
+        themeIds: activeThemes.map((theme) => theme.id),
+        setIds: sets.filter((set) => activeSetNames.has(set.name)).map((set) => set.id),
+      } as unknown as (typeof operations)[number]);
+    } else {
+      operations.push({ type: 'set-active-token-themes', themePaths: newActiveThemes });
+    }
   }
 
   // Make the difference between hosted thumbnails and those we think should be kept
@@ -2022,7 +2048,9 @@ export async function compare(options: CompareOptionsType) {
     const transformedDocument = await readTransformedFigmaTreeFile(options.dataDir, document.figmaDocument, document.penpotDocument);
 
     const hostedCoreDocument = cleanHostedDocument(hostedDocument);
-    const diff = getDifferences(document.penpotDocument, hostedCoreDocument, transformedDocument, Object.keys(currentThumbnails));
+    const diff = getDifferences(document.penpotDocument, hostedCoreDocument, transformedDocument, Object.keys(currentThumbnails), {
+      tokensStatus: await penpotSupportsTokensStatus(),
+    });
 
     await writeBigJsonFile(getFigmaToPenpotDiffPath(options.dataDir, document.figmaDocument, document.penpotDocument), diff);
 

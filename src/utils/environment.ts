@@ -4,7 +4,8 @@ import { OpenAPI as FigmaClientSettings } from '@figpot/src/clients/figma';
 import { OpenAPI as PenpotClientSettings } from '@figpot/src/clients/penpot';
 import { AccessTokenConfigSchema, CredentialsConfigSchema } from '@figpot/src/models/entities/environment';
 
-export const penpotApiBaseUrl = `${process.env.PENPOT_BASE_URL ?? 'https://design.penpot.app'}/api/main/methods`;
+export const penpotBaseUrl = process.env.PENPOT_BASE_URL ?? 'https://design.penpot.app';
+export const penpotApiBaseUrl = `${penpotBaseUrl}/api/main/methods`;
 
 // The generated client does `BASE + path` where `path` has no leading slash, so BASE must end with a trailing one
 PenpotClientSettings.BASE = `${penpotApiBaseUrl}/`;

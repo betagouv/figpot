@@ -2644,6 +2644,7 @@ export async function resolveBindingsInteractively(
   documents: DocumentOptionsType[],
   declaredLibraries: DocumentOptionsType[],
   prompting: boolean,
+  detachedLibraries: string[] = [],
   figmaMetaCache: FigmaFileMetaCache = new FigmaFileMetaCache()
 ): Promise<DocumentOptionsType[]> {
   const declaredFigmaFiles = new Set([...documents.map((doc) => doc.figmaDocument), ...declaredLibraries.map((lib) => lib.figmaDocument)]);
@@ -2664,10 +2665,27 @@ export async function resolveBindingsInteractively(
     return [];
   }
 
+  // Libraries explicitly detached are skipped like when choosing to skip them when prompted, their instances will not be
+  // bound to any component
+  const detachedFigmaFiles = [...unboundFigmaFiles].filter((figmaFile) => detachedLibraries.includes(figmaFile));
+  if (detachedFigmaFiles.length > 0) {
+    console.warn(
+      `${detachedFigmaFiles.length} Figma library file(s) are referenced but detached as requested, the instances of their components will be kept as plain shapes: ${detachedFigmaFiles.join(', ')}`
+    );
+
+    for (const figmaFile of detachedFigmaFiles) {
+      unboundFigmaFiles.delete(figmaFile);
+    }
+
+    if (unboundFigmaFiles.size === 0) {
+      return [];
+    }
+  }
+
   if (!prompting) {
     throw new Error(
       `${unboundFigmaFiles.size} Figma library file(s) are referenced but not bound: ${[...unboundFigmaFiles].join(', ')}. ` +
-        `Pass "-l <figmaFileId>:<penpotFileId>" for each, or "--skip-libraries"`
+        `Pass "-l <figmaFileId>:<penpotFileId>" or "--detach-library <figmaFileId>" for each, or "--skip-libraries"`
     );
   }
 
@@ -2824,6 +2842,7 @@ export const SynchronizeOptions = z.object({
   useCachedFigmaData: z.boolean(),
   libraries: z.array(DocumentOptions).default([]),
   skipLibraries: z.boolean().default(false),
+  detachedLibraries: z.array(z.string()).default([]),
   skipInferringLibraries: z.boolean().default(false),
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;
@@ -2859,6 +2878,7 @@ export async function synchronize(options: SynchronizeOptionsType, figmaMetaCach
         resolvedOptions.documents,
         resolvedOptions.libraries,
         resolvedOptions.prompting === true,
+        resolvedOptions.detachedLibraries,
         figmaMetaCache
       );
 

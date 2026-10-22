@@ -39,6 +39,10 @@ const skipLibrariesOption = new Option(
   '--skip-libraries',
   'skip remote-component resolution, instances of remote components will remain detached (helpful when the Figma access token lacks "Library assets" scope)'
 );
+const detachLibrariesOption = new Option(
+  '--detach-library [figmaFileIds...]',
+  'Figma library file referenced by your documents whose component instances must be kept as plain shapes instead of being bound (helpful to avoid circular dependencies between libraries), any other undeclared library still requires a decision'
+);
 const skipInferringLibrariesOption = new Option(
   '--skip-inferring-libraries',
   "consider only the libraries explicitly declared with -l/--library; do not try to infer library file IDs from remote component and style keys. It may help saving a lot of requests for subsequent runs when we know keys inference won't bring more libraries"
@@ -150,6 +154,7 @@ document
   .addOption(documentsOption)
   .addOption(librariesOption)
   .addOption(skipLibrariesOption)
+  .addOption(detachLibrariesOption)
   .addOption(skipInferringLibrariesOption)
   .addOption(excludePagePatternsOption)
   .addOption(excludeNodePatternsOption)
@@ -196,6 +201,7 @@ document
         documents: documents,
         libraries: libraries,
         skipLibraries: options.skipLibraries || false,
+        detachedLibraries: Array.isArray(options.detachLibrary) ? options.detachLibrary : [],
         skipInferringLibraries: options.skipInferringLibraries || false,
         excludePatterns: {
           pageNamePatterns: Array.isArray(options.excludePagePattern) ? options.excludePagePattern : undefined,

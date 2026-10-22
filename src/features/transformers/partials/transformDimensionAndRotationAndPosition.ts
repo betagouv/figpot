@@ -26,6 +26,48 @@ export const neutralTransforMatrix: Matrix = {
   f: 0,
 };
 
+// Geometry of a shape with no rotation, also used when the geometry is computed from the drawn content
+export function transformAxisAlignedDimensionAndPosition(
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): Pick<ShapeBaseAttributes, 'selrect' | 'points' | 'transform' | 'transformInverse' | 'rotation' | 'flipX' | 'flipY'> &
+  Pick<ShapeGeomAttributes, 'x' | 'y' | 'width' | 'height'> {
+  const selrectWithNoRotation: Selrect = {
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    x1: x,
+    y1: y,
+    x2: x + width,
+    y2: y + height,
+  };
+
+  const pointsWithNoRotation: Point[] = [
+    { x: selrectWithNoRotation.x1, y: selrectWithNoRotation.y1 },
+    { x: selrectWithNoRotation.x2, y: selrectWithNoRotation.y1 },
+    { x: selrectWithNoRotation.x2, y: selrectWithNoRotation.y2 },
+    { x: selrectWithNoRotation.x1, y: selrectWithNoRotation.y2 },
+  ];
+
+  return {
+    x,
+    y,
+    width: selrectWithNoRotation.width,
+    height: selrectWithNoRotation.height,
+    selrect: selrectWithNoRotation,
+    points: pointsWithNoRotation,
+    rotation: 0,
+    transform: neutralTransforMatrix,
+    transformInverse: neutralTransforMatrix,
+    // TODO: implement (here just to avoid useless diff for now)
+    flipX: null,
+    flipY: null,
+  };
+}
+
 export function transformDimensionAndRotationAndPosition(
   node: HasLayoutTrait,
   nodeTransform: Transform
@@ -52,41 +94,7 @@ export function transformDimensionAndRotationAndPosition(
   const rotation = getRotationAngle(nodeTransform);
 
   if (rotation === 0) {
-    const x = nodeAbsoluteBoundingBox.x;
-    const y = nodeAbsoluteBoundingBox.y;
-
-    const selrectWithNoRotation: Selrect = {
-      x: x,
-      y: y,
-      width: nodeSize.x,
-      height: nodeSize.y,
-      x1: x,
-      y1: y,
-      x2: x + nodeSize.x,
-      y2: y + nodeSize.y,
-    };
-
-    const pointsWithNoRotation: Point[] = [
-      { x: selrectWithNoRotation.x1, y: selrectWithNoRotation.y1 },
-      { x: selrectWithNoRotation.x2, y: selrectWithNoRotation.y1 },
-      { x: selrectWithNoRotation.x2, y: selrectWithNoRotation.y2 },
-      { x: selrectWithNoRotation.x1, y: selrectWithNoRotation.y2 },
-    ];
-
-    return {
-      x,
-      y,
-      width: selrectWithNoRotation.width,
-      height: selrectWithNoRotation.height,
-      selrect: selrectWithNoRotation,
-      points: pointsWithNoRotation,
-      rotation: 0,
-      transform: neutralTransforMatrix,
-      transformInverse: neutralTransforMatrix,
-      // TODO: implement (here just to avoid useless diff for now)
-      flipX: null,
-      flipY: null,
-    };
+    return transformAxisAlignedDimensionAndPosition(nodeAbsoluteBoundingBox.x, nodeAbsoluteBoundingBox.y, nodeSize.x, nodeSize.y);
   }
 
   // TODO: this is working for rectangle (we describe 4 points here)

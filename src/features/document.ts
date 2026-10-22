@@ -2234,6 +2234,22 @@ export async function processDifferences(
       // Stop the spinner first so the recovery warnings below render cleanly (no clash with the animation)
       pushSpinner.fail(`Failed while pushing chunk [${chunkNumber}] to Penpot file "${penpotDocumentId}"`);
 
+      // Dump the full Penpot validation details so the user can investigate which shapes were
+      // rejected (Node truncates `details` to "[Object]" by default and inline JSON is too long
+      // for typical referential-integrity failures). Saved alongside the diff for offline inspection
+      const body = (error as unknown as { body?: { details?: unknown[]; code?: string } }).body;
+      if (body && Array.isArray(body.details)) {
+        const dumpPath = path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), `push-error-chunk-${chunkNumber}.json`);
+        try {
+          await fs.writeFile(dumpPath, JSON.stringify({ code: body.code, details: body.details }, null, 2), { encoding: 'utf-8' });
+          console.warn(`Full Penpot rejection (${body.details.length} validation error(s), code "${body.code}") dumped to:\n  ${dumpPath}`);
+          const sample = body.details.slice(0, 3);
+          console.warn(`First ${sample.length} entries (for quick read):\n${JSON.stringify(sample, null, 2)}`);
+        } catch {
+          /* best-effort dump, swallow */
+        }
+      }
+
       if (succeededOperations > 0) {
         console.warn(`Wait a bit since we are removing processed chunks for your next retry, it will reduce the input and speed up`);
 

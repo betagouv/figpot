@@ -556,6 +556,30 @@ export async function retrieve(options: RetrieveOptionsType, figmaMetaCache: Fig
       } catch (error) {
         treeSpinner.fail(`Failed to retrieve Figma document tree for "${document.figmaDocument}"`);
 
+        // Figma returns the same opaque 403 "File not exportable" for two very different causes:
+        // 1. The file isn't a Design file (FigJam, Slides, Buzz, Sites, Draw — REST has no support)
+        // 2. The caller's role on the file is "viewer" (must be "editor" or "owner" to call `getFile`)
+        // Pop a cheap `getFileMeta` to distinguish and surface the actionable reason
+        const errBody = (error as unknown as { body?: { err?: string } }).body;
+        if (error instanceof FigmaApiError && error.status === 403 && errBody?.err === 'File not exportable') {
+          const access = await retrieveFigmaFileAccessInfo(figmaMetaCache, document.figmaDocument);
+          const label = access?.name ? `"${access.name}" (${document.figmaDocument})` : `"${document.figmaDocument}"`;
+
+          if (access?.role && access.role !== 'editor' && access.role !== 'owner') {
+            throw new Error(
+              `cannot synchronize Figma file ${label}: your role on this file is "${access.role}", but the Figma REST API requires at least "editor" to read file content. Ask the file's owner to grant you editor access, or run the sync from an account that already has it`
+            );
+          }
+          if (access?.editorType && access.editorType !== 'figma') {
+            throw new Error(
+              `cannot synchronize Figma file ${label}: its editor type is "${access.editorType}" (FigJam / Slides / Buzz / Sites / Draw), and figpot only supports classic Design (Figma) files`
+            );
+          }
+          throw new Error(
+            `cannot synchronize Figma file ${label}: Figma returned 403 "File not exportable" — and the metadata endpoint did not disambiguate. Common causes: a non-Design file type, a viewer-only role, or a file in a free-plan team whose owner has not granted REST API export`
+          );
+        }
+
         if (error instanceof FigmaApiError && error.status === 429) {
           const retryAfterHeader = figmaRateLimitContext.retryAfter;
           const rateLimitTypeHeader = figmaRateLimitContext.rateLimitType;

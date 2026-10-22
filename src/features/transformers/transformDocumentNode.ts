@@ -239,6 +239,10 @@ export function transformDocumentNode(
             // [WORKAROUND] They added a validation comparing paths and names while expecting exact match
             // So for the ease we just reuse the component metadata to directly patch tree nodes
             object.name = component.path !== '' ? `${component.path} / ${component.name}` : component.name;
+          } else {
+            // [WORKAROUND] Since Penpot v2.19 the same validation applies to main instances of regular components (variants
+            // are checked through their variant wrapper), following their `merge-path-item` logic
+            object.name = component.path !== '' ? (component.name !== '' ? `${component.path} / ${component.name}` : component.path) : component.name;
           }
 
           skipMainInstanceSearch = true;

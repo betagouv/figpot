@@ -12,6 +12,7 @@ import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { Registry } from '@figpot/src/models/entities/registry';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
+import { cleanPath } from '@figpot/src/utils/path';
 import { deterministicUuid } from '@figpot/src/utils/uuid';
 
 export function detectLocalFigmaComponents(foundComponentsIds: string[], figmaNode: SubcanvasNode) {
@@ -230,7 +231,8 @@ export function transformDocumentNode(
           // In Figma the components are organized by pages (e.g. a component "A" inside the "Button" page will be displayed "Button > A")
           // so for the ease of usage into Penpot we reproduce this UI effect even if it implies "hardcoding" the prefix into the `path`
           // TODO: it won't work for components not inside the tree (those with instance excluded by a CLI pattern, or remote components), maybe we should try to get this information to patch them too... (tried `/v1/components/$COMPONENT_KEY` but it returns 404)
-          component.path = component.path !== '' ? `${pageIndex.name} / ${component.path}` : pageIndex.name;
+          // Penpot requires normalized paths (a page name may end with a space for example)
+          component.path = cleanPath(component.path !== '' ? `${pageIndex.name} / ${component.path}` : pageIndex.name);
 
           // We also need to specify the variant wrapper (component set) at the component definition
           if (component.variantId) {

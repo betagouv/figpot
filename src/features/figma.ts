@@ -223,7 +223,7 @@ export async function retrieveRemoteComponents(
 
       if (body?.status === 403 && !scopeWarningEmitted) {
         console.warn(
-          `\nthe Figma access token is missing the "Library assets" scope (read-only) so cross-file component bindings cannot be resolved. Re-create the token with that scope to enable binding`
+          `\nsome remote components cannot be read by the Figma access token (status 403): either the token is missing the "Library assets" scope (read-only), or they belong to a file the token cannot access (for example a Community file not duplicated into your workspace). Their instances cannot be bound`
         );
 
         scopeWarningEmitted = true;
@@ -303,7 +303,7 @@ export async function retrieveRemoteStyles(
 
       if (body?.status === 403 && !scopeWarningEmitted) {
         console.warn(
-          `\nthe Figma access token is missing the "Library assets" scope (read-only) so cross-file style bindings cannot be resolved. Re-create the token with that scope to enable binding`
+          `\nsome remote styles cannot be read by the Figma access token (status 403): either the token is missing the "Library assets" scope (read-only), or they belong to a file the token cannot access (for example a Community file not duplicated into your workspace). Their usages cannot be bound`
         );
 
         scopeWarningEmitted = true;

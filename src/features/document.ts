@@ -48,7 +48,9 @@ import {
   extractStylesTypographies,
   mergeStylesColors,
   patchDocument,
+  FigmaFileMetaCache,
   retrieveDocument,
+  retrieveFigmaFileAccessInfo,
   retrieveFigmaFileName,
   retrieveLibraryPublishedComponents,
   retrieveLibraryPublishedStyles,
@@ -499,7 +501,7 @@ export async function saveMapping(dataDir: string, figmaDocumentId: string, penp
   );
 }
 
-export async function retrieve(options: RetrieveOptionsType) {
+export async function retrieve(options: RetrieveOptionsType, figmaMetaCache: FigmaFileMetaCache = new FigmaFileMetaCache()) {
   // Keep specifically this lightweight metadata in memory because reading the Figma tree file in the `retrieve` step
   // just to retrieve it later was crashing the program when the tree is huge
   const figmaComponentsByDocument = new Map<string, Record<string, Component>>();
@@ -2296,7 +2298,8 @@ export type DurationType = z.infer<typeof Duration>;
 export async function resolveDocumentDestinations(
   dataDir: string,
   documents: DocumentOptionsType[],
-  prompting: boolean
+  prompting: boolean,
+  figmaMetaCache: FigmaFileMetaCache = new FigmaFileMetaCache()
 ): Promise<DocumentOptionsType[]> {
   const needsPrompt = documents.filter((doc) => !doc.penpotDocument);
   if (needsPrompt.length === 0) {
@@ -2323,7 +2326,7 @@ export async function resolveDocumentDestinations(
     // Fetch the Figma file's display name so the user can confirm they're answering for the
     // right document. Lazy per prompt — the synced files are typically accessible to the token
     // so this should almost always succeed (unlike library files in resolveBindingsInteractively)
-    const figmaFileName = await retrieveFigmaFileName(doc.figmaDocument);
+    const figmaFileName = await retrieveFigmaFileName(figmaMetaCache, doc.figmaDocument);
     const figmaLabel = figmaFileName ? `${chalk.yellow(`"${figmaFileName}"`)} (${doc.figmaDocument})` : `"${doc.figmaDocument}"`;
 
     console.log(`\nNo Penpot target was specified for Figma document ${figmaLabel}.`);
@@ -2544,7 +2547,8 @@ export async function resolveBindingsInteractively(
   dataDir: string,
   documents: DocumentOptionsType[],
   declaredLibraries: DocumentOptionsType[],
-  prompting: boolean
+  prompting: boolean,
+  figmaMetaCache: FigmaFileMetaCache = new FigmaFileMetaCache()
 ): Promise<DocumentOptionsType[]> {
   const declaredFigmaFiles = new Set([...documents.map((doc) => doc.figmaDocument), ...declaredLibraries.map((lib) => lib.figmaDocument)]);
 
@@ -2585,7 +2589,7 @@ export async function resolveBindingsInteractively(
   try {
     await Promise.all(
       [...unboundFigmaFiles].map(async (key) => {
-        const name = await retrieveFigmaFileName(key);
+        const name = await retrieveFigmaFileName(figmaMetaCache, key);
 
         figmaLibraryNames.set(key, name);
       })
@@ -2728,7 +2732,7 @@ export const SynchronizeOptions = z.object({
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;
 
-export async function synchronize(options: SynchronizeOptionsType) {
+export async function synchronize(options: SynchronizeOptionsType, figmaMetaCache: FigmaFileMetaCache = new FigmaFileMetaCache()) {
   // Resolve Penpot file IDs for those that need to be created
   // Note: the CLI made sure missing penpot value got promoted to either `'new'` or a real UUID
   const resolvedOptions: SynchronizeOptionsType = {
@@ -2737,16 +2741,19 @@ export async function synchronize(options: SynchronizeOptionsType) {
     libraries: await resolveNewPenpotFiles(options.dataDir, options.libraries, options.prompting === true),
   };
 
-  await retrieve({
-    dataDir: resolvedOptions.dataDir,
-    documents: resolvedOptions.documents,
-    libraries: resolvedOptions.libraries,
-    prompting: resolvedOptions.prompting,
-    syncMappingWithGit: resolvedOptions.syncMappingWithGit,
-    useCachedFigmaData: resolvedOptions.useCachedFigmaData,
-    skipLibraries: resolvedOptions.skipLibraries,
-    skipInferringLibraries: resolvedOptions.skipInferringLibraries,
-  });
+  await retrieve(
+    {
+      dataDir: resolvedOptions.dataDir,
+      documents: resolvedOptions.documents,
+      libraries: resolvedOptions.libraries,
+      prompting: resolvedOptions.prompting,
+      syncMappingWithGit: resolvedOptions.syncMappingWithGit,
+      useCachedFigmaData: resolvedOptions.useCachedFigmaData,
+      skipLibraries: resolvedOptions.skipLibraries,
+      skipInferringLibraries: resolvedOptions.skipInferringLibraries,
+    },
+    figmaMetaCache
+  );
 
   // Bind any unresolved library files interactively before transform sees them
   const interactiveBindings = resolvedOptions.skipLibraries
@@ -2755,7 +2762,8 @@ export async function synchronize(options: SynchronizeOptionsType) {
         resolvedOptions.dataDir,
         resolvedOptions.documents,
         resolvedOptions.libraries,
-        resolvedOptions.prompting === true
+        resolvedOptions.prompting === true,
+        figmaMetaCache
       );
 
   const allLibraries = [...resolvedOptions.libraries, ...interactiveBindings];

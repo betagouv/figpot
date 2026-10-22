@@ -9,6 +9,7 @@ import { transformProportion } from '@figpot/src/features/transformers/partials/
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
+import { translateEvenOddToNonZero } from '@figpot/src/features/translators/vectors/translateEvenOddToNonZero';
 import { translateWindingRule } from '@figpot/src/features/translators/vectors/translateWindingRule';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { PathShape } from '@figpot/src/models/entities/penpot/shapes/path';
@@ -36,11 +37,13 @@ function transformVectorPath(
   // TODO: this returns a line from Figma as a rectangle, which is too complicated to move into Penpot (we should use stroke weight and stroke align to try simplifying the path)
   // Ref: https://github.com/penpot/penpot-exporter-figma-plugin/issues/210
   const normalizedPaths = parseSVG(vectorPath.path);
+  const content = translateCommands(node, figmaNodeTransform, normalizedPaths);
 
   return {
     type: 'path',
     name: 'svg-path',
-    content: translateCommands(node, figmaNodeTransform, normalizedPaths),
+    // The fill rule is kept as information, but Penpot may not apply it (see `translateEvenOddToNonZero`)
+    content: vectorPath.windingRule === 'EVENODD' ? translateEvenOddToNonZero(content) : content,
     svgAttrs: {
       fillRule: translateWindingRule(vectorPath.windingRule),
     },

@@ -11,6 +11,7 @@ import { buildLayoutGridCells, transformAutoLayout, transformLayoutAttributes } 
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
+import { translateGrids } from '@figpot/src/features/translators/translateGrids';
 import { SlotNode } from '@figpot/src/models/entities/figma/slot';
 import { FrameShape } from '@figpot/src/models/entities/penpot/shapes/frame';
 import { Point } from '@figpot/src/models/entities/penpot/traits/point';
@@ -49,6 +50,7 @@ export function transformFrameNode(
 
   // Grid cells are built AFTER children are transformed because they reference the Penpot-mapped child ids
   const layoutGridCells = !isSectionNode(node) ? buildLayoutGridCells(registry, node, childrenShapes) : undefined;
+  const grids = !isSectionNode(node) ? translateGrids(node.layoutGrids) : undefined;
 
   return {
     type: 'frame',
@@ -58,6 +60,7 @@ export function transformFrameNode(
     ...transformFills(registry, node),
     ...frameSpecificAttributes,
     ...(layoutGridCells ? { layoutGridCells } : {}),
+    ...(grids ? { grids } : {}),
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
     ...transformSceneNode(node),
   };

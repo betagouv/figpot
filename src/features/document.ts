@@ -85,6 +85,7 @@ import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot
 import { config, figmaRateLimitContext, penpotApiBaseUrl } from '@figpot/src/utils/environment';
 import { downloadFile, openAsBlob, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
 import { getMemoryAdvice, getMemoryContext } from '@figpot/src/utils/memory';
+import { sleep } from '@figpot/src/utils/sleep';
 import { UserCancellationExit } from '@figpot/src/utils/system';
 
 export const DEFAULT_DATA_DIR_NAME = 'data';
@@ -2142,6 +2143,29 @@ export async function getPenpotFileVersion(penpotProjectId: string, penpotDocume
   return file ? { revn: file.revn, vern: file.vern ?? 0 } : null;
 }
 
+// Watches the file revision to know if a chunk has been applied even if the proxy in front of Penpot gave up waiting
+export async function waitForPenpotFileRevision(
+  penpotProjectId: string,
+  penpotDocumentId: string,
+  expectedRevn: number,
+  timeoutMs: number = 5 * 60_000,
+  intervalMs: number = 10_000
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const version = await getPenpotFileVersion(penpotProjectId, penpotDocumentId).catch(() => null); // The instance may still be busy
+
+    if (version && version.revn >= expectedRevn) {
+      return true;
+    }
+
+    await sleep(intervalMs);
+  }
+
+  return false;
+}
+
 export async function processOperationsChunk(
   penpotDocumentId: string,
   currentChunk: appCommonFilesChanges$changeWithoutUnknown[],
@@ -2340,6 +2364,12 @@ export async function processDifferences(
     // Note: chunks are computed upfront to give the progress
     const chunks = [...chunkOperations(differences.newTreeOperations, chunkBytes)];
 
+    if (chunks.length > 1) {
+      console.warn(
+        `With huge files the Penpot instance may take longer than its proxy allows to apply a chunk, in this case figpot watches the file revision for up to 5 minutes to confirm the chunk has been applied before continuing. CLOSE ANY TAB OPENED ON THIS FILE until the push ends, otherwise your edits could be mistaken for a pushed chunk, messing up the comparison`
+      );
+    }
+
     const pushSpinner = ora(
       `Pushing modifications to Penpot file "${penpotDocumentId}" (${totalOperations} operation(s) in ${chunks.length} chunk(s))…`
     ).start();
@@ -2349,7 +2379,25 @@ export async function processDifferences(
         pushSpinner.text = `Pushing chunk [${chunkNumber}/${chunks.length}] (${chunk.length} ops, ${succeededOperations}/${totalOperations} done) to Penpot file "${penpotDocumentId}"…`;
 
         const chunkStart = Date.now();
-        await processOperationsChunk(penpotDocumentId, chunk as appCommonFilesChanges$changeWithoutUnknown[], serverValidation, fileVersion);
+        try {
+          await processOperationsChunk(penpotDocumentId, chunk as appCommonFilesChanges$changeWithoutUnknown[], serverValidation, fileVersion);
+        } catch (error) {
+          // The proxy gave up waiting but Penpot may still be applying the chunk, the revision tells when it's done
+          // Note: without the current revision it cannot be confirmed, so the push stops
+          if (!isGatewayFailure(error) || !version) {
+            throw error;
+          }
+
+          pushSpinner.text = `Chunk [${chunkNumber}/${chunks.length}] got no answer in time (gateway timeout), watching the file revision to confirm it has been applied…`;
+
+          if (!(await waitForPenpotFileRevision(meta.penpotProjectId, penpotDocumentId, fileVersion.revn + 1))) {
+            throw error;
+          }
+
+          if (!process.stderr.isTTY) {
+            console.log(`chunk [${chunkNumber}/${chunks.length}] got no answer in time but the file revision confirms it has been applied`);
+          }
+        }
 
         succeededOperations += chunk.length;
         fileVersion.revn++;
@@ -2384,10 +2432,10 @@ export async function processDifferences(
       }
 
       if (isGatewayFailure(error)) {
-        // The intermediary (e.g. Cloudflare) gave up waiting but the Penpot server may still have processed the chunk, so
-        // resuming from the remaining operations could apply it twice: the comparison must be done again from the real state
+        // The revision did not confirm the chunk, but the Penpot server may still process it, so resuming from the remaining
+        // operations could apply it twice: the comparison must be done again from the real state
         console.warn(
-          `The Penpot server did not answer in time through its intermediary (gateway timeout). Since a lot of data is pushed, the server may still have processed the chunk behind it, but there is no way to be sure. Wait about 5 minutes for the server to finish, then rerun your command adding "--use-cached-figma-data": it compares again with the current Penpot state before pushing, without fetching Figma again. Note the comparison now also loads the Penpot file content, so it needs more memory than before. If it happens again, lower "--push-chunk-size" (currently ${pushChunkSize ?? defaultPushChunkSize}MB) so each request finishes in time`
+          `The Penpot server did not answer in time through its intermediary (gateway timeout), and the file revision did not confirm the chunk has been applied (or could not be retrieved). The server may still be processing it. Wait about 5 minutes, then rerun your command adding "--use-cached-figma-data": it compares again with the current Penpot state before pushing, without fetching Figma again. Note the comparison now also loads the Penpot file content, so it needs more memory than before. If it happens again, lower "--push-chunk-size" (currently ${pushChunkSize ?? defaultPushChunkSize}MB) so each request finishes in time`
         );
       } else if (succeededOperations > 0) {
         console.warn(`Wait a bit since we are removing processed chunks for your next retry, it will reduce the input and speed up`);

@@ -2107,16 +2107,38 @@ function isGatewayFailure(error: unknown): boolean {
   return error instanceof TypeError && (error.message === 'terminated' || error.message === 'fetch failed');
 }
 
+export type PenpotFileVersion = {
+  revn: number; // Incremented by each update
+  vern: number; // Incremented when restoring a previous version of the file
+};
+
+// Penpot answers each update with all changes stored after the given revision (the "lagged" changes, purged by a daily
+// cleanup), so the real revision must be provided, otherwise each response sends back all chunks pushed lately to the file
+// and gets slower until the gateway times out
+export async function getPenpotFileVersion(penpotProjectId: string, penpotDocumentId: string): Promise<PenpotFileVersion | null> {
+  // `get-project-files` is used since it does not load the file content contrary to `get-file`
+  const files = (await postGetProjectFiles({ requestBody: { projectId: penpotProjectId } })) as unknown as Array<{
+    id: string;
+    revn: number;
+    vern: number;
+  }>;
+
+  const file = files.find((item) => item.id === penpotDocumentId);
+
+  return file ? { revn: file.revn, vern: file.vern ?? 0 } : null;
+}
+
 export async function processOperationsChunk(
   penpotDocumentId: string,
   currentChunk: appCommonFilesChanges$changeWithoutUnknown[],
-  serverValidation: boolean = true
+  serverValidation: boolean = true,
+  version: PenpotFileVersion = { revn: 0, vern: 0 }
 ) {
   await postUpdateFile({
     requestBody: {
       id: penpotDocumentId,
-      revn: 0, // Required but does no block to use a default one
-      vern: 0, // Don't know what is it yet but it's required
+      revn: version.revn,
+      vern: version.vern,
       sessionId: '00000000-0000-0000-0000-000000000000', // It has to be UUID format, no matter the value for us
       changes: currentChunk,
       skipValidate: !serverValidation,
@@ -2291,6 +2313,17 @@ export async function processDifferences(
     // It's not perfect but it would add complexity to have it exact
     const remainingBodyBytes = bodyLimitBytes - 1_000_000;
 
+    // Since a revision lower than the stored one is accepted, falling back to the first one is safe (just slower)
+    const meta = await restoreMeta(dataDir, figmaDocumentId, penpotDocumentId);
+    const version = await getPenpotFileVersion(meta.penpotProjectId, penpotDocumentId).catch(() => null);
+
+    if (!version) {
+      console.warn(
+        `the current revision of the Penpot file "${penpotDocumentId}" cannot be retrieved, Penpot will send back all recent changes of the file after each chunk, which slows down pushes`
+      );
+    }
+
+    const fileVersion = version ?? { revn: 0, vern: 0 };
     const totalOperations = differences.newTreeOperations.length;
     let chunkNumber = 0;
     let succeededOperations = 0;
@@ -2302,9 +2335,10 @@ export async function processDifferences(
         chunkNumber++;
         pushSpinner.text = `Pushing chunk [${chunkNumber}] (${chunk.length} ops, ${succeededOperations}/${totalOperations} done) to Penpot file "${penpotDocumentId}"…`;
 
-        await processOperationsChunk(penpotDocumentId, chunk as appCommonFilesChanges$changeWithoutUnknown[], serverValidation);
+        await processOperationsChunk(penpotDocumentId, chunk as appCommonFilesChanges$changeWithoutUnknown[], serverValidation, fileVersion);
 
         succeededOperations += chunk.length;
+        fileVersion.revn++;
       }
 
       pushSpinner.succeed(

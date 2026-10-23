@@ -1058,6 +1058,69 @@ export function pushOperationsWithOrderingLogic(
   }
 }
 
+// Properties only set after creations (children order once they all exist, component bindings once main components exist),
+// so they can be moved to a later position without consequence
+const delayedAssignmentProperties = new Set([
+  'shapes',
+  'shapeRef',
+  'componentId',
+  'componentFile',
+  'componentRoot',
+  'mainInstance',
+  'isVariantContainer',
+  'variantId',
+  'variantName',
+]);
+
+// A shape often gets several delayed updates (its children order, then its component bindings), they are merged into the
+// last one to reduce the number of operations
+export function mergeDelayedAssignments(operations: (appCommonFilesChanges$changeWithoutUnknown | null)[]) {
+  const lastAssignmentIndex = new Map<string, number>();
+  let mergedCount = 0;
+
+  for (let index = operations.length - 1; index >= 0; index--) {
+    const operation = operations[index];
+
+    if (
+      !operation ||
+      operation.type !== 'mod-obj' ||
+      operation.operations.length !== 1 ||
+      operation.operations[0].type !== 'assign' ||
+      !Object.keys(operation.operations[0].value).every((property) => delayedAssignmentProperties.has(property))
+    ) {
+      continue;
+    }
+
+    const key = `${operation.pageId}|${operation.id}`;
+    const lastIndex = lastAssignmentIndex.get(key);
+
+    if (lastIndex === undefined) {
+      lastAssignmentIndex.set(key, index);
+
+      continue;
+    }
+
+    const lastOperation = operations[lastIndex];
+    assert(lastOperation && lastOperation.type === 'mod-obj' && lastOperation.operations[0].type === 'assign');
+
+    // The last assignment wins over earlier ones for a same property
+    lastOperation.operations[0].value = { ...operation.operations[0].value, ...lastOperation.operations[0].value };
+    operations[index] = null;
+    mergedCount++;
+  }
+
+  // Remove merged operations in place (the list can be huge)
+  if (mergedCount > 0) {
+    let writeIndex = 0;
+    for (const operation of operations) {
+      if (operation) {
+        operations[writeIndex++] = operation;
+      }
+    }
+    operations.length = writeIndex;
+  }
+}
+
 export function delayBindingOperation(
   delayedOperations: appCommonFilesChanges$changeWithoutUnknown[],
   nodeId: string,
@@ -1103,6 +1166,11 @@ export function delayBindingOperation(
   }
   if (shapeRef !== undefined) {
     delayedAssignValues.shapeRef = shapeRef;
+  }
+
+  // Nothing to bind (avoid sending operations doing nothing)
+  if (Object.keys(delayedAssignValues).length === 0) {
+    return;
   }
 
   delayedOperations.push({
@@ -1817,7 +1885,10 @@ export function getDifferences(
             ],
           };
 
-          pushOperationsWithOrderingLogic(operations, delayedOperations, nodeOperationsAfterChildrenAreProcessed, operation);
+          // When only delayed properties changed (component bindings...) there is nothing left to update right now
+          if (uniqueProperties.length > 0) {
+            pushOperationsWithOrderingLogic(operations, delayedOperations, nodeOperationsAfterChildrenAreProcessed, operation);
+          }
 
           if (
             item.before._apiType === 'node' &&
@@ -1932,6 +2003,8 @@ export function getDifferences(
       operations.push(delayedOperation);
     }
   }
+
+  mergeDelayedAssignments(operations);
 
   // Those grouped operations must be marked so the chunk logic knows when it's allowed to start a new chunk
   for (const [variantId, currentVariantOperations] of variantOperations) {

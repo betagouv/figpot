@@ -2336,17 +2336,28 @@ export async function processDifferences(
     let chunkNumber = 0;
     let succeededOperations = 0;
 
-    const pushSpinner = ora(`Pushing modifications to Penpot file "${penpotDocumentId}" (${totalOperations} operation(s))…`).start();
-    try {
-      // Operations of a same group are kept in the same chunk since the Penpot backend needs them at the same time
-      for (const chunk of chunkOperations(differences.newTreeOperations, chunkBytes)) {
-        chunkNumber++;
-        pushSpinner.text = `Pushing chunk [${chunkNumber}] (${chunk.length} ops, ${succeededOperations}/${totalOperations} done) to Penpot file "${penpotDocumentId}"…`;
+    // Operations of a same group are kept in the same chunk since the Penpot backend needs them at the same time
+    // Note: chunks are computed upfront to give the progress
+    const chunks = [...chunkOperations(differences.newTreeOperations, chunkBytes)];
 
+    const pushSpinner = ora(
+      `Pushing modifications to Penpot file "${penpotDocumentId}" (${totalOperations} operation(s) in ${chunks.length} chunk(s))…`
+    ).start();
+    try {
+      for (const chunk of chunks) {
+        chunkNumber++;
+        pushSpinner.text = `Pushing chunk [${chunkNumber}/${chunks.length}] (${chunk.length} ops, ${succeededOperations}/${totalOperations} done) to Penpot file "${penpotDocumentId}"…`;
+
+        const chunkStart = Date.now();
         await processOperationsChunk(penpotDocumentId, chunk as appCommonFilesChanges$changeWithoutUnknown[], serverValidation, fileVersion);
 
         succeededOperations += chunk.length;
         fileVersion.revn++;
+
+        // Without terminal (e.g. CI) the spinner text is not displayed, so progress is logged to know where a failure happened
+        if (!process.stderr.isTTY) {
+          console.log(`pushed chunk [${chunkNumber}/${chunks.length}] (${chunk.length} ops) in ${Math.round((Date.now() - chunkStart) / 1000)}s`);
+        }
       }
 
       pushSpinner.succeed(
@@ -2354,7 +2365,7 @@ export async function processDifferences(
       );
     } catch (error) {
       // Stop the spinner first so the recovery warnings below render cleanly (no clash with the animation)
-      pushSpinner.fail(`Failed while pushing chunk [${chunkNumber}] to Penpot file "${penpotDocumentId}"`);
+      pushSpinner.fail(`Failed while pushing chunk [${chunkNumber}/${chunks.length}] to Penpot file "${penpotDocumentId}"`);
 
       // Dump the full Penpot validation details so the user can investigate which shapes were
       // rejected (Node truncates `details` to "[Object]" by default and inline JSON is too long

@@ -224,7 +224,7 @@ export async function retrieveRemoteComponents(
 
       if (body?.status === 403 && !scopeWarningEmitted) {
         console.warn(
-          `\nsome remote components cannot be read by the Figma access token (status 403): either the token is missing the "Library assets" scope (read-only), or they belong to a file the token cannot access (for example a Community file not duplicated into your workspace). Their instances cannot be bound`
+          `\nsome remote components cannot be read by the Figma access token (status 403): either the token is missing the "Library assets" scope (read-only), or they belong to a file the token cannot access (for example a Community file not duplicated into your workspace, or the original file your libraries were duplicated from, when some instances still point to it instead of your copy: swap them in Figma to the equivalent of your libraries). Their instances cannot be bound`
         );
 
         scopeWarningEmitted = true;
@@ -304,7 +304,7 @@ export async function retrieveRemoteStyles(
 
       if (body?.status === 403 && !scopeWarningEmitted) {
         console.warn(
-          `\nsome remote styles cannot be read by the Figma access token (status 403): either the token is missing the "Library assets" scope (read-only), or they belong to a file the token cannot access (for example a Community file not duplicated into your workspace). Their usages cannot be bound`
+          `\nsome remote styles cannot be read by the Figma access token (status 403): either the token is missing the "Library assets" scope (read-only), or they belong to a file the token cannot access (for example a Community file not duplicated into your workspace, or the original file your libraries were duplicated from, when some layers still point to it instead of your copy: swap them in Figma to the equivalent of your libraries). Their usages cannot be bound`
         );
 
         scopeWarningEmitted = true;

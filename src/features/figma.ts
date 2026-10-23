@@ -30,6 +30,7 @@ import {
 } from '@figpot/src/clients/figma';
 import { DocumentOptionsType, ExcludePatternsType, ReplaceFontPatternType } from '@figpot/src/features/document';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
+import { sleep } from '@figpot/src/utils/sleep';
 
 export type FigmaDefinedTypography = {
   id: LocalVariable['id'];
@@ -685,15 +686,35 @@ export function patchDocument(
   }
 }
 
+const retrieveDocumentAttempts = 3;
+
+// Huge files are hundreds of megabytes and Figma sometimes closes the connection in the middle of the download,
+// so only those network failures are retried (API errors like 403 or 429 are thrown directly)
+function isInterruptedDownloadError(error: unknown): boolean {
+  return error instanceof TypeError && (error.message === 'terminated' || error.message === 'fetch failed');
+}
+
 export async function retrieveDocument(documentId: string) {
-  const documentTree = await getFile({
-    fileKey: documentId,
-    geometry: 'paths', // Needed to have all properties into nodes
-  });
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const documentTree = await getFile({
+        fileKey: documentId,
+        geometry: 'paths', // Needed to have all properties into nodes
+      });
 
-  // TODO: return the metadata
+      // TODO: return the metadata
 
-  return documentTree;
+      return documentTree;
+    } catch (error) {
+      if (attempt >= retrieveDocumentAttempts || !isInterruptedDownloadError(error)) {
+        throw error;
+      }
+
+      console.warn(`the download of the Figma document "${documentId}" has been interrupted, retrying (${attempt}/${retrieveDocumentAttempts - 1})…`);
+
+      await sleep(attempt * 10_000);
+    }
+  }
 }
 
 export async function retrieveDocumentsFromInput(): Promise<string[]> {

@@ -72,6 +72,22 @@ function extractTextSegments(node: TextNode): Paragraph[] {
     paragraphs.push(currentParagraph);
   }
 
+  // Penpot requires at least one paragraph, so an empty text is represented like Penpot does when clearing a text: one
+  // paragraph with an empty segment keeping the node style (needed for the typing to come)
+  if (paragraphs.length === 0) {
+    paragraphs.push([
+      {
+        characters: '',
+        style: {
+          ...node.style,
+          fills: node.style.fills ?? node.fills,
+        },
+        lineTypes: [],
+        lineIndentations: [],
+      },
+    ]);
+  }
+
   return paragraphs;
 }
 

@@ -35,4 +35,31 @@ describe('transformTextNode()', () => {
 
     expect(transformedNode).toMatchObject(penpotNode);
   });
+
+  it('should keep one empty paragraph for an empty text since Penpot requires one', () => {
+    const mapping: MappingType = {
+      lastExport: new Date(),
+      assets: new Map(),
+      documents: new Map(),
+      fonts: new Map(),
+      nodes: new Map([['49:30', '3bfca1c9-81bc-80ba-8004-91e26d0d0c48']]),
+      colors: new Map(),
+      typographies: new Map(),
+      components: new Map(),
+      tokenSets: new Map(),
+      tokens: new Map(),
+      tokenThemes: new Map(),
+    };
+
+    const registry = new Registry(mapping, '/tmp/figpot-test-data');
+    const registryPage = registry.newPage('random');
+    const emptyFigmaNode = { ...(figmaNode as TextNodeImport as TextNode), characters: '', characterStyleOverrides: [], styleOverrideTable: {} };
+
+    const transformedNode = transformTextNode(registryPage, emptyFigmaNode, neutralTransform);
+    const paragraphSets = transformedNode.content?.children ?? [];
+
+    expect(paragraphSets).toHaveLength(1);
+    expect(paragraphSets[0].children).toHaveLength(1);
+    expect(paragraphSets[0].children[0].children).toMatchObject([{ text: '' }]);
+  });
 });

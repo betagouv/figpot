@@ -1,4 +1,5 @@
 import { Component, InstanceNode, SubcanvasNode } from '@figpot/src/clients/figma';
+import { MainCopies } from '@figpot/src/features/mainCopies';
 import { translateComponentShapeId } from '@figpot/src/features/translators/translateId';
 
 // A nested instance whose component has been swapped in Figma (e.g. another variant) must
@@ -8,13 +9,24 @@ import { translateComponentShapeId } from '@figpot/src/features/translators/tran
 type SwapContext = {
   nodes: Map<string, SubcanvasNode>;
   components: Record<string, Component>;
+  remoteComponentSourceFiles: Map<string, string>; // Component key -> Figma file of its library
+  libraryMainCopies: Map<string, MainCopies>; // Figma file of a library -> copies inside its mains
   // Figma ID of a swapped instance -> swap slot (Penpot ID of the replaced shape in the near main)
   swappedInstances: Map<string, string>;
 };
 
-let context: SwapContext = { nodes: new Map(), components: {}, swappedInstances: new Map() };
+let context: SwapContext = emptyContext();
 
-export function initializeInstanceSwaps(document: SubcanvasNode, components: Record<string, Component>): void {
+function emptyContext(): SwapContext {
+  return { nodes: new Map(), components: {}, remoteComponentSourceFiles: new Map(), libraryMainCopies: new Map(), swappedInstances: new Map() };
+}
+
+export function initializeInstanceSwaps(
+  document: SubcanvasNode,
+  components: Record<string, Component>,
+  remoteComponentSourceFiles: Map<string, string> = new Map(),
+  libraryMainCopies: Map<string, MainCopies> = new Map()
+): void {
   const nodes = new Map<string, SubcanvasNode>();
 
   const index = (node: SubcanvasNode) => {
@@ -27,26 +39,34 @@ export function initializeInstanceSwaps(document: SubcanvasNode, components: Rec
 
   index(document);
 
-  context = { nodes, components, swappedInstances: new Map() };
+  context = { nodes, components, remoteComponentSourceFiles, libraryMainCopies, swappedInstances: new Map() };
 }
 
 // The context indexes the whole Figma document, it must be released once transformed so the next steps can use the memory
 export function releaseInstanceSwaps(): void {
-  context = { nodes: new Map(), components: {}, swappedInstances: new Map() };
+  context = emptyContext();
 }
 
 // A nested node ID is `I<instance>;<path in main>`, but inside a swapped instance the path belongs to the new component, so
-// it is resolved relative to the closest swapped ancestor
-export function getRelatedNodeId(nodeId: string): string | undefined {
+// it is resolved relative to the closest swapped ancestor (the anchor)
+function getRelatedPath(nodeId: string): { anchorId: string; relatedNodeId: string } | undefined {
   const ids = nodeId.split(';');
 
   for (let i = ids.length - 1; i > 0; i--) {
     if (i === 1 || context.swappedInstances.has(ids.slice(0, i).join(';'))) {
-      return ids.slice(i).join(';');
+      return { anchorId: ids.slice(0, i).join(';'), relatedNodeId: ids.slice(i).join(';') };
     }
   }
 
   return undefined;
+}
+
+export function getRelatedNodeId(nodeId: string): string | undefined {
+  return getRelatedPath(nodeId)?.relatedNodeId;
+}
+
+function getComponentKey(componentId: string): string {
+  return context.components[componentId]?.key ?? componentId;
 }
 
 // The Figma ID of the node a nested node refers to in its near main: when this path still goes through a nested instance,
@@ -56,23 +76,41 @@ export function getNearMainNodeId(relatedNodeId: string): string {
   return relatedNodeId.includes(';') ? `I${relatedNodeId}` : relatedNodeId;
 }
 
-// Must be called before the instance children are transformed so their references follow the swap
-export function registerInstanceSwap(node: InstanceNode): string | undefined {
-  const relatedNodeId = getRelatedNodeId(node.id);
-  if (!relatedNodeId) {
+// The component key of the node a nested instance replaces in its near main, when this node is an instance
+// Note: Figma IDs are only unique inside a file, so the near main is looked up in the file of the anchor component (the
+// instance the path is relative to)
+function getReplacedComponentKey(anchorId: string, replacedNodeId: string): string | undefined {
+  // The outermost anchor is an instance of the document whose ID has no `I` prefix
+  const anchorNode = context.nodes.get(anchorId) ?? context.nodes.get(anchorId.replace(/^I/, ''));
+  if (!anchorNode || anchorNode.type !== 'INSTANCE') {
     return undefined;
   }
 
-  const replacedNodeId = getNearMainNodeId(relatedNodeId);
-  const replacedNode = context.nodes.get(replacedNodeId);
-  if (!replacedNode || replacedNode.type !== 'INSTANCE') {
-    return undefined; // The near main is not part of this document (remote component), the swap cannot be detected
+  // The near main of a library component is only known through the copies retrieved from its library, even when its library
+  // cannot be resolved: looking it up in this document could match an unrelated node having the same ID
+  if (context.components[anchorNode.componentId]?.remote === true) {
+    const libraryFile = context.remoteComponentSourceFiles.get(getComponentKey(anchorNode.componentId));
+
+    return libraryFile ? context.libraryMainCopies.get(libraryFile)?.[replacedNodeId] : undefined;
   }
 
-  const replacedComponentKey = context.components[replacedNode.componentId]?.key ?? replacedNode.componentId;
-  const componentKey = context.components[node.componentId]?.key ?? node.componentId;
+  const replacedNode = context.nodes.get(replacedNodeId);
 
-  if (replacedComponentKey === componentKey) {
+  return replacedNode && replacedNode.type === 'INSTANCE' ? getComponentKey(replacedNode.componentId) : undefined;
+}
+
+// Must be called before the instance children are transformed so their references follow the swap
+export function registerInstanceSwap(node: InstanceNode): string | undefined {
+  const relatedPath = getRelatedPath(node.id);
+  if (!relatedPath) {
+    return undefined;
+  }
+
+  const { anchorId, relatedNodeId } = relatedPath;
+  const replacedComponentKey = getReplacedComponentKey(anchorId, getNearMainNodeId(relatedNodeId));
+
+  // Unknown when not an instance, or when the near main is in a library whose mains could not be retrieved (the swap cannot be detected)
+  if (!replacedComponentKey || replacedComponentKey === getComponentKey(node.componentId)) {
     return undefined;
   }
 

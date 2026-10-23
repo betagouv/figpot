@@ -29,6 +29,7 @@ import {
   getTeamProjects,
 } from '@figpot/src/clients/figma';
 import { DocumentOptionsType, ExcludePatternsType, ReplaceFontPatternType } from '@figpot/src/features/document';
+import { MainCopies, buildMainCopies } from '@figpot/src/features/mainCopies';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { sleep } from '@figpot/src/utils/sleep';
 
@@ -235,6 +236,51 @@ export async function retrieveRemoteComponents(
   }
 
   return remoteComponentSourceFiles;
+}
+
+// The Figma file endpoint does not provide the content of remote mains, whereas detecting swaps inside instances of library
+// components requires knowing the copies inside their mains. So the mains of the library components used by a document are
+// retrieved (once per component, whatever its number of instances) to index their copies: library Figma file -> copies
+// Mains can be big (all their layers are returned), so they are requested by small batches
+const mainsPerRequest = 20;
+
+export async function retrieveLibraryMainCopies(remoteComponentSourceFiles: Record<string, string>): Promise<Record<string, MainCopies>> {
+  const componentKeysByFile = new Map<string, Set<string>>();
+  for (const [componentKey, figmaFile] of Object.entries(remoteComponentSourceFiles)) {
+    componentKeysByFile.set(figmaFile, (componentKeysByFile.get(figmaFile) ?? new Set()).add(componentKey));
+  }
+
+  const libraryMainCopies: Record<string, MainCopies> = {};
+
+  for (const [figmaFile, componentKeys] of componentKeysByFile) {
+    try {
+      const publishedComponents = await getFileComponents({ fileKey: figmaFile });
+      const mainIds = publishedComponents.meta.components
+        .filter((component) => componentKeys.has(component.key))
+        .map((component) => component.node_id);
+      const mainCopies: MainCopies = {};
+
+      for (const urlChunk of chunkIdsForUrlLength(mainIds, `https://api.figma.com/v1/files/${figmaFile}/nodes?ids=`)) {
+        for (let i = 0; i < urlChunk.length; i += mainsPerRequest) {
+          const response = await getFileNodes({ fileKey: figmaFile, ids: urlChunk.slice(i, i + mainsPerRequest).join(',') });
+
+          for (const node of Object.values(response.nodes)) {
+            if (node) {
+              Object.assign(mainCopies, buildMainCopies(node.document as unknown as SubcanvasNode, node.components));
+            }
+          }
+        }
+      }
+
+      libraryMainCopies[figmaFile] = mainCopies;
+    } catch (error) {
+      console.warn(
+        `\nthe mains of the components used from the library "${figmaFile}" cannot be retrieved, swaps inside their instances will not be detected (Penpot may reject or revert them): ${error instanceof Error ? error.message : error}`
+      );
+    }
+  }
+
+  return libraryMainCopies;
 }
 
 // Lists every component published by the given Figma file. Cheap way to populate the

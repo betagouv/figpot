@@ -45,6 +45,36 @@ describe('transformInstanceSwaps', () => {
     expect(getRelatedNodeId('I2:1;1:2;6:1')).toBe('1:2;6:1');
   });
 
+  it('should detect a swap inside a copy of a library component thanks to the copies of the library mains', () => {
+    // Instance "3:1" of the library component "L" whose main contains the copy "10:2" of component "A", swapped here for "B"
+    // Note: "10:2" also exists in this document with another component, it must not be used since IDs are scoped to files
+    const libraryDocument = {
+      id: '0:0',
+      type: 'DOCUMENT',
+      children: [
+        { id: '10:2', type: 'INSTANCE', componentId: 'B', children: [] },
+        { id: '3:1', type: 'INSTANCE', componentId: 'L', children: [{ id: 'I3:1;10:2', type: 'INSTANCE', componentId: 'B', children: [] }] },
+      ],
+    } as unknown as SubcanvasNode;
+    const libraryComponents = { ...components, L: { key: 'key-library', remote: true } } as unknown as Record<string, Component>;
+
+    initializeInstanceSwaps(
+      libraryDocument,
+      libraryComponents,
+      new Map([['key-library', 'libraryFile']]),
+      new Map([['libraryFile', { '10:2': 'key-a' }]])
+    );
+    expect(registerInstanceSwap({ id: 'I3:1;10:2', componentId: 'B' } as InstanceNode)).toBe(deterministicUuid('10:2'));
+
+    // Without the copies of the library mains the swap cannot be detected
+    initializeInstanceSwaps(libraryDocument, libraryComponents, new Map([['key-library', 'libraryFile']]));
+    expect(registerInstanceSwap({ id: 'I3:1;10:2', componentId: 'B' } as InstanceNode)).toBeUndefined();
+
+    // Nor when the library cannot be resolved, even if this document has a node with the same ID
+    initializeInstanceSwaps(libraryDocument, { ...components, L: { key: 'key-library', remote: true } } as unknown as Record<string, Component>);
+    expect(registerInstanceSwap({ id: 'I3:1;10:2', componentId: 'A' } as InstanceNode)).toBeUndefined();
+  });
+
   it('should refer to the node of the near main, prefixed when it is inside a nested instance', () => {
     expect(getNearMainNodeId('1:2')).toBe('1:2');
     expect(getNearMainNodeId('1:2;5:1')).toBe('I1:2;5:1');

@@ -53,6 +53,7 @@ import {
   retrieveDocument,
   retrieveFigmaFileAccessInfo,
   retrieveFigmaFileName,
+  retrieveLibraryMainCopies,
   retrieveLibraryPublishedComponents,
   retrieveLibraryPublishedStyles,
   retrieveRemoteComponents,
@@ -63,6 +64,7 @@ import {
 } from '@figpot/src/features/figma';
 import { restoreMappingFromRepository, saveMappingToRepository } from '@figpot/src/features/git';
 import { findLibraryUsages, formatLibraryUsages } from '@figpot/src/features/libraryUsages';
+import { MainCopies } from '@figpot/src/features/mainCopies';
 import { cleanHostedDocument, penpotSupportsTokensStatus } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
 import { FigmaVariablesData, emptyFigmaVariablesData } from '@figpot/src/features/translators/tokens/translateTokens';
@@ -252,6 +254,10 @@ export function getFigmaDocumentRemoteComponentsPath(dataDir: string, documentId
   return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'remote-components.json');
 }
 
+export function getFigmaDocumentLibraryMainCopiesPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'library-main-copies.json');
+}
+
 export function getFigmaDocumentRemoteStylesPath(dataDir: string, documentId: string) {
   return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'remote-styles.json');
 }
@@ -357,6 +363,21 @@ export async function readFigmaRemoteComponentsFile(dataDir: string, documentId:
   const remoteComponentsString = await fs.readFile(remoteComponentsPath, 'utf-8');
 
   return JSON.parse(remoteComponentsString) as Record<string, string>;
+}
+
+// Copies inside the mains of the library components used by the document (see `retrieveLibraryMainCopies()`)
+export async function readFigmaLibraryMainCopiesFile(dataDir: string, documentId: string): Promise<Map<string, MainCopies>> {
+  const libraryMainCopiesPath = getFigmaDocumentLibraryMainCopiesPath(dataDir, documentId);
+
+  if (!fsSync.existsSync(libraryMainCopiesPath)) {
+    console.warn(
+      `the mains of the library components used by "${documentId}" have not been retrieved, swaps inside their instances will not be detected (Penpot may reject or revert them). Retrieve the document again to get them`
+    );
+
+    return new Map();
+  }
+
+  return new Map(Object.entries(JSON.parse(await fs.readFile(libraryMainCopiesPath, 'utf-8')) as Record<string, MainCopies>));
 }
 
 export async function readFigmaRemoteStylesFile(dataDir: string, documentId: string): Promise<Record<string, string>> {
@@ -748,6 +769,7 @@ export async function retrieve(options: RetrieveOptionsType, figmaMetaCache: Fig
   if (options.skipLibraries) {
     for (const document of options.documents) {
       await fs.writeFile(getFigmaDocumentRemoteComponentsPath(options.dataDir, document.figmaDocument), '{}', { encoding: 'utf-8' });
+      await fs.writeFile(getFigmaDocumentLibraryMainCopiesPath(options.dataDir, document.figmaDocument), '{}', { encoding: 'utf-8' });
       await fs.writeFile(getFigmaDocumentRemoteStylesPath(options.dataDir, document.figmaDocument), '{}', { encoding: 'utf-8' });
     }
   } else {
@@ -810,6 +832,16 @@ export async function retrieve(options: RetrieveOptionsType, figmaMetaCache: Fig
           }
         );
 
+        // Reused from the cache since the mains of library components are only needed to detect swaps
+        const libraryMainCopiesPath = getFigmaDocumentLibraryMainCopiesPath(options.dataDir, document.figmaDocument);
+        if (!options.useCachedFigmaData || !fsSync.existsSync(libraryMainCopiesPath)) {
+          crossFileSpinner.text = `Resolving cross-file bindings: retrieving the mains of library components used by "${document.figmaDocument}"…`;
+
+          await fs.writeFile(libraryMainCopiesPath, JSON.stringify(await retrieveLibraryMainCopies(remoteComponentSourceFiles)), {
+            encoding: 'utf-8',
+          });
+        }
+
         const remoteStyleSourceFiles = await retrieveRemoteStyles(figmaStyles, publishersByStyleKey, options.skipInferringLibraries);
         await fs.writeFile(
           getFigmaDocumentRemoteStylesPath(options.dataDir, document.figmaDocument),
@@ -839,7 +871,8 @@ export function transformDocument(
   remoteComponentSourceFiles: Map<string, string>,
   remoteStyleSourceFiles: Map<string, string>,
   mapping: MappingType,
-  dataDir: string
+  dataDir: string,
+  libraryMainCopies: Map<string, MainCopies> = new Map()
 ) {
   // Go from the Figma format to the Penpot one
   const penpotTree = transformDocumentNode(
@@ -852,7 +885,8 @@ export function transformDocument(
     remoteComponentSourceFiles,
     remoteStyleSourceFiles,
     mapping,
-    dataDir
+    dataDir,
+    libraryMainCopies
   );
 
   // We have to patch the document since `{}` is not equal to `{ a: undefined }`,
@@ -926,6 +960,8 @@ export async function transform(options: TransformOptionsType) {
 
     patchDocument(figmaTree, figmaColors, figmaTypographies, options.excludePatterns, options.replaceFontPatterns);
 
+    const libraryMainCopies = await readFigmaLibraryMainCopiesFile(options.dataDir, document.figmaDocument);
+
     const elementsCount = countTotalElements(figmaTree, figmaColors, figmaTypographies);
 
     console.log(`the figma document contains around ${elementsCount} elements`);
@@ -966,7 +1002,8 @@ export async function transform(options: TransformOptionsType) {
       remoteComponentSourceFiles,
       remoteStyleSourceFiles,
       mapping,
-      options.dataDir
+      options.dataDir,
+      libraryMainCopies
     );
 
     // Save mapping for later usage

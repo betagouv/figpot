@@ -120,9 +120,10 @@ export function translateComponentId(figmaComponentKey: string): string {
 
 // Shapes inside a component definition get IDs derived from their Figma ID so copies, even from other files, can refer to
 // them. The leading `I` of nodes inside a nested instance is removed, as the paths used by copies (`shapeRef`) do not have it
+// The prefix is for the extra Penpot shapes created for a Figma node (`V<index>` for vector paths, `M` for mask groups)
 // Note: same derivation as `penpot-exporter-figma-plugin` so mockups exported with it can refer to libraries synchronized by figpot
-export function translateComponentShapeId(figmaNodeId: string): string {
-  return deterministicUuid(figmaNodeId.replace(/^I/, ''));
+export function translateComponentShapeId(figmaNodeId: string, prefix: string = ''): string {
+  return deterministicUuid(`${prefix}${figmaNodeId.replace(/^I/, '')}`);
 }
 
 // Penpot's `mainInstanceId` property on an instance is targeting the "main instance" that is under the component node

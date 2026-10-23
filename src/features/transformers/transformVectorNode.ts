@@ -5,9 +5,10 @@ import {
   transformDimensionAndRotationAndPosition,
 } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
+import { getRelatedNodeId } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
 import { transformVectorPaths } from '@figpot/src/features/transformers/partials/transformVectorPaths';
 import { transformGroupNodeLike } from '@figpot/src/features/transformers/transformGroupNode';
-import { translateId } from '@figpot/src/features/translators/translateId';
+import { translateComponentShapeId, translateId } from '@figpot/src/features/translators/translateId';
 import { Bounds, getPathContentBounds } from '@figpot/src/features/translators/vectors/getPathContentBounds';
 import { GroupShape } from '@figpot/src/models/entities/penpot/shapes/group';
 import { PathShape } from '@figpot/src/models/entities/penpot/shapes/path';
@@ -58,6 +59,7 @@ export function transformVectorNode(
   // The group ID will be set by an upper `transformChildren` call, but we need to set to the group children
   // We cannot directly reuse `transformChildren/translateChildren` for this specific case, so duplicating a bit the logic
   const shapes: string[] = [];
+  const relatedNodeId = getRelatedNodeId(node.id);
 
   for (const [penpotChildIndex, penpotChild] of Object.entries(children)) {
     penpotChild.name = `Shape ${parseInt(penpotChildIndex, 10) + 1}`;
@@ -69,7 +71,10 @@ export function transformVectorNode(
       ...(childBounds
         ? transformAxisAlignedDimensionAndPosition(childBounds.x, childBounds.y, childBounds.width, childBounds.height)
         : dimensionRotationPosition),
-      id: translateId(`${node.id}_path_${penpotChildIndex}`, registry.getMapping()), // We use the index since we have no other indentifiable metadata
+      // Deterministic like the node itself when inside a component, so copies can refer to the path of their main
+      // Note: the index is used since there is no other identifiable metadata
+      id: translateComponentShapeId(node.id, `V${penpotChildIndex}`),
+      ...(relatedNodeId ? { shapeRef: translateComponentShapeId(relatedNodeId, `V${penpotChildIndex}`) } : {}),
       parentId: translateId(node.id, registry.getMapping()),
       frameId: translateId(closestFigmaFrameId, registry.getMapping()),
     };

@@ -33,6 +33,8 @@ export function detectLocalFigmaComponents(foundComponentsIds: string[], figmaNo
 // Figma node ID. So if any other is referencing them they will directly use the right ID
 function registerComponentSubtreeIds(figmaNode: GetFileResponse, mapping: MappingType): void {
   function walk(node: SubcanvasNode, insideComponent: boolean): void {
+    // Note: unlike `penpot-exporter-figma-plugin`, component sets keep their mapped ID since no other file refers to them,
+    // and changing it would require moving the variants into a new container, which Penpot refuses until it is marked as such
     if (insideComponent && node.type !== 'COMPONENT' && node.type !== 'COMPONENT_SET') {
       registerId(node.id, translateComponentShapeId(node.id), mapping);
     }

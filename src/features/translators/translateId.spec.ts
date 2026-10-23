@@ -24,4 +24,9 @@ describe('translateComponentShapeId()', () => {
     expect(translateComponentShapeId('I1:2;5:1')).toBe(deterministicUuid('1:2;5:1'));
     expect(translateComponentShapeId('1:2')).toBe(deterministicUuid('1:2'));
   });
+
+  it('should prefix the extra shapes created for a node after removing the leading I', () => {
+    expect(translateComponentShapeId('I1:2;5:1', 'V0')).toBe(deterministicUuid('V01:2;5:1'));
+    expect(translateComponentShapeId('5:1', 'M')).toBe(deterministicUuid('M5:1'));
+  });
 });

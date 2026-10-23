@@ -173,6 +173,20 @@ export type PromptingType = z.infer<typeof Prompting>;
 export const ServerValidation = z.boolean().optional();
 export type ServerValidationType = z.infer<typeof ServerValidation>;
 
+// [IMPORTANT] Penpot rejects requests over `PENPOT_HTTP_SERVER_MAX_BODY_SIZE` (31457280, 30MB, by default) so operations are chunked
+// (`PENPOT_HTTP_SERVER_MAX_MULTIPART_BODY_SIZE` only concerns multipart requests like medias uploads)
+// For huge design systems the limit is easily reached since in adddition we use raw JSON and not the Penpot transit protocol that could help a bit (but would complexify the implementation since no JS Penpot mapper for now)
+// Note: the chunk size only counts operations, so it should stay a bit under the limit to leave room for the rest of the request
+
+// Instances are usually behind a proxy cutting requests after about 60 seconds (Penpot still applying the chunk behind), and
+// the time Penpot takes to apply a chunk mostly depends on the file size (with a file of 500k nodes, a 10MB chunk takes about
+// 40 to 60 seconds, a 30MB one about 50 to 65 seconds), so chunks stay big to limit the number of requests, and a proxy timeout
+// is confirmed by watching the file revision (see `waitForPenpotFileRevision()`)
+export const defaultPushChunkSize = 25; // In megabytes
+
+export const PushChunkSize = z.number().positive().optional();
+export type PushChunkSizeType = z.infer<typeof PushChunkSize>;
+
 export const Metadata = z.object({
   figmaDocumentId: z.string(),
   figmaLastModified: z.string().pipe(z.coerce.date()),
@@ -2165,7 +2179,8 @@ export async function processDifferences(
   penpotDocumentId: string,
   differences: Differences,
   serverValidation: boolean = true,
-  prompting: boolean = true
+  prompting: boolean = true,
+  pushChunkSize: PushChunkSizeType = defaultPushChunkSize
 ) {
   // Note: seeing the name change in the UI requires a browser page refresh
   if (differences.newDocumentName) {
@@ -2303,15 +2318,8 @@ export async function processDifferences(
       );
     }
 
-    // [IMPORTANT] The Penpot scripts defines a default maximum body to 314572800 (300MB) (see `PENPOT_HTTP_SERVER_MAX_MULTIPART_BODY_SIZE`)
-    // but this seems not used in their code. The limit reached at runtime is 31457280 (30MB)
-    // For huge design systems the limit is easily reached since in adddition we use raw JSON and not the Penpot transit protocol that could help a bit (but would complexify the implementation since no JS Penpot mapper for now)
-    // We need to chunk operations if needed
-    const bodyLimitBytes = 31_457_280;
-
-    // Removing a hardcoded amount simulating the `Differences` structure
-    // It's not perfect but it would add complexity to have it exact
-    const remainingBodyBytes = bodyLimitBytes - 1_000_000;
+    // We need to chunk operations if needed (see `defaultPushChunkSize` for details)
+    const chunkBytes = Math.floor((pushChunkSize ?? defaultPushChunkSize) * 1024 * 1024);
 
     // Since a revision lower than the stored one is accepted, falling back to the first one is safe (just slower)
     const meta = await restoreMeta(dataDir, figmaDocumentId, penpotDocumentId);
@@ -2331,7 +2339,7 @@ export async function processDifferences(
     const pushSpinner = ora(`Pushing modifications to Penpot file "${penpotDocumentId}" (${totalOperations} operation(s))…`).start();
     try {
       // Operations of a same group are kept in the same chunk since the Penpot backend needs them at the same time
-      for (const chunk of chunkOperations(differences.newTreeOperations, remainingBodyBytes)) {
+      for (const chunk of chunkOperations(differences.newTreeOperations, chunkBytes)) {
         chunkNumber++;
         pushSpinner.text = `Pushing chunk [${chunkNumber}] (${chunk.length} ops, ${succeededOperations}/${totalOperations} done) to Penpot file "${penpotDocumentId}"…`;
 
@@ -2368,7 +2376,7 @@ export async function processDifferences(
         // The intermediary (e.g. Cloudflare) gave up waiting but the Penpot server may still have processed the chunk, so
         // resuming from the remaining operations could apply it twice: the comparison must be done again from the real state
         console.warn(
-          `The Penpot server did not answer in time through its intermediary (gateway timeout). Since a lot of data is pushed, the server may still have processed the chunk behind it, but there is no way to be sure. Wait about 5 minutes for the server to finish, then rerun your command adding "--use-cached-figma-data": it compares again with the current Penpot state before pushing, without fetching Figma again. Note the comparison now also loads the Penpot file content, so it needs more memory than before`
+          `The Penpot server did not answer in time through its intermediary (gateway timeout). Since a lot of data is pushed, the server may still have processed the chunk behind it, but there is no way to be sure. Wait about 5 minutes for the server to finish, then rerun your command adding "--use-cached-figma-data": it compares again with the current Penpot state before pushing, without fetching Figma again. Note the comparison now also loads the Penpot file content, so it needs more memory than before. If it happens again, lower "--push-chunk-size" (currently ${pushChunkSize ?? defaultPushChunkSize}MB) so each request finishes in time`
         );
       } else if (succeededOperations > 0) {
         console.warn(`Wait a bit since we are removing processed chunks for your next retry, it will reduce the input and speed up`);
@@ -2433,6 +2441,7 @@ export const SetOptions = z.object({
   dataDir: z.string(),
   documents: z.array(DocumentOptions),
   serverValidation: ServerValidation,
+  pushChunkSize: PushChunkSize,
   prompting: Prompting,
 });
 export type SetOptionsType = z.infer<typeof SetOptions>;
@@ -2443,7 +2452,15 @@ export async function set(options: SetOptionsType) {
   for (const document of options.documents) {
     const diff = await readFigmaToPenpotDiffFile(options.dataDir, document.figmaDocument, document.penpotDocument);
 
-    await processDifferences(options.dataDir, document.figmaDocument, document.penpotDocument, diff, options.serverValidation, options.prompting);
+    await processDifferences(
+      options.dataDir,
+      document.figmaDocument,
+      document.penpotDocument,
+      diff,
+      options.serverValidation,
+      options.prompting,
+      options.pushChunkSize
+    );
   }
 }
 
@@ -2940,6 +2957,7 @@ export const SynchronizeOptions = z.object({
   hydrateTimeout: Duration.nullable(),
   syncMappingWithGit: z.boolean(),
   serverValidation: ServerValidation,
+  pushChunkSize: PushChunkSize,
   prompting: Prompting,
   useCachedFigmaData: z.boolean(),
   libraries: z.array(DocumentOptions).default([]),

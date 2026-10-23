@@ -1,4 +1,4 @@
-import { Command, Option } from '@commander-js/extra-typings';
+import { Command, InvalidArgumentError, Option } from '@commander-js/extra-typings';
 import { $ } from 'execa';
 import path from 'path';
 
@@ -11,6 +11,7 @@ import {
   SynchronizeOptions,
   TransformOptions,
   compare,
+  defaultPushChunkSize,
   hydrate,
   resolveDefaultDataDir,
   resolveDocumentDestinations,
@@ -66,6 +67,18 @@ const serverValidationOption = new Option(
   '--no-server-validation',
   'skip Penpot validation server-side, useful for big files or for a Penpot instance with limited resources, use it with caution'
 );
+const pushChunkSizeOption = new Option(
+  '--push-chunk-size <megabytes>',
+  `maximum size of the modifications sent to Penpot per request (default ${defaultPushChunkSize}). Lower it if pushes fail with a gateway timeout (the Penpot instance takes too long to apply them), raise it to push faster on a powerful instance while staying a bit under its "PENPOT_HTTP_SERVER_MAX_BODY_SIZE" (30MB by default)`
+).argParser((value) => {
+  const size = Number(value);
+
+  if (!(size > 0)) {
+    throw new InvalidArgumentError('it must be a positive number of megabytes');
+  }
+
+  return size;
+});
 const useCachedFigmaDataOption = new Option(
   '--use-cached-figma-data',
   'reuse the previously retrieved Figma data (tree, colors, typographies) from local cache instead of fetching it again (useful to avoid Figma rate limits or plan-based restrictions during iteration)'
@@ -174,6 +187,7 @@ document
   .addOption(replaceFontPatternsOption)
   .addOption(syncMappingWithGitOption)
   .addOption(serverValidationOption)
+  .addOption(pushChunkSizeOption)
   .addOption(useCachedFigmaDataOption)
   .addOption(dataDirOption)
   .addOption(continuousIntegrationOption)
@@ -225,6 +239,7 @@ document
         hydrateTimeout: options.hydrateTimeout || null,
         syncMappingWithGit: options.syncMappingWithGit || false,
         serverValidation: options.serverValidation,
+        pushChunkSize: options.pushChunkSize,
         prompting: !options.ci,
         useCachedFigmaData: options.useCachedFigmaData || false,
       }),
@@ -357,6 +372,7 @@ debugDocument
   .description('execute operations')
   .addOption(documentsOption)
   .addOption(serverValidationOption)
+  .addOption(pushChunkSizeOption)
   .addOption(dataDirOption)
   .addOption(continuousIntegrationOption)
   .action(async (options) => {
@@ -370,6 +386,7 @@ debugDocument
         dataDir: dataDir,
         documents: documents,
         serverValidation: options.serverValidation,
+        pushChunkSize: options.pushChunkSize,
         prompting: !options.ci,
       })
     );

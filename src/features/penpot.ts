@@ -198,6 +198,13 @@ export function cleanHostedDocument(hostedTree: PostGetFileResponse): PenpotDocu
     rootFrameNode.parentId = newRootFrameNodeId;
     rootFrameNode.frameId = newRootFrameNodeId;
 
+    // Penpot sets a zero radius on root frames whereas they cannot have one, the transformation leaves it empty
+    for (const radius of ['r1', 'r2', 'r3', 'r4'] as const) {
+      if (rootFrameNode[radius] === 0) {
+        delete rootFrameNode[radius];
+      }
+    }
+
     // To go fully with this logic, also change the object key
     page.objects[newRootFrameNodeId] = rootFrameNode;
     delete page.objects[rootFrameKey];
@@ -232,6 +239,9 @@ export function cleanHostedDocument(hostedTree: PostGetFileResponse): PenpotDocu
           const normalizedPaths = parseSVG(object.content);
 
           object.content = translateNonRotatedCommands(normalizedPaths, 0, 0);
+        } else if ((object.content as unknown) === '') {
+          // An empty shape (e.g. a boolean operation without visible result) has no command
+          object.content = [] as unknown as typeof object.content;
         }
       }
     }

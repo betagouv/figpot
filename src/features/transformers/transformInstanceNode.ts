@@ -56,7 +56,8 @@ export function transformInstanceNode(registry: AbstractRegistry, node: Instance
       }
 
       if (swapSlot) {
-        instanceFrame.touched = [...(instanceFrame.touched ?? []), `swap-slot-${swapSlot}`];
+        // Sorted like in `translateTouched()` since Penpot stores them as a set
+        instanceFrame.touched = ([...(instanceFrame.touched ?? []), `swap-slot-${swapSlot}`] as NonNullable<typeof instanceFrame.touched>).sort();
       }
 
       return instanceFrame;
@@ -74,7 +75,8 @@ export function transformInstanceNode(registry: AbstractRegistry, node: Instance
     }
 
     if (swapSlot) {
-      instanceFrame.touched = [...(instanceFrame.touched ?? []), `swap-slot-${swapSlot}`];
+      // Sorted like in `translateTouched()` since Penpot stores them as a set
+      instanceFrame.touched = ([...(instanceFrame.touched ?? []), `swap-slot-${swapSlot}`] as NonNullable<typeof instanceFrame.touched>).sort();
     }
 
     return instanceFrame;

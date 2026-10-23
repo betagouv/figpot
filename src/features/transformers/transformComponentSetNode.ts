@@ -17,8 +17,8 @@ export function transformComponentSetNode(registry: AbstractRegistry, node: Comp
     const defaultProperties = new Map<string, string | boolean>();
 
     for (const [definitionName, definition] of definitions) {
-      // Only those typed as "variant" mean properties
-      if (definition.type === 'VARIANT') {
+      // Only those typed as "variant" mean properties (their default value is a text, other types may have objects like slot contents)
+      if (definition.type === 'VARIANT' && typeof definition.defaultValue !== 'object') {
         // There is no ID to retrieve the right component with those information so we have to keep track of visible properties names and values
         defaultProperties.set(definitionName, definition.defaultValue);
       }

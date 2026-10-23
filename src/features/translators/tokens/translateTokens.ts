@@ -172,6 +172,15 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
           continue;
         }
 
+        // A color composed with another variable (for its color or its opacity) has no Penpot token equivalent for now
+        if (typeof rawValue === 'object' && rawValue !== null && 'color' in rawValue && 'opacity' in rawValue) {
+          console.warn(
+            `skipping the token for the Figma variable "${variable.name}" because its color is composed with another variable, which figpot cannot translate`
+          );
+
+          continue;
+        }
+
         const types = translateScope(variable);
 
         // Track warning-surface lists once per variable (the inner loop runs again for every mode

@@ -2383,20 +2383,28 @@ export async function processDifferences(
           fileVersion
         );
       } catch (error) {
-        // The proxy gave up waiting but Penpot may still be applying the chunk, the revision tells when it's done
+        // The proxy gave up waiting but Penpot may still be applying the chunk, and Penpot itself can fail after having saved
+        // the changes (e.g. while answering), so the revision tells if they have been applied. Sending them again would
+        // apply them twice
         // Note: without the current revision it cannot be confirmed, so the push stops
-        if (!isGatewayFailure(error) || !version) {
+        const gatewayFailure = isGatewayFailure(error);
+        const serverFailure = error instanceof PenpotApiError && error.status === 500;
+
+        if (!(gatewayFailure || serverFailure) || !version) {
           throw error;
         }
 
-        pushSpinner.text = `Chunk [${chunkNumber}/${chunks.length}] got no answer in time (gateway timeout), watching the file revision to confirm it has been applied…`;
+        pushSpinner.text = `Chunk [${chunkNumber}/${chunks.length}] got ${gatewayFailure ? 'no answer in time (gateway timeout)' : 'a server error'}, checking the file revision to know if it has been applied…`;
 
-        if (!(await waitForPenpotFileRevision(meta.penpotProjectId, penpotDocumentId, fileVersion.revn + 1))) {
+        // A server error is the final answer so the revision is already up to date, contrary to a gateway timeout
+        if (!(await waitForPenpotFileRevision(meta.penpotProjectId, penpotDocumentId, fileVersion.revn + 1, gatewayFailure ? 5 * 60_000 : 20_000))) {
           throw error;
         }
 
         if (!process.stderr.isTTY) {
-          console.log(`chunk [${chunkNumber}/${chunks.length}] got no answer in time but the file revision confirms it has been applied`);
+          console.log(
+            `chunk [${chunkNumber}/${chunks.length}] got ${gatewayFailure ? 'no answer in time' : 'a server error'} but the file revision confirms it has been applied`
+          );
         }
       }
 

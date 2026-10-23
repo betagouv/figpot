@@ -35,6 +35,7 @@ import {
   postGetProjects,
   postGetTeams,
   postLinkFileToLibrary,
+  postSetFileShared,
 } from '@figpot/src/clients/penpot';
 import { ApiError as PenpotApiError, PostGetFileResponse, postGetFile, postRenameFile, postUpdateFile } from '@figpot/src/clients/penpot';
 import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/workaround';
@@ -3263,10 +3264,26 @@ export async function synchronize(options: SynchronizeOptionsType, figmaMetaCach
       libraryFiles.set(lib.figmaDocument, lib.penpotDocument);
     }
 
+    const sharedLibraries = new Set<string>();
+
     for (const consumer of resolvedOptions.documents) {
       for (const [figmaLibraryId, penpotLibraryId] of libraryFiles) {
         if (figmaLibraryId === consumer.figmaDocument) {
           continue; // No need to link a file to itself
+        }
+
+        // The API accepts linking any file, but the Penpot interface (and the relinking when importing exported files) only
+        // considers shared files as libraries, so a library file is shared once before being linked
+        if (!sharedLibraries.has(penpotLibraryId)) {
+          try {
+            await postSetFileShared({ requestBody: { id: penpotLibraryId, isShared: true } });
+
+            sharedLibraries.add(penpotLibraryId);
+          } catch (error) {
+            console.warn(
+              `could not share the Penpot file ${penpotLibraryId} as a library, it will not be proposed as such in the Penpot interface: ${error instanceof Error ? error.message : error}`
+            );
+          }
         }
 
         try {

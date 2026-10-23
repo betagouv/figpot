@@ -36,8 +36,9 @@ import {
   postGetTeams,
   postLinkFileToLibrary,
 } from '@figpot/src/clients/penpot';
-import { PostGetFileResponse, postGetFile, postRenameFile, postUpdateFile } from '@figpot/src/clients/penpot';
+import { ApiError as PenpotApiError, PostGetFileResponse, postGetFile, postRenameFile, postUpdateFile } from '@figpot/src/clients/penpot';
 import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/workaround';
+import { chunkOperations } from '@figpot/src/features/chunks';
 import {
   FigmaDefinedColor,
   FigmaDefinedEffectStyle,
@@ -2091,6 +2092,15 @@ export async function compare(options: CompareOptionsType) {
   }
 }
 
+// Errors from an intermediary (gateway, proxy) or a cut connection, meaning the request may still have been processed
+function isGatewayFailure(error: unknown): boolean {
+  if (error instanceof PenpotApiError) {
+    return [502, 503, 504, 520, 522, 524].includes(error.status);
+  }
+
+  return error instanceof TypeError && (error.message === 'terminated' || error.message === 'fetch failed');
+}
+
 export async function processOperationsChunk(
   penpotDocumentId: string,
   currentChunk: appCommonFilesChanges$changeWithoutUnknown[],
@@ -2258,54 +2268,19 @@ export async function processDifferences(
     const remainingBodyBytes = bodyLimitBytes - 1_000_000;
 
     const totalOperations = differences.newTreeOperations.length;
-    let chunkNumber = 1;
-    let currentChunkCount = 0;
-    let currentChunk: appCommonFilesChanges$changeWithoutUnknown[] = [];
-    let currentGroupId: string | null = null;
-    let currentGroupCount: number = 0;
+    let chunkNumber = 0;
     let succeededOperations = 0;
 
     const pushSpinner = ora(`Pushing modifications to Penpot file "${penpotDocumentId}" (${totalOperations} operation(s))…`).start();
     try {
-      for (const { _groupId, _lastOfTheGroup, ...operation } of differences.newTreeOperations) {
-        const encodedOperationLength = JSON.stringify(operation).length;
+      // Operations of a same group are kept in the same chunk since the Penpot backend needs them at the same time
+      for (const chunk of chunkOperations(differences.newTreeOperations, remainingBodyBytes)) {
+        chunkNumber++;
+        pushSpinner.text = `Pushing chunk [${chunkNumber}] (${chunk.length} ops, ${succeededOperations}/${totalOperations} done) to Penpot file "${penpotDocumentId}"…`;
 
-        // Needed to avoid splitting operations that must be processed at the same time by the Penpot backend
-        currentGroupId = _groupId && _lastOfTheGroup !== undefined ? _groupId : null;
+        await processOperationsChunk(penpotDocumentId, chunk as appCommonFilesChanges$changeWithoutUnknown[], serverValidation);
 
-        // Take into account the `,` delimiter
-        if (currentChunkCount + Math.max(currentChunk.length - 1, 0) + encodedOperationLength > remainingBodyBytes) {
-          let forwardedOperationsOnNextChunk: typeof currentChunk = [];
-
-          // If currently into a group that cannot be separated, we remove the ongoing ones to set them on the next chunk
-          // (being on the last item of the group is fine)
-          // Note: it's unlikely a group size would be bigger than the allowed chunk size
-          if (currentGroupId && _lastOfTheGroup === false) {
-            forwardedOperationsOnNextChunk = currentChunk.splice(-currentChunkCount);
-          }
-
-          // Directly process the chunk to not calculate all of them
-          pushSpinner.text = `Pushing chunk [${chunkNumber}] (${currentChunk.length} ops, ${succeededOperations}/${totalOperations} done) to Penpot file "${penpotDocumentId}"…`;
-          await processOperationsChunk(penpotDocumentId, currentChunk, serverValidation);
-
-          succeededOperations += currentChunk.length;
-
-          // Starting a new chunk
-          currentChunk = [...forwardedOperationsOnNextChunk];
-          currentChunkCount = currentChunk.length;
-          chunkNumber++;
-        }
-
-        currentChunk.push(operation);
-        currentChunkCount += encodedOperationLength;
-        currentGroupCount = currentGroupId ? currentGroupCount + 1 : 0;
-      }
-
-      // The last chunk must be processed
-      if (currentChunk.length > 0) {
-        pushSpinner.text = `Pushing chunk [${chunkNumber}] (${currentChunk.length} ops, ${succeededOperations}/${totalOperations} done) to Penpot file "${penpotDocumentId}"…`;
-        await processOperationsChunk(penpotDocumentId, currentChunk, serverValidation);
-        succeededOperations += currentChunk.length;
+        succeededOperations += chunk.length;
       }
 
       pushSpinner.succeed(
@@ -2331,11 +2306,18 @@ export async function processDifferences(
         }
       }
 
-      if (succeededOperations > 0) {
+      if (isGatewayFailure(error)) {
+        // The intermediary (e.g. Cloudflare) gave up waiting but the Penpot server may still have processed the chunk, so
+        // resuming from the remaining operations could apply it twice: the comparison must be done again from the real state
+        // Note: comparing again from the last transformation is not enough since uploaded medias got new identifiers in the mapping
+        console.warn(
+          `The Penpot server did not answer in time through its intermediary (gateway timeout). Since a lot of data is pushed, the server may still have processed the chunk behind it, but there is no way to be sure. Wait about 5 minutes for the server to finish, then rerun your command adding "--use-cached-figma-data": it compares again with the current Penpot state before pushing, without fetching Figma again. Note the comparison now also loads the Penpot file content, so it needs more memory than before`
+        );
+      } else if (succeededOperations > 0) {
         console.warn(`Wait a bit since we are removing processed chunks for your next retry, it will reduce the input and speed up`);
 
         try {
-          differences.newTreeOperations.splice(0, succeededOperations - 1);
+          differences.newTreeOperations.splice(0, succeededOperations);
 
           await writeBigJsonFile(getFigmaToPenpotDiffPath(dataDir, figmaDocumentId, penpotDocumentId), differences);
         } catch (writeError) {

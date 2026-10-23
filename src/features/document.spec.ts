@@ -28,7 +28,18 @@ describe('document comparaison', () => {
         tokenThemes: new Map(),
       };
 
-      const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], [], { variables: {}, variableCollections: {} }, [], new Map(), new Map(), new Map(), mapping, "/tmp/figpot-test-data");
+      const transformedTree = transformDocument(
+        emptyFigmaTree as GetFileResponse,
+        [],
+        [],
+        { variables: {}, variableCollections: {} },
+        [],
+        new Map(),
+        new Map(),
+        new Map(),
+        mapping,
+        '/tmp/figpot-test-data'
+      );
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
@@ -54,7 +65,18 @@ describe('document comparaison', () => {
         tokenThemes: new Map(),
       };
 
-      const transformedTree = transformDocument(emptyFigmaTree as GetFileResponse, [], [], { variables: {}, variableCollections: {} }, [], new Map(), new Map(), new Map(), mapping, "/tmp/figpot-test-data");
+      const transformedTree = transformDocument(
+        emptyFigmaTree as GetFileResponse,
+        [],
+        [],
+        { variables: {}, variableCollections: {} },
+        [],
+        new Map(),
+        new Map(),
+        new Map(),
+        mapping,
+        '/tmp/figpot-test-data'
+      );
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
@@ -87,7 +109,18 @@ describe('document comparaison', () => {
         tokenThemes: new Map(),
       };
 
-      const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], [], { variables: {}, variableCollections: {} }, [], new Map(), new Map(), new Map(), mapping, "/tmp/figpot-test-data");
+      const transformedTree = transformDocument(
+        withRectangeFigmaTree as GetFileResponse,
+        [],
+        [],
+        { variables: {}, variableCollections: {} },
+        [],
+        new Map(),
+        new Map(),
+        new Map(),
+        mapping,
+        '/tmp/figpot-test-data'
+      );
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
@@ -113,7 +146,18 @@ describe('document comparaison', () => {
         tokenThemes: new Map(),
       };
 
-      const transformedTree = transformDocument(withRectangeFigmaTree as GetFileResponse, [], [], { variables: {}, variableCollections: {} }, [], new Map(), new Map(), new Map(), mapping, "/tmp/figpot-test-data");
+      const transformedTree = transformDocument(
+        withRectangeFigmaTree as GetFileResponse,
+        [],
+        [],
+        { variables: {}, variableCollections: {} },
+        [],
+        new Map(),
+        new Map(),
+        new Map(),
+        mapping,
+        '/tmp/figpot-test-data'
+      );
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
       const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);

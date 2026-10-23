@@ -54,10 +54,7 @@ function applyPaintColorToken(
 // (see `translateTokens` for the rationale) so the static value mirrors what Figma rendered
 // (including any per-frame `explicitVariableModes` override). Toggling a theme in Penpot then
 // drives the rebind globally through `appliedTokens`
-export function transformAppliedTokens(
-  registry: BoundVariableRegistry,
-  node: SubcanvasNodeWithSlot
-): { appliedTokens?: Record<string, string> } {
+export function transformAppliedTokens(registry: BoundVariableRegistry, node: SubcanvasNodeWithSlot): { appliedTokens?: Record<string, string> } {
   const appliedTokens: Record<string, string> = {};
 
   function record(penpotProperty: string, tokenType: TokenType, alias: VariableAlias | VariableAlias[] | undefined): void {

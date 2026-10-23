@@ -65,7 +65,7 @@ const syncMappingWithGitOption = new Option(
 );
 const serverValidationOption = new Option(
   '--no-server-validation',
-  'skip Penpot validation server-side, useful for big files or for a Penpot instance with limited resources, use it with caution'
+  'skip Penpot validation server-side, useful for big files or for a Penpot instance with limited resources, use it with caution: once done, rerun the synchronization without it (with "--use-cached-figma-data" to avoid fetching Figma again) to check there is no difference left, and see the documentation to make Penpot validate the whole file'
 );
 const pushChunkSizeOption = new Option(
   '--push-chunk-size <megabytes>',

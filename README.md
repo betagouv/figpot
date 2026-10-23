@@ -199,6 +199,11 @@ We did not find for now an ordering of operations that is passing 100% of the ti
 
 Note you can omit using this parameter after a first complete synchronization, because probably your next differences to push won't trigger integrity failure due to interconnected operations.
 
+After a synchronization done with `--no-server-validation`, it's worth checking everything went fine and the Penpot file is in a valid state:
+
+1. Rerun the synchronization without this parameter (adding `--use-cached-figma-data` avoids fetching Figma again). It should report no difference, which confirms the Penpot file matches the Figma one
+2. But with no difference nothing is sent, so the Penpot server validates nothing. For a quick validation of the whole file, you can send through the Penpot API an `update-file` request with `skipValidate: false` and a change having no effect on each page, for example `{"type": "mod-obj", "id": "00000000-0000-0000-0000-000000000000", "pageId": "<page ID>", "operations": [{"type": "assign", "value": {"r1": 0, "r2": 0, "r3": 0, "r4": 0}}]}` (the page root frame radius, which is always 0). The server then checks the pages concerned and lists the issues if any. For huge files, send a few pages per request so each one is processed in time
+
 ### How to redirect a Figma font to a different Penpot font?
 
 Use `--replace-font-pattern`. The syntax is `'<regex>:<family>[:<weight>[:<normal|italic>]]'`:

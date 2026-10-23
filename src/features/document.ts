@@ -2448,7 +2448,7 @@ export async function processDifferences(
   if (differences.newTreeOperations.length > 0) {
     if (!serverValidation) {
       console.warn(
-        'the Penpot server-side validation of updates has been disabled. It may lead to a corrupted Penpot file in case the library does not handle all cases properly, so use it with caution'
+        'the Penpot server-side validation of updates has been disabled. It may lead to a corrupted Penpot file in case the library does not handle all cases properly, so use it with caution. Once done, rerun the synchronization without "--no-server-validation" (adding "--use-cached-figma-data" to avoid fetching Figma again) to check there is no difference left, and see the documentation to make Penpot validate the whole file (a synchronization without difference sends nothing to validate)'
       );
     }
 

@@ -2657,6 +2657,11 @@ async function findRecommendedPenpotIdsForLibrary(dataDir: string, figmaFileKey:
 // that is neither passed as a document or library (if libraries were not explicitly skipped). And throws under `--ci`
 //
 // Options will be to bind to an existing Penpot file, skip referencing it or stop the run to first synchronize that library separately
+// Old library references can remain on hidden layers inside instances, which the Figma libraries panel does not list, so
+// a library looking unexpected is worth investigating before detaching it (otherwise the defect would be silently hidden)
+const unexpectedLibraryHint =
+  'If a library is unexpected (e.g. an older version of a library you use), it may only be referenced by style or component overrides on hidden layers inside instances, which the Figma libraries panel does not list: fix them in Figma rather than detaching the library';
+
 export async function resolveBindingsInteractively(
   dataDir: string,
   documents: DocumentOptionsType[],
@@ -2703,7 +2708,7 @@ export async function resolveBindingsInteractively(
   if (!prompting) {
     throw new Error(
       `${unboundFigmaFiles.size} Figma library file(s) are referenced but not bound: ${[...unboundFigmaFiles].join(', ')}. ` +
-        `Pass "-l <figmaFileId>:<penpotFileId>" or "--detach-library <figmaFileId>" for each, or "--skip-libraries"`
+        `Pass "-l <figmaFileId>:<penpotFileId>" or "--detach-library <figmaFileId>" for each, or "--skip-libraries". ${unexpectedLibraryHint}`
     );
   }
 
@@ -2770,7 +2775,7 @@ export async function resolveBindingsInteractively(
     decoratedChoices.push({
       name: 'Skip referencing this library',
       value: SKIP_VALUE,
-      description: 'Useful when your Figma access token does not have access to the source library, but cross-file instances will land detached',
+      description: `Useful when your Figma access token does not have access to the source library, but cross-file instances will land detached. ${unexpectedLibraryHint}`,
     });
     decoratedChoices.push({
       name: 'Stop now, I want to synchronize this library first',

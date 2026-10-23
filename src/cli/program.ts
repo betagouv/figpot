@@ -41,7 +41,7 @@ const skipLibrariesOption = new Option(
 );
 const detachLibrariesOption = new Option(
   '--detach-library [figmaFileIds...]',
-  'Figma library file referenced by your documents whose component instances must be kept as plain shapes instead of being bound (helpful to avoid circular dependencies between libraries), any other undeclared library still requires a decision'
+  'Figma library file referenced by your documents whose component instances must be kept as plain shapes instead of being bound (helpful to avoid circular dependencies between libraries), any other undeclared library still requires a decision. Before detaching an unexpected library, check it is not only referenced by overrides on hidden layers inside instances (not listed by the Figma libraries panel)'
 );
 const skipInferringLibrariesOption = new Option(
   '--skip-inferring-libraries',

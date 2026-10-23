@@ -1,9 +1,9 @@
 import { SubcanvasNode } from '@figpot/src/clients/figma';
-import { getNearMainNodeId, getRelatedNodeId } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
+import { getRelatedNodeId } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
 import { transformOverrides } from '@figpot/src/features/transformers/partials/transformOverrides';
+import { translateComponentShapeId } from '@figpot/src/features/translators/translateId';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
-import { deterministicUuid } from '@figpot/src/utils/uuid';
 
 export function transformInheritance(registry: AbstractRegistry, node: Pick<SubcanvasNode, 'id'>): Pick<ShapeAttributes, 'shapeRef'> {
   // The Penpot `componentId` property refers to the component definition ID linked to a main instance
@@ -18,7 +18,7 @@ export function transformInheritance(registry: AbstractRegistry, node: Pick<Subc
   if (relatedNodeId) {
     // It must target the component definition equivalent, so it's deterministic
     return {
-      shapeRef: deterministicUuid(getNearMainNodeId(relatedNodeId)),
+      shapeRef: translateComponentShapeId(relatedNodeId),
       ...transformOverrides(registry, node), // The overrides have sense only if we have linked a `shapeRef`
     };
   } else {

@@ -1,5 +1,6 @@
 import { MappingType } from '@figpot/src/features/document';
-import { translateMediaId, translateMediaPlaceholderId } from '@figpot/src/features/translators/translateId';
+import { translateComponentShapeId, translateMediaId, translateMediaPlaceholderId } from '@figpot/src/features/translators/translateId';
+import { deterministicUuid } from '@figpot/src/utils/uuid';
 
 describe('translateMediaId()', () => {
   it('should use the uploaded identifier when mapped', () => {
@@ -14,5 +15,13 @@ describe('translateMediaId()', () => {
     expect(translateMediaId('abc', mapping)).toBe(translateMediaPlaceholderId('abc'));
     expect(translateMediaPlaceholderId('abc')).not.toBe(translateMediaPlaceholderId('def'));
     expect(mapping.assets.size).toBe(0);
+  });
+});
+
+describe('translateComponentShapeId()', () => {
+  it('should derive the same ID for a shape inside a nested instance of a main and for the path copies refer to it with', () => {
+    // Like `penpot-exporter-figma-plugin`, the leading `I` is removed
+    expect(translateComponentShapeId('I1:2;5:1')).toBe(deterministicUuid('1:2;5:1'));
+    expect(translateComponentShapeId('1:2')).toBe(deterministicUuid('1:2'));
   });
 });

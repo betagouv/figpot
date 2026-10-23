@@ -1,5 +1,5 @@
 import { Component, InstanceNode, SubcanvasNode } from '@figpot/src/clients/figma';
-import { deterministicUuid } from '@figpot/src/utils/uuid';
+import { translateComponentShapeId } from '@figpot/src/features/translators/translateId';
 
 // A nested instance whose component has been swapped in Figma (e.g. another variant) must
 // refer to its new component, and keep the replaced shape of the near main as "swap slot", otherwise Penpot rejects it
@@ -51,6 +51,7 @@ export function getRelatedNodeId(nodeId: string): string | undefined {
 
 // The Figma ID of the node a nested node refers to in its near main: when this path still goes through a nested instance,
 // the node in the main has an ID prefixed with `I` (e.g. the path "1:2;5:1" is the node "I1:2;5:1" of the main)
+// Note: only for looking up Figma nodes, Penpot IDs are derived without this prefix (see `translateComponentShapeId()`)
 export function getNearMainNodeId(relatedNodeId: string): string {
   return relatedNodeId.includes(';') ? `I${relatedNodeId}` : relatedNodeId;
 }
@@ -75,7 +76,7 @@ export function registerInstanceSwap(node: InstanceNode): string | undefined {
     return undefined;
   }
 
-  const swapSlot = deterministicUuid(replacedNodeId);
+  const swapSlot = translateComponentShapeId(relatedNodeId);
   context.swappedInstances.set(node.id, swapSlot);
 
   return swapSlot;

@@ -7,14 +7,13 @@ import { transformPageNode } from '@figpot/src/features/transformers/transformPa
 import { translateEffectStyleTokens } from '@figpot/src/features/translators/tokens/translateEffectStyleTokens';
 import { FigmaVariablesData, translateTokens } from '@figpot/src/features/translators/tokens/translateTokens';
 import { translateColor } from '@figpot/src/features/translators/translateColor';
-import { registerId, translateComponentId, translateId } from '@figpot/src/features/translators/translateId';
+import { registerId, translateComponentId, translateComponentShapeId, translateId } from '@figpot/src/features/translators/translateId';
 import { translateTypography } from '@figpot/src/features/translators/translateTypography';
 import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { Registry } from '@figpot/src/models/entities/registry';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { cleanPath } from '@figpot/src/utils/path';
-import { deterministicUuid } from '@figpot/src/utils/uuid';
 
 export function detectLocalFigmaComponents(foundComponentsIds: string[], figmaNode: SubcanvasNode) {
   if (figmaNode.type === 'COMPONENT') {
@@ -35,7 +34,7 @@ export function detectLocalFigmaComponents(foundComponentsIds: string[], figmaNo
 function registerComponentSubtreeIds(figmaNode: GetFileResponse, mapping: MappingType): void {
   function walk(node: SubcanvasNode, insideComponent: boolean): void {
     if (insideComponent && node.type !== 'COMPONENT' && node.type !== 'COMPONENT_SET') {
-      registerId(node.id, deterministicUuid(node.id), mapping);
+      registerId(node.id, translateComponentShapeId(node.id), mapping);
     }
 
     if ('children' in node && node.children) {

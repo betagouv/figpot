@@ -38,7 +38,7 @@ import {
 } from '@figpot/src/clients/penpot';
 import { ApiError as PenpotApiError, PostGetFileResponse, postGetFile, postRenameFile, postUpdateFile } from '@figpot/src/clients/penpot';
 import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/workaround';
-import { chunkOperations } from '@figpot/src/features/chunks';
+import { chunkOperations, splitOperationsInHalves, stripGroupMarkers } from '@figpot/src/features/chunks';
 import {
   FigmaDefinedColor,
   FigmaDefinedEffectStyle,
@@ -2373,34 +2373,92 @@ export async function processDifferences(
     const pushSpinner = ora(
       `Pushing modifications to Penpot file "${penpotDocumentId}" (${totalOperations} operation(s) in ${chunks.length} chunk(s))…`
     ).start();
+    // Pushes operations, confirming them through the file revision if the proxy gave up waiting
+    const pushOperations = async (operations: typeof differences.newTreeOperations) => {
+      try {
+        await processOperationsChunk(
+          penpotDocumentId,
+          operations.map(stripGroupMarkers) as appCommonFilesChanges$changeWithoutUnknown[],
+          serverValidation,
+          fileVersion
+        );
+      } catch (error) {
+        // The proxy gave up waiting but Penpot may still be applying the chunk, the revision tells when it's done
+        // Note: without the current revision it cannot be confirmed, so the push stops
+        if (!isGatewayFailure(error) || !version) {
+          throw error;
+        }
+
+        pushSpinner.text = `Chunk [${chunkNumber}/${chunks.length}] got no answer in time (gateway timeout), watching the file revision to confirm it has been applied…`;
+
+        if (!(await waitForPenpotFileRevision(meta.penpotProjectId, penpotDocumentId, fileVersion.revn + 1))) {
+          throw error;
+        }
+
+        if (!process.stderr.isTTY) {
+          console.log(`chunk [${chunkNumber}/${chunks.length}] got no answer in time but the file revision confirms it has been applied`);
+        }
+      }
+
+      succeededOperations += operations.length;
+      fileVersion.revn++;
+    };
+
+    // When Penpot crashes without telling the cause, operations are sent in halves (applying the ones that pass, so the push
+    // goes on) until the operation making it fail is isolated
+    const pushOperationsIsolatingFailures = async (operations: typeof differences.newTreeOperations) => {
+      try {
+        await pushOperations(operations);
+      } catch (error) {
+        if (!(error instanceof PenpotApiError && error.status === 500)) {
+          throw error;
+        }
+
+        const parts = splitOperationsInHalves(operations);
+
+        if (parts.length === 1) {
+          const dumpPath = path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), 'push-error-operations.json');
+          await fs.writeFile(dumpPath, JSON.stringify(operations, null, 2), { encoding: 'utf-8' }).catch(() => {
+            /* best-effort dump, swallow */
+          });
+
+          console.warn(
+            `Penpot fails on its own on the following operation(s), dumped to:\n  ${dumpPath}\n${operations
+              .map((operation) => {
+                const obj = 'obj' in operation ? (operation.obj as { type?: string; name?: string }) : null;
+
+                return `  - ${operation.type}${'id' in operation ? ` "${operation.id}"` : ''}${obj ? ` (${obj.type} "${obj.name}")` : ''}`;
+              })
+              .join('\n')}`
+          );
+
+          throw error;
+        }
+
+        pushSpinner.text = `Chunk [${chunkNumber}/${chunks.length}] made Penpot fail, sending it in smaller parts to isolate the operation causing it (${operations.length} ops left to check)…`;
+        if (!process.stderr.isTTY) {
+          console.log(
+            `Penpot failed on ${operations.length} operation(s) of chunk [${chunkNumber}/${chunks.length}], sending them in halves to isolate the cause`
+          );
+        }
+
+        for (const part of parts) {
+          await pushOperationsIsolatingFailures(part);
+        }
+      }
+    };
+
     try {
+      let chunkStartIndex = 0;
+
       for (const chunk of chunks) {
         chunkNumber++;
         pushSpinner.text = `Pushing chunk [${chunkNumber}/${chunks.length}] (${chunk.length} ops, ${succeededOperations}/${totalOperations} done) to Penpot file "${penpotDocumentId}"…`;
 
+        // Chunks keep the operations order, so the original operations (with group markers) are retrieved by position
         const chunkStart = Date.now();
-        try {
-          await processOperationsChunk(penpotDocumentId, chunk as appCommonFilesChanges$changeWithoutUnknown[], serverValidation, fileVersion);
-        } catch (error) {
-          // The proxy gave up waiting but Penpot may still be applying the chunk, the revision tells when it's done
-          // Note: without the current revision it cannot be confirmed, so the push stops
-          if (!isGatewayFailure(error) || !version) {
-            throw error;
-          }
-
-          pushSpinner.text = `Chunk [${chunkNumber}/${chunks.length}] got no answer in time (gateway timeout), watching the file revision to confirm it has been applied…`;
-
-          if (!(await waitForPenpotFileRevision(meta.penpotProjectId, penpotDocumentId, fileVersion.revn + 1))) {
-            throw error;
-          }
-
-          if (!process.stderr.isTTY) {
-            console.log(`chunk [${chunkNumber}/${chunks.length}] got no answer in time but the file revision confirms it has been applied`);
-          }
-        }
-
-        succeededOperations += chunk.length;
-        fileVersion.revn++;
+        await pushOperationsIsolatingFailures(differences.newTreeOperations.slice(chunkStartIndex, chunkStartIndex + chunk.length));
+        chunkStartIndex += chunk.length;
 
         // Without terminal (e.g. CI) the spinner text is not displayed, so progress is logged to know where a failure happened
         if (!process.stderr.isTTY) {

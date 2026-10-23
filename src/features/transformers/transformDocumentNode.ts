@@ -1,7 +1,7 @@
 import { GetFileResponse, SubcanvasNode } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { FigmaDefinedColor, FigmaDefinedEffectStyle, FigmaDefinedTypography } from '@figpot/src/features/figma';
-import { initializeInstanceSwaps } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
+import { initializeInstanceSwaps, releaseInstanceSwaps } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
 import { transformUnboundInstances } from '@figpot/src/features/transformers/partials/transformUnboundInstances';
 import { transformPageNode } from '@figpot/src/features/transformers/transformPageNode';
 import { translateEffectStyleTokens } from '@figpot/src/features/translators/tokens/translateEffectStyleTokens';
@@ -272,6 +272,8 @@ export function transformDocumentNode(
       }
     }
   }
+
+  releaseInstanceSwaps();
 
   return {
     name: figmaNode.name,

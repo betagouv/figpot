@@ -30,6 +30,11 @@ export function initializeInstanceSwaps(document: SubcanvasNode, components: Rec
   context = { nodes, components, swappedInstances: new Map() };
 }
 
+// The context indexes the whole Figma document, it must be released once transformed so the next steps can use the memory
+export function releaseInstanceSwaps(): void {
+  context = { nodes: new Map(), components: {}, swappedInstances: new Map() };
+}
+
 // A nested node ID is `I<instance>;<path in main>`, but inside a swapped instance the path belongs to the new component, so
 // it is resolved relative to the closest swapped ancestor
 export function getRelatedNodeId(nodeId: string): string | undefined {

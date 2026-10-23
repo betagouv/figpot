@@ -77,6 +77,7 @@ import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot/src/utils/comparaison';
 import { config, figmaRateLimitContext, penpotApiBaseUrl } from '@figpot/src/utils/environment';
 import { downloadFile, openAsBlob, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
+import { getMemoryAdvice, getMemoryContext } from '@figpot/src/utils/memory';
 import { UserCancellationExit } from '@figpot/src/utils/system';
 
 export const DEFAULT_DATA_DIR_NAME = 'data';
@@ -923,6 +924,11 @@ export async function transform(options: TransformOptionsType) {
         console.warn(
           `the Figma document tree you want to synchronize is really huge. Over ${advisedElementsLimit} elements we are quick sure both the Penpot backend and the frontend won't be able to render your document until Penpot evolves. Have a look at our documentation to see how to exclude nodes that bring to you no value and that could make the document loadable`
         );
+      }
+
+      const memoryAdvice = getMemoryAdvice(getMemoryContext(), true);
+      if (memoryAdvice) {
+        console.warn(memoryAdvice);
       }
     }
 

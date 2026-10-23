@@ -21,10 +21,20 @@ import {
 } from '@figpot/src/features/document';
 import { FigmaFileMetaCache, processDocumentsParametersFromInput, retrieveDocumentsFromInput } from '@figpot/src/features/figma';
 import { ensureAccessTokens, ensureCredentials } from '@figpot/src/utils/environment';
+import { getMemoryAdvice, getMemoryContext } from '@figpot/src/utils/memory';
 
 export const program = new Command();
 
 program.name('@betagouv/figpot').description('CLI to perform actions between Figma and Penpot').version('0.0.0');
+
+// A crash due to the memory cannot be reported since the process is killed, so warning ahead about a risky configuration
+program.hook('preAction', () => {
+  const memoryAdvice = getMemoryAdvice(getMemoryContext(), false);
+
+  if (memoryAdvice) {
+    console.warn(memoryAdvice);
+  }
+});
 
 const deps = program.command('deps').description('install required dependencies to use the package');
 const document = program.command('document').description('manage documents');

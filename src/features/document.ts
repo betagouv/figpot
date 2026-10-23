@@ -61,6 +61,7 @@ import {
   retrieveVariables,
 } from '@figpot/src/features/figma';
 import { restoreMappingFromRepository, saveMappingToRepository } from '@figpot/src/features/git';
+import { findLibraryUsages, formatLibraryUsages } from '@figpot/src/features/libraryUsages';
 import { cleanHostedDocument, penpotSupportsTokensStatus } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
 import { FigmaVariablesData, emptyFigmaVariablesData } from '@figpot/src/features/translators/tokens/translateTokens';
@@ -2662,6 +2663,30 @@ async function findRecommendedPenpotIdsForLibrary(dataDir: string, figmaFileKey:
 const unexpectedLibraryHint =
   'If a library is unexpected (e.g. an older version of a library you use), it may only be referenced by style or component overrides on hidden layers inside instances, which the Figma libraries panel does not list: fix them in Figma rather than detaching the library';
 
+// Reading the whole tree is expensive, so it is only done when some libraries have to be decided on
+async function describeLibraryUsages(dataDir: string, documents: DocumentOptionsType[], figmaFiles: Set<string>): Promise<Map<string, string>> {
+  const descriptions = new Map<string, string[]>();
+
+  for (const doc of documents) {
+    const tree = await readFigmaTreeFile(dataDir, doc.figmaDocument);
+    const remoteComponents = await readFigmaRemoteComponentsFile(dataDir, doc.figmaDocument);
+    const remoteStyles = await readFigmaRemoteStylesFile(dataDir, doc.figmaDocument);
+
+    for (const [figmaFile, usages] of findLibraryUsages(tree, remoteComponents, remoteStyles, figmaFiles)) {
+      const description = `referenced in "${doc.figmaDocument}" at:\n${formatLibraryUsages(doc.figmaDocument, usages)}`;
+      const fileDescriptions = descriptions.get(figmaFile);
+
+      if (fileDescriptions) {
+        fileDescriptions.push(description);
+      } else {
+        descriptions.set(figmaFile, [description]);
+      }
+    }
+  }
+
+  return new Map([...descriptions].map(([figmaFile, fileDescriptions]) => [figmaFile, fileDescriptions.join('\n')]));
+}
+
 export async function resolveBindingsInteractively(
   dataDir: string,
   documents: DocumentOptionsType[],
@@ -2705,9 +2730,13 @@ export async function resolveBindingsInteractively(
     }
   }
 
+  const usagesDescriptions = await describeLibraryUsages(dataDir, documents, unboundFigmaFiles);
+
   if (!prompting) {
     throw new Error(
-      `${unboundFigmaFiles.size} Figma library file(s) are referenced but not bound: ${[...unboundFigmaFiles].join(', ')}. ` +
+      `${unboundFigmaFiles.size} Figma library file(s) are referenced but not bound:\n` +
+        [...unboundFigmaFiles].map((figmaFile) => `- ${figmaFile} ${usagesDescriptions.get(figmaFile) ?? ''}`).join('\n') +
+        `\n` +
         `Pass "-l <figmaFileId>:<penpotFileId>" or "--detach-library <figmaFileId>" for each, or "--skip-libraries". ${unexpectedLibraryHint}`
     );
   }
@@ -2786,6 +2815,11 @@ export async function resolveBindingsInteractively(
     // Name was prefetched in parallel above; falls back to just the id if the meta call failed
     const figmaLibraryName = figmaLibraryNames.get(figmaFileKey);
     const figmaLibraryLabel = figmaLibraryName ? `${chalk.yellow(`"${figmaLibraryName}"`)} (${figmaFileKey})` : `"${figmaFileKey}"`;
+
+    const usagesDescription = usagesDescriptions.get(figmaFileKey);
+    if (usagesDescription) {
+      console.log(`Figma library file ${figmaLibraryLabel} is ${usagesDescription}`);
+    }
 
     const chosenPenpotFileId = await select({
       message: `Figma library file ${figmaLibraryLabel} is referenced, pick the corresponding Penpot file if any:`,

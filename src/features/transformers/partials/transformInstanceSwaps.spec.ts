@@ -1,5 +1,10 @@
 import { Component, InstanceNode, SubcanvasNode } from '@figpot/src/clients/figma';
-import { getRelatedNodeId, initializeInstanceSwaps, registerInstanceSwap } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
+import {
+  getNearMainNodeId,
+  getRelatedNodeId,
+  initializeInstanceSwaps,
+  registerInstanceSwap,
+} from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
 import { deterministicUuid } from '@figpot/src/utils/uuid';
 
 describe('transformInstanceSwaps', () => {
@@ -38,5 +43,10 @@ describe('transformInstanceSwaps', () => {
     expect(registerInstanceSwap({ id: 'I2:1;1:3', componentId: 'A' } as InstanceNode)).toBeUndefined();
     expect(registerInstanceSwap({ id: 'I9:9;1:2', componentId: 'A' } as InstanceNode)).toBeUndefined();
     expect(getRelatedNodeId('I2:1;1:2;6:1')).toBe('1:2;6:1');
+  });
+
+  it('should refer to the node of the near main, prefixed when it is inside a nested instance', () => {
+    expect(getNearMainNodeId('1:2')).toBe('1:2');
+    expect(getNearMainNodeId('1:2;5:1')).toBe('I1:2;5:1');
   });
 });

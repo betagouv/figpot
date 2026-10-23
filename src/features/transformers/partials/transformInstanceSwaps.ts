@@ -49,6 +49,12 @@ export function getRelatedNodeId(nodeId: string): string | undefined {
   return undefined;
 }
 
+// The Figma ID of the node a nested node refers to in its near main: when this path still goes through a nested instance,
+// the node in the main has an ID prefixed with `I` (e.g. the path "1:2;5:1" is the node "I1:2;5:1" of the main)
+export function getNearMainNodeId(relatedNodeId: string): string {
+  return relatedNodeId.includes(';') ? `I${relatedNodeId}` : relatedNodeId;
+}
+
 // Must be called before the instance children are transformed so their references follow the swap
 export function registerInstanceSwap(node: InstanceNode): string | undefined {
   const relatedNodeId = getRelatedNodeId(node.id);
@@ -56,8 +62,8 @@ export function registerInstanceSwap(node: InstanceNode): string | undefined {
     return undefined;
   }
 
-  // The replaced node is a nested instance when its own ID still contains a path
-  const replacedNode = context.nodes.get(relatedNodeId.includes(';') ? `I${relatedNodeId}` : relatedNodeId);
+  const replacedNodeId = getNearMainNodeId(relatedNodeId);
+  const replacedNode = context.nodes.get(replacedNodeId);
   if (!replacedNode || replacedNode.type !== 'INSTANCE') {
     return undefined; // The near main is not part of this document (remote component), the swap cannot be detected
   }
@@ -69,7 +75,7 @@ export function registerInstanceSwap(node: InstanceNode): string | undefined {
     return undefined;
   }
 
-  const swapSlot = deterministicUuid(relatedNodeId);
+  const swapSlot = deterministicUuid(replacedNodeId);
   context.swappedInstances.set(node.id, swapSlot);
 
   return swapSlot;

@@ -227,7 +227,9 @@ export const getResponseBody = async (response: Response): Promise<unknown> => {
 				}
 			}
 		} catch (error) {
+			// [WORKAROUND] Rethrow so an interrupted body (e.g. connection closed while downloading a huge file) is not taken as an empty success
 			console.error(error);
+			throw error;
 		}
 	}
 	return undefined;

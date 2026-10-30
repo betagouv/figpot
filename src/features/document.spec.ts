@@ -42,7 +42,7 @@ describe('document comparaison', () => {
       );
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
-      const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
+      const differences = getDifferences(cleanHostedTree, transformedTree);
 
       expect(differences.newDocumentName).toBeUndefined();
       expect(differences.newTreeOperations).toEqual([]);
@@ -79,7 +79,7 @@ describe('document comparaison', () => {
       );
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
-      const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
+      const differences = getDifferences(cleanHostedTree, transformedTree);
 
       expect(differences.newDocumentName).toBeUndefined();
       expect(differences.newTreeOperations.length).toBe(6);
@@ -123,7 +123,7 @@ describe('document comparaison', () => {
       );
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
-      const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
+      const differences = getDifferences(cleanHostedTree, transformedTree);
 
       expect(differences.newDocumentName).toBeUndefined();
       expect(differences.newTreeOperations).toEqual([]);
@@ -160,7 +160,7 @@ describe('document comparaison', () => {
       );
       const cleanHostedTree = cleanHostedDocument(penpotTree);
 
-      const differences = getDifferences('no_matter', cleanHostedTree, transformedTree, []);
+      const differences = getDifferences(cleanHostedTree, transformedTree);
 
       expect(differences.newDocumentName).toBeUndefined();
       expect(differences.newTreeOperations.length).toBe(8);

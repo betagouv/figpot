@@ -110,8 +110,8 @@ It's also possible either this plugin does not implement the conversion yet, or 
 
 In fact, our core library is transforming and giving all the Figma information to Penpot but the latter relies on a few operations that only happen when the document is open into a browser:
 
-- It creates thumbnails for some elements
 - It gives each paragraph part a graphical position that cannot be inferred from the Figma data
+- It recalculates the size of auto-sized texts with the browser font metrics (that may differ from Figma ones, for example a text wrapping on more lines), and so the layouts containing them
 
 So, at the end of a synchronization of "raw data", we hydrate the Penpot file by opening a hidden browser that will wait for those 2 operations to be done on all pages.
 

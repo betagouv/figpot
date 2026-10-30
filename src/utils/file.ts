@@ -67,6 +67,82 @@ export async function readBigJsonFile(filePath: string): Promise<object> {
   });
 }
 
+export type JsonPath = (string | number)[];
+
+type JsonToken = { name: string; value?: string };
+
+// Reads a big JSON file building only the values whose path is selected (one at a time), so the whole content is never in
+// memory. A selected value is passed with its path, and the reading waits for the callback before going on
+export async function streamBigJsonFileValues(
+  filePath: string,
+  select: (path: JsonPath) => boolean,
+  onValue: (path: JsonPath, value: unknown) => void | Promise<void>
+): Promise<void> {
+  const tokens = chain([fsSync.createReadStream(filePath, { encoding: 'utf-8' }), parser({ packValues: true, streamValues: false })]);
+
+  // Position in the document: the current key of each object, or the current index of each array
+  const frames: { key: string | number | null; isArray: boolean }[] = [];
+
+  let assembler: any = null;
+  let assembledPath: JsonPath = [];
+  let assembledDepth = 0;
+
+  for await (const token of tokens as AsyncIterable<JsonToken>) {
+    if (assembler) {
+      assembler[token.name](token.value);
+
+      if (token.name === 'startObject' || token.name === 'startArray') {
+        assembledDepth++;
+      } else if (token.name === 'endObject' || token.name === 'endArray') {
+        assembledDepth--;
+      }
+
+      if (assembledDepth === 0) {
+        await onValue(assembledPath, assembler.current);
+
+        assembler = null;
+      }
+
+      continue;
+    }
+
+    if (token.name === 'keyValue') {
+      frames[frames.length - 1].key = token.value as string;
+
+      continue;
+    } else if (token.name === 'endObject' || token.name === 'endArray') {
+      frames.pop();
+
+      continue;
+    }
+
+    // A value starts
+    const parent = frames[frames.length - 1];
+    if (parent?.isArray) {
+      parent.key = (parent.key as number) + 1;
+    }
+
+    const valuePath = frames.map((frame) => frame.key as string | number);
+
+    if (valuePath.length > 0 && select(valuePath)) {
+      assembler = new Asm();
+      assembler[token.name](token.value);
+      assembledPath = valuePath;
+      assembledDepth = token.name === 'startObject' || token.name === 'startArray' ? 1 : 0;
+
+      if (assembledDepth === 0) {
+        await onValue(assembledPath, assembler.current);
+
+        assembler = null;
+      }
+    } else if (token.name === 'startObject') {
+      frames.push({ key: null, isArray: false });
+    } else if (token.name === 'startArray') {
+      frames.push({ key: -1, isArray: true });
+    }
+  }
+}
+
 export async function writeBigJsonFile(filePath: string, jsonObject: object): Promise<void> {
   // [WORKAROUND] We do not use `stream-json` as we do for reading
   // since its internal logic will go over arrays size limit when transforming the object

@@ -20,6 +20,7 @@ import {
   synchronize,
   transform,
 } from '@figpot/src/features/document';
+import { ExportOptions, exportDocuments } from '@figpot/src/features/export';
 import { FigmaFileMetaCache, processDocumentsParametersFromInput, retrieveDocumentsFromInput } from '@figpot/src/features/figma';
 import { ensureAccessTokens, ensureCredentials } from '@figpot/src/utils/environment';
 import { getMemoryAdvice, getMemoryContext } from '@figpot/src/utils/memory';
@@ -244,6 +245,86 @@ document
         useCachedFigmaData: options.useCachedFigmaData || false,
       }),
       figmaMetaCache
+    );
+  });
+
+document
+  .command('export')
+  .description(
+    'export Figma documents as a Penpot file (.penpot) to import, instead of synchronizing them through the API (helpful to create a file too big to be pushed by parts)'
+  )
+  .addOption(
+    new Option(
+      '-d, --document [documents...]',
+      'figma document id to export (`-d figmaId`), when several are given they are all written into the same ".penpot" file (as distinct Penpot files)'
+    )
+  )
+  .addOption(librariesOption)
+  .addOption(skipLibrariesOption)
+  .addOption(detachLibrariesOption)
+  .addOption(skipInferringLibrariesOption)
+  .addOption(excludePagePatternsOption)
+  .addOption(excludeNodePatternsOption)
+  .addOption(excludeComponentPatternsOption)
+  .addOption(excludeTypographyPatternsOption)
+  .addOption(excludeColorPatternsOption)
+  .addOption(replaceFontPatternsOption)
+  .requiredOption(
+    '-p, --project <projectId>',
+    'Penpot project the files are meant for: its team custom fonts are used, and the files are imported into it with "--import"'
+  )
+  .option('-o, --output <path>', 'path of the Penpot file to write (".penpot")')
+  .option('--import', 'import the Penpot file into the project, the created files can then be synchronized as usual')
+  .option(
+    '--shared',
+    'mark the exported files as shared libraries, so files imported later can be linked to them (files used by another exported file are always shared)'
+  )
+  .addOption(useCachedFigmaDataOption)
+  .addOption(dataDirOption)
+  .addOption(continuousIntegrationOption)
+  .action(async (options) => {
+    await ensureAccessTokens(!options.ci);
+
+    const dataDir = resolveDataDirectoryFromCli(options.dataDir);
+
+    if (!options.document || options.document === true) {
+      throw new Error('please specify at least one Figma document to export');
+    }
+
+    // The exported files do not exist on Penpot yet (an import creates new ones), so there is no Penpot file to give
+    const figmaDocuments = options.document.map((value) => {
+      if (value.includes(':')) {
+        throw new Error(
+          `the export only takes Figma document ids (\`-d ${value.split(':')[0]}\`), the Penpot files are created by the import (to update an existing Penpot file use the "synchronize" command)`
+        );
+      }
+
+      return value;
+    });
+
+    await exportDocuments(
+      ExportOptions.parse({
+        dataDir: dataDir,
+        figmaDocuments: figmaDocuments,
+        libraries: Array.isArray(options.library) ? processDocumentsParametersFromInput(options.library) : [],
+        skipLibraries: options.skipLibraries || false,
+        detachedLibraries: Array.isArray(options.detachLibrary) ? options.detachLibrary : [],
+        skipInferringLibraries: options.skipInferringLibraries || false,
+        excludePatterns: {
+          pageNamePatterns: Array.isArray(options.excludePagePattern) ? options.excludePagePattern : undefined,
+          nodeNamePatterns: Array.isArray(options.excludeNodePattern) ? options.excludeNodePattern : undefined,
+          componentNamePatterns: Array.isArray(options.excludeComponentPattern) ? options.excludeComponentPattern : undefined,
+          typographyNamePatterns: Array.isArray(options.excludeTypographyPattern) ? options.excludeTypographyPattern : undefined,
+          colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
+        },
+        replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
+        useCachedFigmaData: options.useCachedFigmaData || false,
+        prompting: !options.ci,
+        penpotProjectId: options.project,
+        output: options.output,
+        importIntoProject: options.import || false,
+        shared: options.shared || false,
+      })
     );
   });
 

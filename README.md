@@ -204,6 +204,26 @@ After a synchronization done with `--no-server-validation`, it's worth checking 
 1. Rerun the synchronization without this parameter (adding `--use-cached-figma-data` avoids fetching Figma again). It should report no difference, which confirms the Penpot file matches the Figma one
 2. But with no difference nothing is sent, so the Penpot server validates nothing. For a quick validation of the whole file, you can send through the Penpot API an `update-file` request with `skipValidate: false` and a change having no effect on each page, for example `{"type": "mod-obj", "id": "00000000-0000-0000-0000-000000000000", "pageId": "<page ID>", "operations": [{"type": "assign", "value": {"r1": 0, "r2": 0, "r3": 0, "r4": 0}}]}` (the page root frame radius, which is always 0). The server then checks the pages concerned and lists the issues if any. For huge files, send a few pages per request so each one is processed in time
 
+### How to create a file too big to be pushed through the API?
+
+Each update through the Penpot API makes the server load and check the whole file, so the bigger the file the slower each request, until the server (or its proxy) gives up. For the first transfer of a huge file you can instead generate a Penpot file (`.penpot`) and import it, the server then builds the file in one go:
+
+```shell
+figpot document export \
+  -d <figmaId> \
+  -l <figmaLibraryId>:<penpotLibraryId> \
+  -p <penpotProjectId> \
+  -o my-file.penpot \
+  --import
+```
+
+- `-p` is the Penpot project the file is meant for: its team fonts are used, and with `--import` the file is imported into it (without `--import` you can import `-o` yourself from the Penpot interface)
+- The import creates new Penpot files (the identifier of an existing file cannot be kept), their identifiers are displayed at the end so you can synchronize them later as usual with `-d <figmaId>:<newPenpotId>`, the mapping being moved to them
+- Libraries passed with `-l` are linked at import if the destination team has exactly one shared file with the same name, and several `-d` are written into the same `.penpot` keeping the links between them (a file used by another one is shared, use `--shared` to share all of them)
+- Images are included into the `.penpot`, but Penpot gives them new identifiers at import so the next synchronization uploads them again
+
+Note that Penpot also limits imports (since v2.19, by default 500,000 elements and 500 MiB of content once decompressed). For files that big, excluding some nodes is still needed.
+
 ### How to redirect a Figma font to a different Penpot font?
 
 Use `--replace-font-pattern`. The syntax is `'<regex>:<family>[:<weight>[:<normal|italic>]]'`:

@@ -217,6 +217,7 @@ export const RetrieveOptions = z.object({
   libraries: z.array(DocumentOptions).default([]),
   skipLibraries: z.boolean().default(false),
   skipInferringLibraries: z.boolean().default(false),
+  penpotProjectId: z.string().optional(),
 });
 export type RetrieveOptionsType = z.infer<typeof RetrieveOptions>;
 
@@ -568,9 +569,7 @@ export async function retrieve(options: RetrieveOptionsType, figmaMetaCache: Fig
     const figmaColors: FigmaDefinedColor[] = useCache ? await readFigmaColorsFile(options.dataDir, document.figmaDocument) : [];
 
     const customPenpotFontsVariants = (await postGetFontVariants({
-      requestBody: {
-        fileId: document.penpotDocument,
-      },
+      requestBody: options.penpotProjectId ? { projectId: options.penpotProjectId } : { fileId: document.penpotDocument },
     })) as unknown as any[];
 
     if (options.syncMappingWithGit) {

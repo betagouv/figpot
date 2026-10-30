@@ -14,6 +14,7 @@ export function translateStrokes(
 
   const sharedStrokeProperties: Stroke = {
     strokeWidth: translateStrokeWeight(node),
+    ...translateStrokeSideWeights(node),
     strokeAlignment: node.strokeAlign ? translateStrokeAlignment(node.strokeAlign) : undefined,
     strokeStyle: !!node.strokeDashes && node.strokeDashes.length > 0 ? 'dashed' : 'solid',
   };
@@ -86,6 +87,29 @@ function translateStrokeWeight(node: HasGeometryTrait | (HasGeometryTrait & Indi
     node.individualStrokeWeights.bottom,
     node.individualStrokeWeights.left
   );
+}
+
+// Penpot draws a different width per side only if all sides are given (a missing one falls back to `strokeWidth`), and
+// only with its new renderer. `strokeWidth` is kept to the widest side (instead of the top one as Penpot does when editing)
+// so instances or renderers without per-side support show a full border as before, instead of no border at all
+function translateStrokeSideWeights(
+  node: HasGeometryTrait | (HasGeometryTrait & IndividualStrokesTrait)
+): Pick<Stroke, 'strokeWidthTop' | 'strokeWidthRight' | 'strokeWidthBottom' | 'strokeWidthLeft'> {
+  if (!isIndividualStrokes(node) || node.individualStrokeWeights === undefined) {
+    return {};
+  }
+
+  const { top, right, bottom, left } = node.individualStrokeWeights;
+  if (top === right && right === bottom && bottom === left) {
+    return {};
+  }
+
+  return {
+    strokeWidthTop: top,
+    strokeWidthRight: right,
+    strokeWidthBottom: bottom,
+    strokeWidthLeft: left,
+  };
 }
 
 function isIndividualStrokes(node: HasGeometryTrait | IndividualStrokesTrait): node is IndividualStrokesTrait {

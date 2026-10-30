@@ -3198,7 +3198,9 @@ export async function synchronize(options: SynchronizeOptionsType, figmaMetaCach
 }
 
 export function formatPenpotPageUrl(baseUrl: string, teamId: string, documentId: string, pageId: string): string {
-  return `${baseUrl}/#/workspace?team-id=${teamId}&file-id=${documentId}&page-id=${pageId}`;
+  // The new render engine is forced whatever the user profile preference, it computes text layouts the same way users will see them,
+  // and contrary to the legacy one it does not generate thumbnails (all pushed as updates to wait for)
+  return `${baseUrl}/#/workspace?team-id=${teamId}&file-id=${documentId}&page-id=${pageId}&wasm=true`;
 }
 
 export const HydrateOptions = z.object({
@@ -3252,6 +3254,7 @@ export async function hydrate(options: HydrateOptionsType) {
     headless: false,
     args: [
       '--window-size=1,1', // It does not work as expected, `viewport` in the browser context must also be set (note there is no working way to minimize the window)
+      '--enable-unsafe-swiftshader', // Fallback to software WebGL when there is no GPU (e.g. CI with `xvfb-run`), otherwise the new render engine cannot start and nothing is hydrated
     ],
   });
 
@@ -3296,6 +3299,12 @@ export async function hydrate(options: HydrateOptionsType) {
       const page = await browserContext.newPage();
 
       try {
+        // Without WebGL the new render engine cannot start, the file would be considered as hydrated whereas nothing has been computed
+        const webglAvailable = await page.evaluate(() => !!window.document.createElement('canvas').getContext('webgl2'));
+        if (!webglAvailable) {
+          throw new Error(`webgl is not available in the hydratation browser, the penpot render engine cannot compute the file`);
+        }
+
         const endpointsToWatch = ['/api/main/methods/update-file?'];
         let stage: 'start' | 'waiting-updates' = 'start';
 

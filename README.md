@@ -113,7 +113,7 @@ In fact, our core library is transforming and giving all the Figma information t
 - It gives each paragraph part a graphical position that cannot be inferred from the Figma data
 - It recalculates the size of auto-sized texts with the browser font metrics (that may differ from Figma ones, for example a text wrapping on more lines), and so the layouts containing them
 
-So, at the end of a synchronization of "raw data", we hydrate the Penpot file by opening a hidden browser that will wait for those 2 operations to be done on all pages.
+So, at the end of a synchronization of "raw data", we hydrate the Penpot file by opening a hidden browser that will wait for those operations to be done on all pages. The new Penpot render engine is forced during this step, whatever your profile preference.
 
 There are 2 drawbacks to this:
 

@@ -3200,7 +3200,7 @@ export async function synchronize(options: SynchronizeOptionsType, figmaMetaCach
 export function formatPenpotPageUrl(baseUrl: string, teamId: string, documentId: string, pageId: string): string {
   // The new render engine is forced whatever the user profile preference, it computes text layouts the same way users will see them,
   // and contrary to the legacy one it does not generate thumbnails (all pushed as updates to wait for)
-  return `${baseUrl}/#/workspace?team-id=${teamId}&file-id=${documentId}&page-id=${pageId}&wasm=true`;
+  return `${baseUrl}/?screen=workspace&team-id=${teamId}&file-id=${documentId}&page-id=${pageId}&wasm=true`;
 }
 
 export const HydrateOptions = z.object({
@@ -3336,10 +3336,12 @@ export async function hydrate(options: HydrateOptionsType) {
                 const pageToWatch = pagesToWatch.shift() as string;
                 const pageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, pageToWatch);
 
+                // Changing the url through `location.href` would reload the whole document (the file is fetched and loaded again for
+                // each page, very slow on big files), so the Penpot router is notified through the history API instead
                 page
                   .evaluate((newUrl) => {
-                    // We tried using `pushState` but it was not working. It seems by modifying the `href` the page is not reloaded so it fits our need
-                    window.location.href = newUrl;
+                    window.history.pushState({}, '', newUrl);
+                    window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
                   }, pageUrl)
                   .then(() => {
                     // Start again the analysis process
@@ -3384,6 +3386,10 @@ export async function hydrate(options: HydrateOptionsType) {
               } else {
                 reject(new Error(`document data cannot be fetched: ${await response.text()}`));
               }
+            } else if (stage === 'waiting-updates' && url.includes('/api/main/methods/get-file?') && url.includes(document.penpotDocument)) {
+              // Switching pages must not reload the document, otherwise the whole file is fetched again (very slow on big files)
+              // Note: the libraries used by the document are also fetched at startup, they are not concerned
+              console.warn(`the document has been fetched again, the page switch has probably reloaded it`);
             } else if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => url.includes(endpoint))) {
               console.log(`the needed request has been performed, looking for more...`);
 

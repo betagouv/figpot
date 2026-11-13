@@ -62,8 +62,17 @@ export async function ensureAccessTokens(prompting: boolean = true) {
   };
 
   PenpotClientSettings.HEADERS = {
-    Authorization: `Token ${config.penpotAccessToken}`,
+    Authorization: getPenpotAuthorizationHeader(config.penpotAccessToken),
   };
+}
+
+// An access token is sent as `Token <value>`. When the instance does not enable the `access-tokens` flag (no section in the profile
+// to create one, and the backend ignores them), the session token of a logged-in browser (value of the `auth-token` cookie) can be
+// used instead by prefixing it with `Bearer ` (supported since Penpot 2.12). An explicit `Token ` prefix is also accepted
+export function getPenpotAuthorizationHeader(value: string): string {
+  const trimmedValue = value.trim();
+
+  return /^(Token|Bearer)\s+/i.test(trimmedValue) ? trimmedValue : `Token ${trimmedValue}`;
 }
 
 export async function ensureCredentials(prompting: boolean = true) {

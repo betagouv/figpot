@@ -51,7 +51,7 @@ Selecting the same Penpot file target over and over can be annoying. You can use
 It's possible to prefill some environment variables to avoid typing information each time:
 
 - `FIGMA_ACCESS_TOKEN` _(the token can be created from your account settings under `Personal access tokens` section, with **read-only** scopes like `File content, File metadata, Library assets, Library content, Projects, Team library content`)_
-- `PENPOT_ACCESS_TOKEN` _(the token can be created from your account settings under `Access tokens` tab)_
+- `PENPOT_ACCESS_TOKEN` _(the token can be created from your account settings under `Access tokens` tab. And if your instance does not enable access tokens, you can use instead the value of the `auth-token` cookie of a logged-in browser prefixed with `Bearer ` but it will expire with the session)_
 - `PENPOT_USER_EMAIL` _(email used for your account)_
 - `PENPOT_USER_PASSWORD` _(password used for your account)_
 

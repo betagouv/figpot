@@ -17,6 +17,25 @@ import { FrameShape } from '@figpot/src/models/entities/penpot/shapes/frame';
 import { Point } from '@figpot/src/models/entities/penpot/traits/point';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
+// Penpot cannot truncate a text (Figma cuts it with an ellipsis), the overflowing lines would be displayed over the next elements, so
+// the frame holding a truncated text clips its content instead (groups cannot clip, so texts inside them are concerned too)
+// Note: the rule only depends on the node itself, so a main component and its copies get the same value (no override)
+function hasTruncatedText(node: SubcanvasNode): boolean {
+  if (!('children' in node)) {
+    return false;
+  }
+
+  return node.children.some((child) => {
+    if (child.visible === false) {
+      return false;
+    } else if (child.type === 'TEXT') {
+      return child.style.textTruncation === 'ENDING' || child.style.textAutoResize === 'TRUNCATE';
+    }
+
+    return child.type === 'GROUP' && hasTruncatedText(child);
+  });
+}
+
 function isSectionNode(node: FrameNode | SectionNode | ComponentNode | ComponentSetNode | InstanceNode | SlotNode): node is SectionNode {
   return node.type === 'SECTION';
 }
@@ -56,7 +75,7 @@ export function transformFrameNode(
     type: 'frame',
     name: node.name,
     shapes: childrenShapes,
-    showContent: isSectionNode(node) ? true : !node.clipsContent,
+    showContent: isSectionNode(node) ? true : !(node.clipsContent || hasTruncatedText(node as SubcanvasNode)),
     ...transformFills(registry, node),
     ...frameSpecificAttributes,
     ...(layoutGridCells ? { layoutGridCells } : {}),

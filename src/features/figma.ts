@@ -637,6 +637,43 @@ export function patchFontFamily(fontSettings: TypeStyle, replaceFontPatterns: Re
   }
 }
 
+// An auto layout frame hugging its content takes the size of its children, so once the exclusions removed all the children laid out in it
+// Penpot would collapse it at the next layout computation. Its Figma size is kept as a fixed one on the hugging axes instead
+export function freezeEmptiedHuggingFrame(figmaNode: SubcanvasNode) {
+  if (!('children' in figmaNode) || !('layoutMode' in figmaNode) || !figmaNode.layoutMode || figmaNode.layoutMode === 'NONE') {
+    return;
+  }
+
+  // Children positioned absolutely are not laid out, so they do not give any size to the frame
+  const hasLaidOutChildren = figmaNode.children.some((child) => !('layoutPositioning' in child) || child.layoutPositioning !== 'ABSOLUTE');
+  if (hasLaidOutChildren) {
+    return;
+  }
+
+  const isHorizontalLayout = figmaNode.layoutMode === 'HORIZONTAL';
+
+  if (figmaNode.layoutSizingHorizontal === 'HUG') {
+    figmaNode.layoutSizingHorizontal = 'FIXED';
+
+    // Legacy properties expressing the same along the layout axes
+    if (isHorizontalLayout) {
+      figmaNode.primaryAxisSizingMode = 'FIXED';
+    } else {
+      figmaNode.counterAxisSizingMode = 'FIXED';
+    }
+  }
+
+  if (figmaNode.layoutSizingVertical === 'HUG') {
+    figmaNode.layoutSizingVertical = 'FIXED';
+
+    if (isHorizontalLayout) {
+      figmaNode.counterAxisSizingMode = 'FIXED';
+    } else {
+      figmaNode.primaryAxisSizingMode = 'FIXED';
+    }
+  }
+}
+
 export function patchNestedTreeElements(
   figmaNode: SubcanvasNode,
   excludePatterns: ExcludePatternsType,
@@ -645,13 +682,21 @@ export function patchNestedTreeElements(
   // Deep parse
   // Note: arrays are browsed the reverse order since modifying it while browsing
   if ('children' in figmaNode) {
+    let excludedChildren = false;
+
     let w = figmaNode.children.length;
     while (w--) {
       if (excludePatterns.nodeNamePatterns && excludePatterns.nodeNamePatterns.some((pattern) => pattern.test(figmaNode.children[w].name))) {
         figmaNode.children.splice(w, 1);
+
+        excludedChildren = true;
       } else {
         patchNestedTreeElements(figmaNode.children[w], excludePatterns, replaceFontPatterns);
       }
+    }
+
+    if (excludedChildren) {
+      freezeEmptiedHuggingFrame(figmaNode);
     }
   }
 

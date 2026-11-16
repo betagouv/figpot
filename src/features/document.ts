@@ -3271,6 +3271,9 @@ export async function hydrate(options: HydrateOptionsType) {
   const legacyIdleSeconds = 10;
   // Loading the shapes of a huge page can take minutes, past this delay something went wrong
   const pageLoadTimeoutSeconds = 10 * 60;
+  // The memory of a tab grows with each page displayed, past this share of its JavaScript heap limit the next pages are hydrated
+  // into a new tab (a crash is also retried into a new tab, to tell apart a page too big to be loaded from the accumulated memory)
+  const heapRestartRatio = 0.5;
 
   const browser = await chromium.launch({
     executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
@@ -3320,48 +3323,37 @@ export async function hydrate(options: HydrateOptionsType) {
         throw new Error(`to run hydratation you must first run the synchronization on this document on this machine`);
       }
 
-      const page = await browserContext.newPage();
+      const endpointsToWatch = ['/api/main/methods/update-file?'];
 
-      // Penpot emits this event once the shapes of the displayed page are loaded into its render engine (at startup and at each page
-      // switch). It is counted into the DOM since it is shared with the isolated context used to evaluate scripts
-      await page.addInitScript(() => {
-        window.document.addEventListener('penpot:wasm:set-objects', () => {
-          const dataset = window.document.documentElement.dataset;
+      // Hydrate the given pages into a new tab, it returns the pages left when the tab had to be replaced (see below)
+      const hydratePagesIntoNewTab = async (pages: string[]): Promise<string[]> => {
+        const page = await browserContext.newPage();
 
-          dataset.figpotPageLoads = String(Number(dataset.figpotPageLoads ?? 0) + 1);
+        // Penpot emits this event once the shapes of the displayed page are loaded into its render engine (at startup and at each page
+        // switch). It is counted into the DOM since it is shared with the isolated context used to evaluate scripts
+        await page.addInitScript(() => {
+          window.document.addEventListener('penpot:wasm:set-objects', () => {
+            const dataset = window.document.documentElement.dataset;
+
+            dataset.figpotPageLoads = String(Number(dataset.figpotPageLoads ?? 0) + 1);
+          });
         });
-      });
-
-      try {
-        // Without WebGL the new render engine cannot start, the file would be considered as hydrated whereas nothing has been computed
-        const webglAvailable = await page.evaluate(() => !!window.document.createElement('canvas').getContext('webgl2'));
-        if (!webglAvailable) {
-          throw new Error(`webgl is not available in the hydratation browser, the penpot render engine cannot compute the file`);
-        }
-
-        const endpointsToWatch = ['/api/main/methods/update-file?'];
-        let stage: 'start' | 'waiting-updates' = 'start';
-
-        const pagesToWatch = [...meta.penpotPages];
-
-        if (pagesToWatch.length === 0) {
-          break;
-        }
-
-        const firstPageToWatch = pagesToWatch.shift() as string;
-        let currentPage = firstPageToWatch;
 
         // The crash event gives no reason, so the JavaScript heap of the tab is sampled to tell the user when it was close to its limit
         // (Chromium caps it around 4 GB whatever the machine memory, a page with too many shapes cannot be loaded)
-        let lastHeapSample: { used: number; limit: number } | null = null;
+        type HeapSample = { used: number; limit: number };
+        const readHeap = () =>
+          page.evaluate(() => {
+            const memory = (performance as Performance & { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
+
+            return memory ? { used: memory.usedJSHeapSize, limit: memory.jsHeapSizeLimit } : null;
+          });
+        const toMegabytes = (bytes: number) => Math.round(bytes / 1024 / 1024);
+
+        let lastHeapSample: HeapSample | null = null;
         let peakHeapUsed = 0;
         const heapSamplingIntervalId = setInterval(() => {
-          page
-            .evaluate(() => {
-              const memory = (performance as Performance & { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
-
-              return memory ? { used: memory.usedJSHeapSize, limit: memory.jsHeapSizeLimit } : null;
-            })
+          readHeap()
             .then((sample) => {
               if (sample) {
                 lastHeapSample = sample;
@@ -3373,219 +3365,276 @@ export async function hydrate(options: HydrateOptionsType) {
             });
         }, 2000);
 
-        await new Promise<void>((resolve, reject) => {
-          page.on('crash', () => {
-            const toMegabytes = (bytes: number) => Math.round(bytes / 1024 / 1024);
-            const heapLimit = (lastHeapSample as { used: number; limit: number } | null)?.limit ?? null;
-            const memoryDetails = heapLimit
-              ? ` (JavaScript heap peaked at ${toMegabytes(peakHeapUsed)} MB out of a ${toMegabytes(heapLimit)} MB limit)`
-              : '';
-            // Samples are taken every few seconds while the heap grows fast just before the crash, so half of the limit is already a strong hint
-            const likelyOutOfMemory = heapLimit !== null && peakHeapUsed >= heapLimit / 2;
+        try {
+          // Without WebGL the new render engine cannot start, the file would be considered as hydrated whereas nothing has been computed
+          const webglAvailable = await page.evaluate(() => !!window.document.createElement('canvas').getContext('webgl2'));
+          if (!webglAvailable) {
+            throw new Error(`webgl is not available in the hydratation browser, the penpot render engine cannot compute the file`);
+          }
 
-            reject(
-              new Error(
-                `the browser tab crashed while hydrating the page ${currentPage}${memoryDetails}. ` +
-                  (likelyOutOfMemory
-                    ? `It has very likely run out of memory: the page has too many shapes to be loaded in a browser tab (Chromium caps the JavaScript memory of a tab around 4 GB, adding memory to the machine does not help). Users will face the same crash when opening this page, consider excluding its non-essential elements from the synchronization (with "--exclude-node-pattern" or "--exclude-page-pattern") or splitting its content across several pages into the Figma document`
-                    : `The cause is unknown, try again and check the machine has enough free memory`)
-              )
-            );
-          });
+          let stage: 'start' | 'waiting-updates' = 'start';
 
-          // TODO: timeout should be global to all documents
-          const timeoutTimerId = options.timeout
-            ? setTimeout(() => {
-                reject(new Error('hydratation has timed out before being fully complete'));
-              }, options.timeout)
-            : null;
+          const [firstPageToWatch, ...otherPagesToWatch] = pages;
+          let currentPage = firstPageToWatch;
+          let hydratedPages = 0;
 
-          const inFlightUpdates = new Set<Request>();
+          return await new Promise<string[]>((resolve, reject) => {
+            page.on('crash', () => {
+              const heapLimit = (lastHeapSample as HeapSample | null)?.limit ?? null;
+              const memoryDetails = heapLimit
+                ? ` (JavaScript heap peaked at ${toMegabytes(peakHeapUsed)} MB out of a ${toMegabytes(heapLimit)} MB limit)`
+                : '';
 
-          page.on('request', (request) => {
-            if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => request.url().includes(endpoint))) {
-              console.log(`a needed request has been detected`);
+              // The memory of the tab grows with each page displayed, so the page is retried into a new tab to know if it can be loaded on its own
+              if (hydratedPages > 0) {
+                console.warn(`the browser tab crashed while hydrating the page ${currentPage}${memoryDetails}, retrying it into a new tab`);
 
-              inFlightUpdates.add(request);
-            }
-          });
+                resolve(pages.slice(hydratedPages));
 
-          page.on('response', async (response) => {
-            const url = response.url();
-            if (stage === 'start' && url.includes('/api/main/methods/get-file?')) {
-              if (response.status() === 200) {
-                stage = 'waiting-updates';
-              } else {
-                reject(new Error(`document data cannot be fetched: ${await response.text()}`));
+                return;
               }
-            } else if (stage === 'waiting-updates' && url.includes('/api/main/methods/get-file?') && url.includes(document.penpotDocument)) {
-              // Switching pages must not reload the document, otherwise the whole file is fetched again (very slow on big files)
-              // Note: the libraries used by the document are also fetched at startup, they are not concerned
-              console.warn(`the document has been fetched again, the page switch has probably reloaded it`);
-            } else if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => url.includes(endpoint))) {
-              console.log(`the needed request has been performed, looking for more...`);
 
-              inFlightUpdates.delete(response.request());
-            }
-          });
+              // Samples are taken every few seconds while the heap grows fast just before the crash, so half of the limit is already a strong hint
+              const likelyOutOfMemory = heapLimit !== null && peakHeapUsed >= heapLimit / 2;
 
-          // Penpot emits an event once the shapes of the displayed page are loaded into its render engine, it is counted by the init script
-          const waitForPageLoaded = async (previousPageLoads: number) => {
-            try {
-              await page.waitForFunction(
-                (previous) => Number(window.document.documentElement.dataset.figpotPageLoads ?? 0) > previous,
-                previousPageLoads,
-                { timeout: pageLoadTimeoutSeconds * 1000, polling: 500 }
+              reject(
+                new Error(
+                  `the browser tab crashed while hydrating the page ${currentPage}${memoryDetails}. ` +
+                    (likelyOutOfMemory
+                      ? `It has very likely run out of memory: the page has too many shapes to be loaded in a browser tab (Chromium caps the JavaScript memory of a tab around 4 GB, adding memory to the machine does not help). Users will face the same crash when opening this page, consider excluding its non-essential elements from the synchronization (with "--exclude-node-pattern" or "--exclude-page-pattern") or splitting its content across several pages into the Figma document`
+                      : `The cause is unknown, try again and check the machine has enough free memory`)
+                )
               );
-            } catch (error) {
-              throw error instanceof Error && error.name === 'TimeoutError'
-                ? new Error(`the page ${currentPage} has not been loaded by Penpot after ${pageLoadTimeoutSeconds} seconds`)
-                : error;
-            }
-          };
-
-          // Read the persistence state of Penpot (changes waiting to be saved) through its `debug` namespace, it only exists into the
-          // main context of the page (not the isolated one used by default). It returns `null` if not available (e.g. other Penpot versions)
-          const readPenpotPersistence = () =>
-            page.evaluate(
-              () => {
-                const debug = (window as unknown as { debug?: { get_state?: (path: string) => void } }).debug;
-                const getState = debug?.get_state;
-
-                if (typeof getState !== 'function') {
-                  return null;
-                }
-
-                // `get_state` only logs the value, so it is captured
-                // Note: no named function must be declared here, the TypeScript runtime would wrap it with a helper that does not exist in the page
-                const values: unknown[] = [];
-                const originalLog = console.log;
-
-                console.log = (...args: unknown[]) => {
-                  values.push(args[args.length - 1]);
-                };
-
-                try {
-                  getState(':persistence :status');
-                  getState(':persistence :queue');
-                } finally {
-                  console.log = originalLog;
-                }
-
-                const [status, queue] = values;
-
-                return {
-                  status: typeof status === 'string' ? status : null,
-                  queueLength: Array.isArray(queue) ? queue.length : 0,
-                };
-              },
-              undefined,
-              undefined,
-              false
-            );
-
-          // A page is done once nothing is being sent and Penpot has no change waiting to be saved (a `null` or `saved` status with an empty
-          // queue, like its own `terminal-status?`), for a few seconds in a row since Penpot debounces its changes and some are computed
-          // a bit after the page load (e.g. text layouts once fonts are loaded)
-          const waitForPageSettled = (stableSeconds: number, fallbackStableSeconds: number) =>
-            new Promise<void>((resolveSettled, rejectSettled) => {
-              let settledSince: number | null = null;
-
-              const check = () => {
-                readPenpotPersistence()
-                  .then((persistence) => {
-                    if (persistence?.status === 'error') {
-                      rejectSettled(new Error(`Penpot has failed to save the changes computed for the page ${currentPage}`));
-
-                      return;
-                    }
-
-                    const settled =
-                      inFlightUpdates.size === 0 &&
-                      (persistence === null || (persistence.queueLength === 0 && (persistence.status === null || persistence.status === 'saved')));
-                    const requiredStableSeconds = persistence === null ? fallbackStableSeconds : stableSeconds;
-
-                    if (!settled) {
-                      settledSince = null;
-                    } else if (settledSince === null) {
-                      settledSince = Date.now();
-                    } else if (Date.now() - settledSince >= requiredStableSeconds * 1000) {
-                      resolveSettled();
-
-                      return;
-                    }
-
-                    setTimeout(check, 500);
-                  })
-                  .catch((error) => {
-                    // If the tab has crashed its own event gives a better explanation, so let it reject first
-                    setTimeout(() => rejectSettled(error), 1000);
-                  });
-              };
-
-              check();
             });
 
-          const hydratePages = async () => {
-            const firstPageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, firstPageToWatch);
+            // TODO: timeout should be global to all documents
+            const timeoutTimerId = options.timeout
+              ? setTimeout(() => {
+                  reject(new Error('hydratation has timed out before being fully complete'));
+                }, options.timeout)
+              : null;
 
-            const response = await page.goto(firstPageUrl, {
-              // timeout: xxx, // It should be working by having the command timeout that will close the browser
-              waitUntil: 'load',
-            });
+            const inFlightUpdates = new Set<Request>();
 
-            if (response && response.status() !== 200) {
-              console.log(await response.text());
+            page.on('request', (request) => {
+              if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => request.url().includes(endpoint))) {
+                console.log(`a needed request has been detected`);
 
-              throw new Error(`cannot load the document page`);
-            }
-
-            console.log(`look for change needed on the page ${firstPageToWatch}`);
-
-            // The page shapes may have been loaded before reaching this point, the counter covers it
-            await waitForPageLoaded(0);
-            // At startup Penpot also synchronizes the libraries and the components, so it is given more time
-            await waitForPageSettled(firstPageSettledSeconds, legacyStartupIdleSeconds);
-
-            for (const pageToWatch of pagesToWatch) {
-              const pageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, pageToWatch);
-
-              currentPage = pageToWatch;
-
-              // Changing the url through `location.href` would reload the whole document (the file is fetched and loaded again for
-              // each page, very slow on big files), so the Penpot router is notified through the history API instead
-              const previousPageLoads = await page.evaluate((newUrl) => {
-                const previous = Number(window.document.documentElement.dataset.figpotPageLoads ?? 0);
-
-                window.history.pushState({}, '', newUrl);
-                window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
-
-                return previous;
-              }, pageUrl);
-
-              console.log(`look for change needed on the page ${pageToWatch}`);
-
-              await waitForPageLoaded(previousPageLoads);
-              await waitForPageSettled(pageSettledSeconds, legacyIdleSeconds);
-            }
-          };
-
-          hydratePages()
-            .then(resolve)
-            .catch(reject)
-            .finally(() => {
-              if (timeoutTimerId) {
-                clearTimeout(timeoutTimerId);
+                inFlightUpdates.add(request);
               }
             });
-        }).finally(() => {
-          clearInterval(heapSamplingIntervalId);
-        });
 
-        console.log('no more update needed on the document');
-      } finally {
-        await page.close();
+            page.on('response', async (response) => {
+              const url = response.url();
+              if (stage === 'start' && url.includes('/api/main/methods/get-file?')) {
+                if (response.status() === 200) {
+                  stage = 'waiting-updates';
+                } else {
+                  reject(new Error(`document data cannot be fetched: ${await response.text()}`));
+                }
+              } else if (stage === 'waiting-updates' && url.includes('/api/main/methods/get-file?') && url.includes(document.penpotDocument)) {
+                // Switching pages must not reload the document, otherwise the whole file is fetched again (very slow on big files)
+                // Note: the libraries used by the document are also fetched at startup, they are not concerned
+                console.warn(`the document has been fetched again, the page switch has probably reloaded it`);
+              } else if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => url.includes(endpoint))) {
+                console.log(`the needed request has been performed, looking for more...`);
+
+                inFlightUpdates.delete(response.request());
+              }
+            });
+
+            // Penpot emits an event once the shapes of the displayed page are loaded into its render engine, it is counted by the init script
+            const waitForPageLoaded = async (previousPageLoads: number) => {
+              try {
+                await page.waitForFunction(
+                  (previous) => Number(window.document.documentElement.dataset.figpotPageLoads ?? 0) > previous,
+                  previousPageLoads,
+                  { timeout: pageLoadTimeoutSeconds * 1000, polling: 500 }
+                );
+              } catch (error) {
+                throw error instanceof Error && error.name === 'TimeoutError'
+                  ? new Error(`the page ${currentPage} has not been loaded by Penpot after ${pageLoadTimeoutSeconds} seconds`)
+                  : error;
+              }
+            };
+
+            // Read the persistence state of Penpot (changes waiting to be saved) through its `debug` namespace, it only exists into the
+            // main context of the page (not the isolated one used by default). It returns `null` if not available (e.g. other Penpot versions)
+            const readPenpotPersistence = () =>
+              page.evaluate(
+                () => {
+                  const debug = (window as unknown as { debug?: { get_state?: (path: string) => void } }).debug;
+                  const getState = debug?.get_state;
+
+                  if (typeof getState !== 'function') {
+                    return null;
+                  }
+
+                  // `get_state` only logs the value, so it is captured
+                  // Note: no named function must be declared here, the TypeScript runtime would wrap it with a helper that does not exist in the page
+                  const values: unknown[] = [];
+                  const originalLog = console.log;
+
+                  console.log = (...args: unknown[]) => {
+                    values.push(args[args.length - 1]);
+                  };
+
+                  try {
+                    getState(':persistence :status');
+                    getState(':persistence :queue');
+                  } finally {
+                    console.log = originalLog;
+                  }
+
+                  const [status, queue] = values;
+
+                  return {
+                    status: typeof status === 'string' ? status : null,
+                    queueLength: Array.isArray(queue) ? queue.length : 0,
+                  };
+                },
+                undefined,
+                undefined,
+                false
+              );
+
+            // A page is done once nothing is being sent and Penpot has no change waiting to be saved (a `null` or `saved` status with an empty
+            // queue, like its own `terminal-status?`), for a few seconds in a row since Penpot debounces its changes and some are computed
+            // a bit after the page load (e.g. text layouts once fonts are loaded)
+            const waitForPageSettled = (stableSeconds: number, fallbackStableSeconds: number) =>
+              new Promise<void>((resolveSettled, rejectSettled) => {
+                let settledSince: number | null = null;
+
+                const check = () => {
+                  readPenpotPersistence()
+                    .then((persistence) => {
+                      if (persistence?.status === 'error') {
+                        rejectSettled(new Error(`Penpot has failed to save the changes computed for the page ${currentPage}`));
+
+                        return;
+                      }
+
+                      const settled =
+                        inFlightUpdates.size === 0 &&
+                        (persistence === null || (persistence.queueLength === 0 && (persistence.status === null || persistence.status === 'saved')));
+                      const requiredStableSeconds = persistence === null ? fallbackStableSeconds : stableSeconds;
+
+                      if (!settled) {
+                        settledSince = null;
+                      } else if (settledSince === null) {
+                        settledSince = Date.now();
+                      } else if (Date.now() - settledSince >= requiredStableSeconds * 1000) {
+                        resolveSettled();
+
+                        return;
+                      }
+
+                      setTimeout(check, 500);
+                    })
+                    .catch((error) => {
+                      // If the tab has crashed its own event gives a better explanation, so let it reject first
+                      setTimeout(() => rejectSettled(error), 1000);
+                    });
+                };
+
+                check();
+              });
+
+            // Once a page is done, it tells if the next ones should be hydrated into a new tab: Penpot keeps in memory what it has
+            // loaded so the heap of the tab grows with each page displayed, until crashing even on a small page
+            const markPageAsHydrated = async (): Promise<boolean> => {
+              hydratedPages++;
+
+              const heap = await readHeap();
+
+              console.log(`the page ${currentPage} is hydrated${heap ? ` (JavaScript heap: ${toMegabytes(heap.used)} MB)` : ''}`);
+
+              if (heap && hydratedPages < pages.length && heap.used >= heap.limit * heapRestartRatio) {
+                console.log(`the JavaScript heap of the tab is getting large, the next pages are hydrated into a new tab to free it`);
+
+                return true;
+              }
+
+              return false;
+            };
+
+            const hydratePages = async (): Promise<string[]> => {
+              const firstPageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, firstPageToWatch);
+
+              const response = await page.goto(firstPageUrl, {
+                // timeout: xxx, // It should be working by having the command timeout that will close the browser
+                waitUntil: 'load',
+              });
+
+              if (response && response.status() !== 200) {
+                console.log(await response.text());
+
+                throw new Error(`cannot load the document page`);
+              }
+
+              console.log(`look for change needed on the page ${firstPageToWatch}`);
+
+              // The page shapes may have been loaded before reaching this point, the counter covers it
+              await waitForPageLoaded(0);
+              // At startup Penpot also synchronizes the libraries and the components, so it is given more time
+              await waitForPageSettled(firstPageSettledSeconds, legacyStartupIdleSeconds);
+
+              if (await markPageAsHydrated()) {
+                return pages.slice(hydratedPages);
+              }
+
+              for (const pageToWatch of otherPagesToWatch) {
+                const pageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, pageToWatch);
+
+                currentPage = pageToWatch;
+
+                // Changing the url through `location.href` would reload the whole document (the file is fetched and loaded again for
+                // each page, very slow on big files), so the Penpot router is notified through the history API instead
+                const previousPageLoads = await page.evaluate((newUrl) => {
+                  const previous = Number(window.document.documentElement.dataset.figpotPageLoads ?? 0);
+
+                  window.history.pushState({}, '', newUrl);
+                  window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+
+                  return previous;
+                }, pageUrl);
+
+                console.log(`look for change needed on the page ${pageToWatch}`);
+
+                await waitForPageLoaded(previousPageLoads);
+                await waitForPageSettled(pageSettledSeconds, legacyIdleSeconds);
+
+                if (await markPageAsHydrated()) {
+                  return pages.slice(hydratedPages);
+                }
+              }
+
+              return [];
+            };
+
+            hydratePages()
+              .then(resolve)
+              .catch(reject)
+              .finally(() => {
+                if (timeoutTimerId) {
+                  clearTimeout(timeoutTimerId);
+                }
+              });
+          });
+        } finally {
+          clearInterval(heapSamplingIntervalId);
+
+          await page.close();
+        }
+      };
+
+      let pagesLeft = [...meta.penpotPages];
+
+      while (pagesLeft.length > 0) {
+        pagesLeft = await hydratePagesIntoNewTab(pagesLeft);
       }
+
+      console.log('no more update needed on the document');
     }
   } finally {
     await browser.close();

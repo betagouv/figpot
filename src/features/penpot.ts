@@ -1,6 +1,6 @@
 import svgPathParser from 'svg-path-parser';
 
-import { PostGetFileResponse } from '@figpot/src/clients/penpot';
+import { OpenAPI as PenpotClientSettings, PostGetFileResponse } from '@figpot/src/clients/penpot';
 import {
   formatPageRootFrameId,
   rootFrameId,
@@ -11,7 +11,7 @@ import {
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { Token, TokenSet, TokenTheme, TokenType } from '@figpot/src/models/entities/penpot/traits/token';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
-import { penpotBaseUrl } from '@figpot/src/utils/environment';
+import { penpotApiBaseUrl, penpotBaseUrl } from '@figpot/src/utils/environment';
 
 import { translateNonRotatedCommands } from './translators/vectors/translateNonRotatedCommands';
 
@@ -322,4 +322,90 @@ export async function penpotSupportsTokensStatus(): Promise<boolean> {
   }
 
   return version.major > 2 || (version.major === 2 && version.minor >= 19);
+}
+
+// The Penpot interface receives the whole file in a single response (transit format) decoded as one string, which cannot exceed
+// the maximum string length of the browser engine (V8: 2^29 - 24 characters, about 512 MB). Past it the file cannot be opened at
+// all (Penpot gets an error instead of the file data), whatever the machine
+// Note: bytes are compared to characters, which is a bit conservative since some characters take several bytes
+export const browserMaxFileResponseBytes = 2 ** 29 - 24;
+
+// Hydration adds data computed by the interface (text positions...), so a file close to the limit may exceed it once hydrated
+const browserFileResponseWarningRatio = 0.85;
+
+// Returns the size in bytes of the file as downloaded by the Penpot interface, or `null` if it cannot be measured
+export async function measureBrowserFileResponseSize(fileId: string): Promise<number | null> {
+  const request = (features: string[]) => {
+    const searchParams = new URLSearchParams({ id: fileId });
+    for (const feature of features) {
+      searchParams.append('features', feature);
+    }
+
+    return fetch(`${penpotApiBaseUrl}/get-file?${searchParams.toString()}`, {
+      headers: { ...(PenpotClientSettings.HEADERS as Record<string, string>), Accept: 'application/transit+json' },
+    });
+  };
+
+  try {
+    let response = await request([]);
+
+    // The client must declare the features used by the file, they are listed by the error
+    if (response.status === 400) {
+      const match = (await response.text()).match(/declares no support for '([^']+)' features/);
+      if (!match) {
+        return null;
+      }
+
+      response = await request(match[1].split(','));
+    }
+
+    if (!response.ok || !response.body) {
+      await response.body?.cancel();
+
+      return null;
+    }
+
+    // The response is only counted (it may be hundreds of megabytes)
+    const reader = response.body.getReader();
+    let size = 0;
+    for (let result = await reader.read(); !result.done; result = await reader.read()) {
+      size += result.value.byteLength;
+    }
+
+    return size;
+  } catch {
+    return null;
+  }
+}
+
+// Tells whether the Penpot interface can still load the file, `stage` adapts the advices (before hydration the file still grows)
+export async function checkFileLoadableByBrowser(fileId: string, stage: 'synchronized' | 'hydrated'): Promise<boolean> {
+  const size = await measureBrowserFileResponseSize(fileId);
+  if (size === null) {
+    console.warn(`the size of the Penpot file "${fileId}" as loaded by the browser cannot be measured, skipping the check`);
+
+    return true;
+  }
+
+  const toMegabytes = (bytes: number) => Math.round(bytes / 1024 / 1024);
+  const details = `${toMegabytes(size)} MB out of a ${toMegabytes(browserMaxFileResponseBytes)} MB limit`;
+  const advice = `Exclude non-essential elements from the synchronization (with "--exclude-node-pattern" or "--exclude-page-pattern") to make it lighter`;
+
+  if (size > browserMaxFileResponseBytes) {
+    console.error(
+      `the Penpot file "${fileId}" is too big to be opened by a browser (${details}): its data is loaded as a single string whose length is capped by the browser engine, so the Penpot interface (and the hydration) gets stuck on loading. ${advice}`
+    );
+
+    return false;
+  } else if (size > browserMaxFileResponseBytes * browserFileResponseWarningRatio) {
+    console.warn(
+      `the Penpot file "${fileId}" is close to the size a browser can open (${details})` +
+        (stage === 'synchronized' ? `, and the hydration will make it grow (data computed by the interface like text positions)` : '') +
+        `. Past the limit it cannot be opened at all. ${advice}`
+    );
+  } else {
+    console.log(`the Penpot file "${fileId}" can be loaded by a browser (${details})`);
+  }
+
+  return true;
 }

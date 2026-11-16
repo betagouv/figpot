@@ -65,7 +65,7 @@ import {
 import { restoreMappingFromRepository, saveMappingToRepository } from '@figpot/src/features/git';
 import { findLibraryUsages, formatLibraryUsages } from '@figpot/src/features/libraryUsages';
 import { MainCopies } from '@figpot/src/features/mainCopies';
-import { cleanHostedDocument, penpotSupportsTokensStatus } from '@figpot/src/features/penpot';
+import { checkFileLoadableByBrowser, cleanHostedDocument, penpotSupportsTokensStatus } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
 import { FigmaVariablesData, emptyFigmaVariablesData } from '@figpot/src/features/translators/tokens/translateTokens';
 import {
@@ -3151,6 +3151,10 @@ export async function synchronize(options: SynchronizeOptionsType, figmaMetaCach
   await compare(resolvedOptions);
   await set(resolvedOptions);
 
+  for (const document of resolvedOptions.documents) {
+    await checkFileLoadableByBrowser(document.penpotDocument, 'synchronized');
+  }
+
   // Dclare a link from every synced document to every library file (including sibling co-synced documents)
   if (!resolvedOptions.skipLibraries) {
     const libraryFiles = new Map<string, string>();
@@ -3321,6 +3325,11 @@ export async function hydrate(options: HydrateOptionsType) {
       // Check we have the needed information into the `meta.json`
       if (meta.penpotTeamId === 'not_known_yet') {
         throw new Error(`to run hydratation you must first run the synchronization on this document on this machine`);
+      }
+
+      // Otherwise the interface would get stuck on loading the file until the page timeout
+      if (!(await checkFileLoadableByBrowser(document.penpotDocument, 'synchronized'))) {
+        throw new Error(`the penpot document ${document.penpotDocument} cannot be hydrated since a browser cannot load it`);
       }
 
       const endpointsToWatch = ['/api/main/methods/update-file?'];
@@ -3635,6 +3644,11 @@ export async function hydrate(options: HydrateOptionsType) {
       }
 
       console.log('no more update needed on the document');
+
+      // The hydration makes the file grow, it may have become too big to be opened again
+      if (!(await checkFileLoadableByBrowser(document.penpotDocument, 'hydrated'))) {
+        throw new Error(`the penpot document ${document.penpotDocument} has become too big to be opened by a browser once hydrated`);
+      }
     }
   } finally {
     await browser.close();

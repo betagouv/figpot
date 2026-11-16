@@ -3247,6 +3247,8 @@ export async function hydrate(options: HydrateOptionsType) {
   // Detect updates needed by the frontend, and wait for them to finish
   const mininumStartupTimeSeconds = 30;
   const idleIntervalAfterChangeSeconds = 10;
+  // Loading the shapes of a huge page can take minutes, past this delay something went wrong
+  const pageLoadTimeoutSeconds = 10 * 60;
 
   const browser = await chromium.launch({
     executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
@@ -3298,6 +3300,16 @@ export async function hydrate(options: HydrateOptionsType) {
 
       const page = await browserContext.newPage();
 
+      // Penpot emits this event once the shapes of the displayed page are loaded into its render engine (at startup and at each page
+      // switch). It is counted into the DOM since it is shared with the isolated context used to evaluate scripts
+      await page.addInitScript(() => {
+        window.document.addEventListener('penpot:wasm:set-objects', () => {
+          const dataset = window.document.documentElement.dataset;
+
+          dataset.figpotPageLoads = String(Number(dataset.figpotPageLoads ?? 0) + 1);
+        });
+      });
+
       try {
         // Without WebGL the new render engine cannot start, the file would be considered as hydrated whereas nothing has been computed
         const webglAvailable = await page.evaluate(() => !!window.document.createElement('canvas').getContext('webgl2'));
@@ -3315,8 +3327,50 @@ export async function hydrate(options: HydrateOptionsType) {
         }
 
         const firstPageToWatch = pagesToWatch.shift() as string;
+        let currentPage = firstPageToWatch;
+
+        // The crash event gives no reason, so the JavaScript heap of the tab is sampled to tell the user when it was close to its limit
+        // (Chromium caps it around 4 GB whatever the machine memory, a page with too many shapes cannot be loaded)
+        let lastHeapSample: { used: number; limit: number } | null = null;
+        let peakHeapUsed = 0;
+        const heapSamplingIntervalId = setInterval(() => {
+          page
+            .evaluate(() => {
+              const memory = (performance as Performance & { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
+
+              return memory ? { used: memory.usedJSHeapSize, limit: memory.jsHeapSizeLimit } : null;
+            })
+            .then((sample) => {
+              if (sample) {
+                lastHeapSample = sample;
+                peakHeapUsed = Math.max(peakHeapUsed, sample.used);
+              }
+            })
+            .catch(() => {
+              // The page may be navigating or have crashed, the crash is reported by its own event
+            });
+        }, 2000);
 
         await new Promise<void>((resolve, reject) => {
+          page.on('crash', () => {
+            const toMegabytes = (bytes: number) => Math.round(bytes / 1024 / 1024);
+            const heapLimit = (lastHeapSample as { used: number; limit: number } | null)?.limit ?? null;
+            const memoryDetails = heapLimit
+              ? ` (JavaScript heap peaked at ${toMegabytes(peakHeapUsed)} MB out of a ${toMegabytes(heapLimit)} MB limit)`
+              : '';
+            // Samples are taken every few seconds while the heap grows fast just before the crash, so half of the limit is already a strong hint
+            const likelyOutOfMemory = heapLimit !== null && peakHeapUsed >= heapLimit / 2;
+
+            reject(
+              new Error(
+                `the browser tab crashed while hydrating the page ${currentPage}${memoryDetails}. ` +
+                  (likelyOutOfMemory
+                    ? `It has very likely run out of memory: the page has too many shapes to be loaded in a browser tab (Chromium caps the JavaScript memory of a tab around 4 GB, adding memory to the machine does not help). Users will face the same crash when opening this page, consider excluding its non-essential elements from the synchronization (with "--exclude-node-pattern" or "--exclude-page-pattern") or splitting its content across several pages into the Figma document`
+                    : `The cause is unknown, try again and check the machine has enough free memory`)
+              )
+            );
+          });
+
           // TODO: timeout should be global to all documents
           const timeoutTimerId = options.timeout
             ? setTimeout(() => {
@@ -3330,24 +3384,63 @@ export async function hydrate(options: HydrateOptionsType) {
 
           let successTimerId: ReturnType<typeof setTimeout>;
 
+          // The idle timer must only start once the page shapes are loaded, otherwise a page still loading (or whose tab crashed
+          // while loading) would be considered as hydrated after a few seconds without update
+          let pageLoaded = false;
+
+          const waitForPageLoaded = (previousPageLoads: number, onLoaded: () => void) => {
+            page
+              .waitForFunction((previous) => Number(window.document.documentElement.dataset.figpotPageLoads ?? 0) > previous, previousPageLoads, {
+                timeout: pageLoadTimeoutSeconds * 1000,
+                polling: 500,
+              })
+              .then(() => {
+                pageLoaded = true;
+
+                onLoaded();
+              })
+              .catch((error) => {
+                reject(
+                  error instanceof Error && error.name === 'TimeoutError'
+                    ? new Error(`the page ${currentPage} has not been loaded by Penpot after ${pageLoadTimeoutSeconds} seconds`)
+                    : error
+                );
+              });
+          };
+
+          const startIdleTimer = (timeout: number) => {
+            if (pageLoaded && ongoingChanges.length === 0) {
+              waitForPageChange(timeout);
+            }
+          };
+
           const waitForPageChange = (timeout: number) => {
             successTimerId = setTimeout(() => {
               if (pagesToWatch.length > 0) {
                 const pageToWatch = pagesToWatch.shift() as string;
                 const pageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, pageToWatch);
 
+                pageLoaded = false;
+                currentPage = pageToWatch;
+
                 // Changing the url through `location.href` would reload the whole document (the file is fetched and loaded again for
                 // each page, very slow on big files), so the Penpot router is notified through the history API instead
                 page
                   .evaluate((newUrl) => {
+                    const previousPageLoads = Number(window.document.documentElement.dataset.figpotPageLoads ?? 0);
+
                     window.history.pushState({}, '', newUrl);
                     window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+
+                    return previousPageLoads;
                   }, pageUrl)
-                  .then(() => {
+                  .then((previousPageLoads) => {
                     // Start again the analysis process
                     console.log(`look for change needed on the page ${pageToWatch}`);
 
-                    waitForPageChange(idleIntervalAfterChangeSeconds * 1000);
+                    waitForPageLoaded(previousPageLoads, () => {
+                      startIdleTimer(idleIntervalAfterChangeSeconds * 1000);
+                    });
                   })
                   .catch(reject);
               } else {
@@ -3382,7 +3475,10 @@ export async function hydrate(options: HydrateOptionsType) {
 
                 console.log(`look for change needed on the page ${firstPageToWatch}`);
 
-                waitForPageChange(mininumStartupTimeSeconds * 1000);
+                // The page shapes may have been loaded before this response is handled, the counter covers it
+                waitForPageLoaded(0, () => {
+                  startIdleTimer(mininumStartupTimeSeconds * 1000);
+                });
               } else {
                 reject(new Error(`document data cannot be fetched: ${await response.text()}`));
               }
@@ -3401,7 +3497,7 @@ export async function hydrate(options: HydrateOptionsType) {
                 // If no more waiting we can enable again the timer
                 if (ongoingChanges.length === 0) {
                   // Note: the time is different since after the first detected change it means the rest has been loaded already
-                  waitForPageChange(idleIntervalAfterChangeSeconds * 1000);
+                  startIdleTimer(idleIntervalAfterChangeSeconds * 1000);
                 }
               }
             }
@@ -3426,6 +3522,8 @@ export async function hydrate(options: HydrateOptionsType) {
                   });
               }
             });
+        }).finally(() => {
+          clearInterval(heapSamplingIntervalId);
         });
 
         console.log('no more update needed on the document');

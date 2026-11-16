@@ -3244,9 +3244,13 @@ export async function hydrate(options: HydrateOptionsType) {
     })
     .flat(); // Flatten because the cookie set and the library may have nested things;
 
-  // Detect updates needed by the frontend, and wait for them to finish
-  const mininumStartupTimeSeconds = 30;
-  const idleIntervalAfterChangeSeconds = 10;
+  // Detect updates needed by the frontend, and wait for them to finish: a page is done once Penpot has nothing left to save for
+  // these durations in a row (the first page also synchronizes the libraries). If the Penpot state cannot be read, it falls back to
+  // waiting for these durations without any update sent
+  const firstPageSettledSeconds = 10;
+  const pageSettledSeconds = 3;
+  const legacyStartupIdleSeconds = 30;
+  const legacyIdleSeconds = 10;
   // Loading the shapes of a huge page can take minutes, past this delay something went wrong
   const pageLoadTimeoutSeconds = 10 * 60;
 
@@ -3374,96 +3378,17 @@ export async function hydrate(options: HydrateOptionsType) {
           // TODO: timeout should be global to all documents
           const timeoutTimerId = options.timeout
             ? setTimeout(() => {
-                if (successTimerId) {
-                  clearTimeout(successTimerId);
-                }
-
                 reject(new Error('hydratation has timed out before being fully complete'));
               }, options.timeout)
             : null;
 
-          let successTimerId: ReturnType<typeof setTimeout>;
-
-          // The idle timer must only start once the page shapes are loaded, otherwise a page still loading (or whose tab crashed
-          // while loading) would be considered as hydrated after a few seconds without update
-          let pageLoaded = false;
-
-          const waitForPageLoaded = (previousPageLoads: number, onLoaded: () => void) => {
-            page
-              .waitForFunction((previous) => Number(window.document.documentElement.dataset.figpotPageLoads ?? 0) > previous, previousPageLoads, {
-                timeout: pageLoadTimeoutSeconds * 1000,
-                polling: 500,
-              })
-              .then(() => {
-                pageLoaded = true;
-
-                onLoaded();
-              })
-              .catch((error) => {
-                reject(
-                  error instanceof Error && error.name === 'TimeoutError'
-                    ? new Error(`the page ${currentPage} has not been loaded by Penpot after ${pageLoadTimeoutSeconds} seconds`)
-                    : error
-                );
-              });
-          };
-
-          const startIdleTimer = (timeout: number) => {
-            if (pageLoaded && ongoingChanges.length === 0) {
-              waitForPageChange(timeout);
-            }
-          };
-
-          const waitForPageChange = (timeout: number) => {
-            successTimerId = setTimeout(() => {
-              if (pagesToWatch.length > 0) {
-                const pageToWatch = pagesToWatch.shift() as string;
-                const pageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, pageToWatch);
-
-                pageLoaded = false;
-                currentPage = pageToWatch;
-
-                // Changing the url through `location.href` would reload the whole document (the file is fetched and loaded again for
-                // each page, very slow on big files), so the Penpot router is notified through the history API instead
-                page
-                  .evaluate((newUrl) => {
-                    const previousPageLoads = Number(window.document.documentElement.dataset.figpotPageLoads ?? 0);
-
-                    window.history.pushState({}, '', newUrl);
-                    window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
-
-                    return previousPageLoads;
-                  }, pageUrl)
-                  .then((previousPageLoads) => {
-                    // Start again the analysis process
-                    console.log(`look for change needed on the page ${pageToWatch}`);
-
-                    waitForPageLoaded(previousPageLoads, () => {
-                      startIdleTimer(idleIntervalAfterChangeSeconds * 1000);
-                    });
-                  })
-                  .catch(reject);
-              } else {
-                if (timeoutTimerId) {
-                  clearTimeout(timeoutTimerId);
-                }
-
-                resolve();
-              }
-            }, timeout);
-          };
-
-          const ongoingChanges: Request[] = [];
+          const inFlightUpdates = new Set<Request>();
 
           page.on('request', (request) => {
-            const url = request.url();
-            if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => url.includes(endpoint))) {
+            if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => request.url().includes(endpoint))) {
               console.log(`a needed request has been detected`);
 
-              // Pause the timer until this same request triggers a respponse
-              clearTimeout(successTimerId);
-
-              ongoingChanges.push(request);
+              inFlightUpdates.add(request);
             }
           });
 
@@ -3472,13 +3397,6 @@ export async function hydrate(options: HydrateOptionsType) {
             if (stage === 'start' && url.includes('/api/main/methods/get-file?')) {
               if (response.status() === 200) {
                 stage = 'waiting-updates';
-
-                console.log(`look for change needed on the page ${firstPageToWatch}`);
-
-                // The page shapes may have been loaded before this response is handled, the counter covers it
-                waitForPageLoaded(0, () => {
-                  startIdleTimer(mininumStartupTimeSeconds * 1000);
-                });
               } else {
                 reject(new Error(`document data cannot be fetched: ${await response.text()}`));
               }
@@ -3489,37 +3407,157 @@ export async function hydrate(options: HydrateOptionsType) {
             } else if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => url.includes(endpoint))) {
               console.log(`the needed request has been performed, looking for more...`);
 
-              // Find the corresponding request and remove it
-              const requestIndex = ongoingChanges.indexOf(response.request());
-              if (requestIndex !== -1) {
-                ongoingChanges.splice(requestIndex, 1);
-
-                // If no more waiting we can enable again the timer
-                if (ongoingChanges.length === 0) {
-                  // Note: the time is different since after the first detected change it means the rest has been loaded already
-                  startIdleTimer(idleIntervalAfterChangeSeconds * 1000);
-                }
-              }
+              inFlightUpdates.delete(response.request());
             }
           });
 
-          const firstPageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, firstPageToWatch);
+          // Penpot emits an event once the shapes of the displayed page are loaded into its render engine, it is counted by the init script
+          const waitForPageLoaded = async (previousPageLoads: number) => {
+            try {
+              await page.waitForFunction(
+                (previous) => Number(window.document.documentElement.dataset.figpotPageLoads ?? 0) > previous,
+                previousPageLoads,
+                { timeout: pageLoadTimeoutSeconds * 1000, polling: 500 }
+              );
+            } catch (error) {
+              throw error instanceof Error && error.name === 'TimeoutError'
+                ? new Error(`the page ${currentPage} has not been loaded by Penpot after ${pageLoadTimeoutSeconds} seconds`)
+                : error;
+            }
+          };
 
-          page
-            .goto(firstPageUrl, {
+          // Read the persistence state of Penpot (changes waiting to be saved) through its `debug` namespace, it only exists into the
+          // main context of the page (not the isolated one used by default). It returns `null` if not available (e.g. other Penpot versions)
+          const readPenpotPersistence = () =>
+            page.evaluate(
+              () => {
+                const debug = (window as unknown as { debug?: { get_state?: (path: string) => void } }).debug;
+                const getState = debug?.get_state;
+
+                if (typeof getState !== 'function') {
+                  return null;
+                }
+
+                // `get_state` only logs the value, so it is captured
+                // Note: no named function must be declared here, the TypeScript runtime would wrap it with a helper that does not exist in the page
+                const values: unknown[] = [];
+                const originalLog = console.log;
+
+                console.log = (...args: unknown[]) => {
+                  values.push(args[args.length - 1]);
+                };
+
+                try {
+                  getState(':persistence :status');
+                  getState(':persistence :queue');
+                } finally {
+                  console.log = originalLog;
+                }
+
+                const [status, queue] = values;
+
+                return {
+                  status: typeof status === 'string' ? status : null,
+                  queueLength: Array.isArray(queue) ? queue.length : 0,
+                };
+              },
+              undefined,
+              undefined,
+              false
+            );
+
+          // A page is done once nothing is being sent and Penpot has no change waiting to be saved (a `null` or `saved` status with an empty
+          // queue, like its own `terminal-status?`), for a few seconds in a row since Penpot debounces its changes and some are computed
+          // a bit after the page load (e.g. text layouts once fonts are loaded)
+          const waitForPageSettled = (stableSeconds: number, fallbackStableSeconds: number) =>
+            new Promise<void>((resolveSettled, rejectSettled) => {
+              let settledSince: number | null = null;
+
+              const check = () => {
+                readPenpotPersistence()
+                  .then((persistence) => {
+                    if (persistence?.status === 'error') {
+                      rejectSettled(new Error(`Penpot has failed to save the changes computed for the page ${currentPage}`));
+
+                      return;
+                    }
+
+                    const settled =
+                      inFlightUpdates.size === 0 &&
+                      (persistence === null || (persistence.queueLength === 0 && (persistence.status === null || persistence.status === 'saved')));
+                    const requiredStableSeconds = persistence === null ? fallbackStableSeconds : stableSeconds;
+
+                    if (!settled) {
+                      settledSince = null;
+                    } else if (settledSince === null) {
+                      settledSince = Date.now();
+                    } else if (Date.now() - settledSince >= requiredStableSeconds * 1000) {
+                      resolveSettled();
+
+                      return;
+                    }
+
+                    setTimeout(check, 500);
+                  })
+                  .catch((error) => {
+                    // If the tab has crashed its own event gives a better explanation, so let it reject first
+                    setTimeout(() => rejectSettled(error), 1000);
+                  });
+              };
+
+              check();
+            });
+
+          const hydratePages = async () => {
+            const firstPageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, firstPageToWatch);
+
+            const response = await page.goto(firstPageUrl, {
               // timeout: xxx, // It should be working by having the command timeout that will close the browser
               waitUntil: 'load',
-            })
-            .then((response) => {
-              if (response && response.status() !== 200) {
-                response
-                  .text()
-                  .then((value) => {
-                    console.log(value);
-                  })
-                  .finally(() => {
-                    reject(new Error(`cannot load the document page`));
-                  });
+            });
+
+            if (response && response.status() !== 200) {
+              console.log(await response.text());
+
+              throw new Error(`cannot load the document page`);
+            }
+
+            console.log(`look for change needed on the page ${firstPageToWatch}`);
+
+            // The page shapes may have been loaded before reaching this point, the counter covers it
+            await waitForPageLoaded(0);
+            // At startup Penpot also synchronizes the libraries and the components, so it is given more time
+            await waitForPageSettled(firstPageSettledSeconds, legacyStartupIdleSeconds);
+
+            for (const pageToWatch of pagesToWatch) {
+              const pageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, pageToWatch);
+
+              currentPage = pageToWatch;
+
+              // Changing the url through `location.href` would reload the whole document (the file is fetched and loaded again for
+              // each page, very slow on big files), so the Penpot router is notified through the history API instead
+              const previousPageLoads = await page.evaluate((newUrl) => {
+                const previous = Number(window.document.documentElement.dataset.figpotPageLoads ?? 0);
+
+                window.history.pushState({}, '', newUrl);
+                window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+
+                return previous;
+              }, pageUrl);
+
+              console.log(`look for change needed on the page ${pageToWatch}`);
+
+              await waitForPageLoaded(previousPageLoads);
+              await waitForPageSettled(pageSettledSeconds, legacyIdleSeconds);
+            }
+          };
+
+          hydratePages()
+            .then(resolve)
+            .catch(reject)
+            .finally(() => {
+              if (timeoutTimerId) {
+                clearTimeout(timeoutTimerId);
               }
             });
         }).finally(() => {

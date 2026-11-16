@@ -188,6 +188,7 @@ export async function exportDocuments(options: ExportOptionsType, figmaMetaCache
     excludePatterns: options.excludePatterns,
     replaceFontPatterns: options.replaceFontPatterns,
     syncMappingWithGit: false,
+    pruneMapping: false,
     prompting: options.prompting,
     libraries: libraries,
   });

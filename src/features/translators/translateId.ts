@@ -16,7 +16,39 @@ export const nullId = '00000000-0000-0000-0000-000000000000';
 export const rootFrameId = '00000000-0000-0000-0000-000000000000';
 export const rootFrameIdSuffix = '_rootFrame';
 
+// Node mapping entries used during a transformation, to remove the ones of nodes no longer synchronized (removed from Figma, excluded...)
+// Note: entries cannot be pruned from the produced tree since some identifiers are not nodes (effects, component instances, variants...)
+const usedNodeEntries = new WeakMap<MappingType, Set<string>>();
+
+export function trackUsedNodeEntries(mapping: MappingType) {
+  usedNodeEntries.set(mapping, new Set());
+}
+
+// Returns the number of removed entries, it must only be called after a full transformation of the document started with `trackUsedNodeEntries()`
+export function pruneUnusedNodeEntries(mapping: MappingType): number {
+  const usedEntries = usedNodeEntries.get(mapping);
+  if (!usedEntries) {
+    throw new Error(`the usage of the mapping entries has not been tracked, they cannot be pruned`);
+  }
+
+  let removedEntries = 0;
+
+  for (const figmaNodeId of mapping.nodes.keys()) {
+    if (!usedEntries.has(figmaNodeId)) {
+      mapping.nodes.delete(figmaNodeId);
+
+      removedEntries++;
+    }
+  }
+
+  usedNodeEntries.delete(mapping);
+
+  return removedEntries;
+}
+
 export function translateId(figmaNodeId: string, mapping: MappingType): string {
+  usedNodeEntries.get(mapping)?.add(figmaNodeId);
+
   const penpotMappedNodeId = mapping.nodes.get(figmaNodeId);
   if (penpotMappedNodeId) {
     return penpotMappedNodeId;
@@ -31,6 +63,8 @@ export function translateId(figmaNodeId: string, mapping: MappingType): string {
 }
 
 export function registerId(figmaNodeId: string, penpotNodeId: string, mapping: MappingType) {
+  usedNodeEntries.get(mapping)?.add(figmaNodeId);
+
   mapping.nodes.set(figmaNodeId, penpotNodeId);
 }
 

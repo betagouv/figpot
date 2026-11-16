@@ -64,6 +64,10 @@ const syncMappingWithGitOption = new Option(
   '--sync-mapping-with-git',
   'save and restore the mapping file with Git (must be run inside a repository with "git" command accessible'
 );
+const pruneMappingOption = new Option(
+  '--prune-mapping',
+  'remove from the mapping file the entries of Figma nodes no longer synchronized (deleted, excluded...), they are kept by default so restoring or including them again gives back the same Penpot shapes (see the documentation)'
+);
 const serverValidationOption = new Option(
   '--no-server-validation',
   'skip Penpot validation server-side, useful for big files or for a Penpot instance with limited resources, use it with caution: once done, rerun the synchronization without it (with "--use-cached-figma-data" to avoid fetching Figma again) to check there is no difference left, and see the documentation to make Penpot validate the whole file'
@@ -187,6 +191,7 @@ document
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
   .addOption(syncMappingWithGitOption)
+  .addOption(pruneMappingOption)
   .addOption(serverValidationOption)
   .addOption(pushChunkSizeOption)
   .addOption(useCachedFigmaDataOption)
@@ -239,6 +244,7 @@ document
         hydrate: options.hydrate,
         hydrateTimeout: options.hydrateTimeout || null,
         syncMappingWithGit: options.syncMappingWithGit || false,
+        pruneMapping: options.pruneMapping || false,
         serverValidation: options.serverValidation,
         pushChunkSize: options.pushChunkSize,
         prompting: !options.ci,
@@ -400,6 +406,7 @@ debugDocument
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
   .addOption(syncMappingWithGitOption)
+  .addOption(pruneMappingOption)
   .addOption(dataDirOption)
   .addOption(continuousIntegrationOption)
   .action(async (options) => {
@@ -423,6 +430,7 @@ debugDocument
         },
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
         syncMappingWithGit: options.syncMappingWithGit || false,
+        pruneMapping: options.pruneMapping || false,
         prompting: !options.ci,
       })
     );

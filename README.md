@@ -272,12 +272,12 @@ All those "cons" are due to limitations being a Figma plugin, **for my initial u
 
 ### Why `mapping.json` keeps growing despite deleting elements?
 
-The choice has been done to keep all file mappings done in the past so:
+By default all file mappings done in the past are kept so:
 
 - in case of a deletion mistake on Figma followed by a rollback of the data, the Penpot file will continue to be stable
 - it allows testing different `figpot` exclude settings without loosing the bindings
 
-_If you feel confident that your Penpot file is not used as a dependency, you may choose to empty your file values... but it should be a rare use case._
+If the mapping has grown a lot (for example after excluding a large part of a file for good), pass `--prune-mapping` to remove the entries of the Figma nodes no longer synchronized (deleted, excluded...). If one of these nodes comes back later, it will be created again on Penpot with a new identifier, so anything referring to the previous shape will lose it.
 
 ## Contribute
 

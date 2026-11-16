@@ -71,8 +71,10 @@ import { FigmaVariablesData, emptyFigmaVariablesData } from '@figpot/src/feature
 import {
   isPageRootFrame,
   isPageRootFrameFromId,
+  pruneUnusedNodeEntries,
   registerFontId,
   rootFrameId,
+  trackUsedNodeEntries,
   translateMediaPlaceholderId,
 } from '@figpot/src/features/translators/translateId';
 import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
@@ -925,6 +927,7 @@ export const TransformOptions = z.object({
   excludePatterns: ExcludePatterns,
   replaceFontPatterns: z.array(ReplaceFontPattern),
   syncMappingWithGit: z.boolean(),
+  pruneMapping: z.boolean().default(false),
   prompting: Prompting,
   libraries: z.array(DocumentOptions).default([]),
 });
@@ -991,6 +994,10 @@ export async function transform(options: TransformOptionsType) {
 
     const mapping = await restoreMapping(options.dataDir, document.figmaDocument, document.penpotDocument, options.prompting);
 
+    if (options.pruneMapping) {
+      trackUsedNodeEntries(mapping);
+    }
+
     const penpotTree = transformDocument(
       figmaTree,
       figmaColors,
@@ -1004,6 +1011,15 @@ export async function transform(options: TransformOptionsType) {
       options.dataDir,
       libraryMainCopies
     );
+
+    // On demand, entries of nodes no longer synchronized (removed from Figma, excluded...) are dropped to shrink the mapping
+    // Note: if such a node comes back it will get a new Penpot identifier (they are kept by default, see the documentation)
+    if (options.pruneMapping) {
+      const prunedEntries = pruneUnusedNodeEntries(mapping);
+      if (prunedEntries > 0) {
+        console.log(`${prunedEntries} mapping entries of nodes no longer synchronized have been removed`);
+      }
+    }
 
     // Save mapping for later usage
     await saveMapping(options.dataDir, document.figmaDocument, document.penpotDocument, mapping);
@@ -3073,6 +3089,7 @@ export const SynchronizeOptions = z.object({
   hydrate: z.boolean(),
   hydrateTimeout: Duration.nullable(),
   syncMappingWithGit: z.boolean(),
+  pruneMapping: z.boolean().default(false),
   serverValidation: ServerValidation,
   pushChunkSize: PushChunkSize,
   prompting: Prompting,
@@ -3127,6 +3144,7 @@ export async function synchronize(options: SynchronizeOptionsType, figmaMetaCach
     excludePatterns: resolvedOptions.excludePatterns,
     replaceFontPatterns: resolvedOptions.replaceFontPatterns,
     syncMappingWithGit: resolvedOptions.syncMappingWithGit,
+    pruneMapping: resolvedOptions.pruneMapping,
     prompting: resolvedOptions.prompting,
     libraries: allLibraries,
   });

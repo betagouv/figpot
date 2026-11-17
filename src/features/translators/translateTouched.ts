@@ -1,4 +1,5 @@
 import { Overrides } from '@figpot/src/clients/figma';
+import { isTokenContextsEnabled } from '@figpot/src/features/translators/tokens/translateTokens';
 import { SyncGroups } from '@figpot/src/models/entities/penpot/traits/syncGroups';
 
 export type SyncAttributes = {
@@ -145,7 +146,11 @@ export function translateTouched(figmaChangedProperties: Overrides['overriddenFi
   }
 
   for (const figmaChangedProperty of figmaChangedProperties) {
-    const syncGroup = syncAttributes[figmaChangedProperty];
+    // With token contexts, the variable modes an instance sets become its token scope, an override of its main's one
+    const syncGroup =
+      figmaChangedProperty === 'explicitVariableModes' && isTokenContextsEnabled()
+        ? (['token-scope-group'] as SyncGroups[])
+        : syncAttributes[figmaChangedProperty];
 
     if (syncGroup && syncGroup.length > 0) {
       syncGroup.forEach((group) => syncGroups.add(group));

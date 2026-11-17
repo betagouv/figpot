@@ -198,6 +198,16 @@ export function cleanHostedDocument(hostedTree: PostGetFileResponse): PenpotDocu
     rootFrameNode.parentId = newRootFrameNodeId;
     rootFrameNode.frameId = newRootFrameNodeId;
 
+    // Penpot stores the themes and overrides of a token scope as sets, returned in any order, whereas the transformation sorts them
+    for (const node of Object.values(page.objects) as Array<{ tokenScope?: { themes: string[]; overrides?: string[] } }>) {
+      if (node.tokenScope?.themes) {
+        node.tokenScope.themes = [...node.tokenScope.themes].sort();
+      }
+      if (node.tokenScope?.overrides) {
+        node.tokenScope.overrides = [...node.tokenScope.overrides].sort();
+      }
+    }
+
     // Penpot sets a zero radius on root frames whereas they cannot have one, the transformation leaves it empty
     for (const radius of ['r1', 'r2', 'r3', 'r4'] as const) {
       if (rootFrameNode[radius] === 0) {
@@ -299,7 +309,15 @@ export function retrievePenpotVersion(): Promise<{ major: number; minor: number 
     penpotVersionPromise = (async () => {
       try {
         const response = await fetch(`${penpotBaseUrl}/version.txt`);
-        const match = response.ok ? (await response.text()).match(/^(\d+)\.(\d+)/) : null;
+        const text = response.ok ? (await response.text()).trim() : '';
+
+        // A development instance (built from sources) has no version file (the interface page is served instead) or reports
+        // "develop": it is ahead of any release
+        if (text === '' || text === 'develop' || text.startsWith('%') || text.startsWith('<')) {
+          return response.ok ? { major: Number.MAX_SAFE_INTEGER, minor: 0 } : null;
+        }
+
+        const match = text.match(/^(\d+)\.(\d+)/);
 
         return match ? { major: parseInt(match[1], 10), minor: parseInt(match[2], 10) } : null;
       } catch {

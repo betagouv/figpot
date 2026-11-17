@@ -60,3 +60,11 @@ export type TokenTheme = {
   isSource?: boolean;
   sets: string[];
 };
+
+// The themes a Penpot page or shape activates for itself and its children (`:token-scope`, Penpot branch with token
+// contexts), the groups it does not name being inherited
+export type TokenScope = {
+  themes: string[];
+  mode?: 'cascade' | 'isolated';
+  overrides?: string[]; // on a component copy, the theme groups it chose itself (the others follow its main)
+};

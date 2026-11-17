@@ -1,3 +1,5 @@
+import fs from 'fs';
+
 import { GetLocalVariablesResponse, LocalVariable, RGBA, VariableAlias } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { hasInferredScope, isMultiTypeVariable, translateScope } from '@figpot/src/features/translators/tokens/translateScope';
@@ -6,11 +8,32 @@ import { translateTokenId, translateTokenSetId, translateTokenThemeId } from '@f
 import { Token, TokenSet, TokenTheme, TokenType } from '@figpot/src/models/entities/penpot/traits/token';
 import { rgbToHex } from '@figpot/src/utils/color';
 
+// The Penpot theme of a Figma variable mode set on a node (`explicitVariableModes`), if its collection is known
+export function resolveThemeIdForMode(themeIdsByCollectionMode: Map<string, string>, collectionId: string, modeId: string): string | undefined {
+  const direct = themeIdsByCollectionMode.get(`${collectionId}/${modeId}`);
+  if (direct) {
+    return direct;
+  }
+
+  // Remote collection IDs are formatted `VariableCollectionId:<collection key>/<local id>`
+  const key = collectionId.match(/^VariableCollectionId:([0-9a-f]+)\//)?.[1];
+
+  return key ? themeIdsByCollectionMode.get(`key:${key}/${modeId}`) : undefined;
+}
+
 export type FigmaVariablesData = GetLocalVariablesResponse['meta'];
 
 export const emptyFigmaVariablesData: FigmaVariablesData = { variables: {}, variableCollections: {} };
 
+// Experimental "token contexts" mode (Penpot branch with token scopes): every Figma collection becomes a theme group whose
+// themes are its modes, the default modes are activated, and the variable modes set on nodes (`explicitVariableModes`)
+// become token scopes on the Penpot shapes. Remote collections are kept too since the modes set on nodes mostly target them
+export function isTokenContextsEnabled(): boolean {
+  return process.env.FIGPOT_TOKEN_CONTEXTS === 'true';
+}
+
 export type TranslatedTokens = {
+  themeIdsByCollectionMode: Map<string, string>; // `${figmaCollectionId}/${figmaModeId}` -> Penpot theme ID (token contexts mode only)
   tokenSets: Record<string, TokenSet>;
   tokenThemes: Record<string, TokenTheme>;
   activeThemes: string[];
@@ -120,7 +143,29 @@ function translateTokenValueForType(
   }
 }
 
-export function translateTokens(data: FigmaVariablesData, mapping: MappingType): TranslatedTokens {
+// The REST API only describes the remote variables a file binds to some nodes: it misses the library collections a file
+// only sets a mode of and the targets of aliases. `FIGPOT_EXTRA_VARIABLES` points to a JSON file in the format of the REST
+// response (`{ meta: { variableCollections, variables } }`) exported by the `figma-plugins/variables-export` plugin, whose
+// Plugin API resolves them from the copies the file keeps. `FIGPOT_EXTRA_VARIABLE_COLLECTIONS` (deprecated) only adds
+// collections, so their modes become themes without tokens. The REST data wins on common ids
+function withExtraVariables(data: FigmaVariablesData): FigmaVariablesData {
+  const extraPath = process.env.FIGPOT_EXTRA_VARIABLES || process.env.FIGPOT_EXTRA_VARIABLE_COLLECTIONS;
+  if (!extraPath) {
+    return data;
+  }
+
+  const content = JSON.parse(fs.readFileSync(extraPath, 'utf-8')) as { meta: Partial<FigmaVariablesData> } | Partial<FigmaVariablesData>;
+  const extra = 'meta' in content ? content.meta : content;
+
+  return {
+    variables: { ...extra.variables, ...data.variables },
+    variableCollections: { ...extra.variableCollections, ...data.variableCollections },
+  };
+}
+
+export function translateTokens(originalData: FigmaVariablesData, mapping: MappingType): TranslatedTokens {
+  const data = withExtraVariables(originalData);
+
   const tokenSets: Record<string, TokenSet> = {};
   const tokenThemes: Record<string, TokenTheme> = {};
   const activeThemes: string[] = [];
@@ -130,6 +175,9 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
   const variableTokenNames = new Map<string, string>(); // composite key `${variableId}/${type}` -> name
   const inferredScopeNames: string[] = [];
   const suffixedVariableNames: string[] = [];
+  const themeIdsByCollectionMode = new Map<string, string>();
+  const usedGroupNames = new Set<string>();
+  const tokenContexts = isTokenContextsEnabled();
 
   // Resolves (and caches) the final Penpot name for a (variable, type) pair. Computed once, reused
   // across every mode the variable appears in so collision suffixes do not drift between modes
@@ -153,17 +201,20 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
   };
 
   for (const collection of Object.values(data.variableCollections)) {
-    if (collection.remote) {
+    if (collection.remote && !tokenContexts) {
       continue;
     }
 
+    // Two libraries can have collections with the same name, a theme group must be unique
+    const groupName = tokenContexts ? uniqueName(collection.name, usedGroupNames) : collection.name;
+
     for (const mode of collection.modes) {
-      const setPath = uniqueName(`${translateTokenSetPath(collection.name)}/${translateTokenSetPath(mode.name)}`, usedSetPaths);
+      const setPath = uniqueName(`${translateTokenSetPath(groupName)}/${translateTokenSetPath(mode.name)}`, usedSetPaths);
       const tokens: Record<string, Token> = {};
 
       for (const variableId of collection.variableIds) {
         const variable = data.variables[variableId];
-        if (!variable || variable.remote) {
+        if (!variable || (variable.remote && !tokenContexts)) {
           continue;
         }
 
@@ -216,6 +267,31 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
         tokens: tokens,
       };
 
+      if (tokenContexts) {
+        const themePath = `${groupName}/${mode.name}`;
+        const themeId = translateTokenThemeId(themePath, mapping);
+
+        tokenThemes[themePath] = {
+          id: themeId,
+          name: mode.name,
+          group: groupName,
+          sets: [setPath],
+        };
+
+        themeIdsByCollectionMode.set(`${collection.id}/${mode.modeId}`, themeId);
+
+        // Figma "extended collections" keep the key and the mode IDs of the collection they extend, and the REST API only
+        // lists the extended ones when the file binds their variables: a mode set on a node through an extension is then
+        // matched to the theme of its parent collection (see `resolveThemeIdForMode()`)
+        if (collection.key && !themeIdsByCollectionMode.has(`key:${collection.key}/${mode.modeId}`)) {
+          themeIdsByCollectionMode.set(`key:${collection.key}/${mode.modeId}`, themeId);
+        }
+
+        if (mode.modeId === collection.defaultModeId) {
+          activeThemes.push(themePath);
+        }
+      }
+
       // Token themes are intentionally NOT emitted at sync. Penpot's set picker is multi-select
       // and works directly on sets — themes are purely user-defined bundles that toggle several
       // sets at once. Figma's data has no cross-collection grouping we could read to deduce a
@@ -237,6 +313,7 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
   }
 
   return {
+    themeIdsByCollectionMode,
     tokenSets,
     tokenThemes,
     activeThemes,

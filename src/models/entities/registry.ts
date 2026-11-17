@@ -26,12 +26,21 @@ export type StyleBinding = {
   isRemote: boolean;
 };
 
+// With token contexts: the variable modes every Figma node sets (`explicitVariableModes`, absent when it sets none) to
+// compare a copy with its main, and the Penpot theme group of each theme ID
+export type TokenScopeIndex = {
+  explicitModesByNodeId: Map<string, Record<string, string> | undefined>;
+  themeGroupById: Map<string, string>;
+};
+
 export interface BoundVariableRegistry {
   getColors(): Map<string, Color>;
   getTypographies(): Map<string, LibraryTypography>;
   getComponents(): Map<string, LibraryComponent>;
   getMapping(): MappingType;
   getVariableTokenNames(): Map<string, string>;
+  getThemeIdsByCollectionMode(): Map<string, string>;
+  getTokenScopeIndex(): TokenScopeIndex;
   resolveComponent(figmaComponentNodeId: string): ComponentBinding | undefined;
   resolveStyle(figmaStyleNodeId: string, paintIndex?: number): StyleBinding | undefined;
   getDataDir(): string;
@@ -93,6 +102,14 @@ export class ComponentInstanceRegistry implements AbstractRegistry {
 
   public getVariableTokenNames(): Map<string, string> {
     return this.pageRegistry.getVariableTokenNames();
+  }
+
+  public getThemeIdsByCollectionMode(): Map<string, string> {
+    return this.pageRegistry.getThemeIdsByCollectionMode();
+  }
+
+  public getTokenScopeIndex(): TokenScopeIndex {
+    return this.pageRegistry.getTokenScopeIndex();
   }
 
   public resolveComponent(figmaComponentNodeId: string): ComponentBinding | undefined {
@@ -158,6 +175,14 @@ export class ComponentRegistry implements AbstractRegistry {
     return this.pageRegistry.getVariableTokenNames();
   }
 
+  public getThemeIdsByCollectionMode(): Map<string, string> {
+    return this.pageRegistry.getThemeIdsByCollectionMode();
+  }
+
+  public getTokenScopeIndex(): TokenScopeIndex {
+    return this.pageRegistry.getTokenScopeIndex();
+  }
+
   public resolveComponent(figmaComponentNodeId: string): ComponentBinding | undefined {
     return this.pageRegistry.resolveComponent(figmaComponentNodeId);
   }
@@ -221,6 +246,14 @@ export class PageRegistry implements AbstractRegistry {
     return this.globalRegistry.getVariableTokenNames();
   }
 
+  public getThemeIdsByCollectionMode(): Map<string, string> {
+    return this.globalRegistry.getThemeIdsByCollectionMode();
+  }
+
+  public getTokenScopeIndex(): TokenScopeIndex {
+    return this.globalRegistry.getTokenScopeIndex();
+  }
+
   public resolveComponent(figmaComponentNodeId: string): ComponentBinding | undefined {
     return this.globalRegistry.resolveComponent(figmaComponentNodeId);
   }
@@ -244,6 +277,8 @@ export class Registry implements BoundVariableRegistry {
   protected readonly typographies: Map<string, LibraryTypography> = new Map();
   protected readonly components: Map<string, LibraryComponent> = new Map();
   protected readonly variableTokenNames: Map<string, string> = new Map();
+  protected readonly themeIdsByCollectionMode: Map<string, string> = new Map();
+  protected tokenScopeIndex: TokenScopeIndex = { explicitModesByNodeId: new Map(), themeGroupById: new Map() };
   protected figmaComponents: Record<string, Component> = {};
   protected libraryFiles: Map<string, string> = new Map();
   protected remoteComponentSourceFiles: Map<string, string> = new Map();
@@ -307,6 +342,24 @@ export class Registry implements BoundVariableRegistry {
 
   public getVariableTokenNames(): Map<string, string> {
     return this.variableTokenNames;
+  }
+
+  public registerThemeIdsByCollectionMode(themeIdsByCollectionMode: Map<string, string>) {
+    for (const [key, themeId] of themeIdsByCollectionMode) {
+      this.themeIdsByCollectionMode.set(key, themeId);
+    }
+  }
+
+  public getThemeIdsByCollectionMode(): Map<string, string> {
+    return this.themeIdsByCollectionMode;
+  }
+
+  public registerTokenScopeIndex(tokenScopeIndex: TokenScopeIndex) {
+    this.tokenScopeIndex = tokenScopeIndex;
+  }
+
+  public getTokenScopeIndex(): TokenScopeIndex {
+    return this.tokenScopeIndex;
   }
 
   // Seeds the cross-file component binding state (to call once at the start of a document transform)

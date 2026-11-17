@@ -6,7 +6,7 @@ import { initializeInstanceSwaps, releaseInstanceSwaps } from '@figpot/src/featu
 import { transformUnboundInstances } from '@figpot/src/features/transformers/partials/transformUnboundInstances';
 import { transformPageNode } from '@figpot/src/features/transformers/transformPageNode';
 import { translateEffectStyleTokens } from '@figpot/src/features/translators/tokens/translateEffectStyleTokens';
-import { FigmaVariablesData, translateTokens } from '@figpot/src/features/translators/tokens/translateTokens';
+import { FigmaVariablesData, isTokenContextsEnabled, translateTokens } from '@figpot/src/features/translators/tokens/translateTokens';
 import { translateColor } from '@figpot/src/features/translators/translateColor';
 import { registerId, translateComponentId, translateComponentShapeId, translateId } from '@figpot/src/features/translators/translateId';
 import { translateTypography } from '@figpot/src/features/translators/translateTypography';
@@ -123,12 +123,37 @@ export function transformDocumentNode(
   registerComponentSubtreeIds(figmaNode, mapping);
 
   // Figma variables become Penpot design tokens so nodes can directly use them
-  const { tokenSets, tokenThemes, activeThemes, variableTokenNames, usedTokenNames, inferredScopeNames, suffixedVariableNames } = translateTokens(
-    figmaVariables,
-    mapping
-  );
+  const {
+    tokenSets,
+    tokenThemes,
+    activeThemes,
+    variableTokenNames,
+    themeIdsByCollectionMode,
+    usedTokenNames,
+    inferredScopeNames,
+    suffixedVariableNames,
+  } = translateTokens(figmaVariables, mapping);
 
   registry.registerVariableTokenNames(variableTokenNames);
+  registry.registerThemeIdsByCollectionMode(themeIdsByCollectionMode);
+
+  // With token contexts a copy only overrides the groups whose mode differs from its main's, so every node's modes are
+  // indexed beforehand: a copy may come before its main in the tree
+  if (isTokenContextsEnabled()) {
+    const explicitModesByNodeId = new Map<string, Record<string, string> | undefined>();
+    const indexModes = (node: SubcanvasNode) => {
+      explicitModesByNodeId.set(node.id, (node as { explicitVariableModes?: Record<string, string> }).explicitVariableModes);
+      for (const child of (node as { children?: SubcanvasNode[] }).children ?? []) {
+        indexModes(child);
+      }
+    };
+    indexModes(figmaNode.document as unknown as SubcanvasNode);
+
+    registry.registerTokenScopeIndex({
+      explicitModesByNodeId: explicitModesByNodeId,
+      themeGroupById: new Map(Object.values(tokenThemes).map((theme) => [theme.id, theme.group])),
+    });
+  }
 
   if (inferredScopeNames.length > 0) {
     console.warn(

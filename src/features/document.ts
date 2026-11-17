@@ -2063,8 +2063,12 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
   // Also adjust the active token themes
   const currentActiveThemes = currentTree.data.activeTokenThemes ?? [];
   const newActiveThemes = newTree.data.activeTokenThemes ?? [];
+  // Compared without order: Penpot keeps the active themes as a set
+  const sortedCurrentActiveThemes = [...currentActiveThemes].sort();
+  const sortedNewActiveThemes = [...newActiveThemes].sort();
   const activeThemesChanged =
-    currentActiveThemes.length !== newActiveThemes.length || currentActiveThemes.some((themePath, index) => themePath !== newActiveThemes[index]);
+    sortedCurrentActiveThemes.length !== sortedNewActiveThemes.length ||
+    sortedCurrentActiveThemes.some((themePath, index) => themePath !== sortedNewActiveThemes[index]);
   if (activeThemesChanged) {
     if (options.tokensStatus) {
       // Themes are referenced by path (`group/name`) and their sets by name, whereas this operation needs identifiers

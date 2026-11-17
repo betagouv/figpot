@@ -1,7 +1,9 @@
 import { Paint, VariableAlias } from '@figpot/src/clients/figma';
+import { isTokenContextsEnabled, resolveThemeIdForMode } from '@figpot/src/features/translators/tokens/translateTokens';
 import { SubcanvasNodeWithSlot } from '@figpot/src/models/entities/figma/slot';
 import { TokenType } from '@figpot/src/models/entities/penpot/traits/token';
-import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
+import { TokenScope } from '@figpot/src/models/entities/penpot/traits/token';
+import { AbstractRegistry, BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 
 // Warned at most once per process: per-frame variable mode overrides have no Penpot equivalent
 // (theme switching is document-wide), so flagging every offending node would be noise
@@ -54,7 +56,89 @@ function applyPaintColorToken(
 // (see `translateTokens` for the rationale) so the static value mirrors what Figma rendered
 // (including any per-frame `explicitVariableModes` override). Toggling a theme in Penpot then
 // drives the rebind globally through `appliedTokens`
-export function transformAppliedTokens(registry: BoundVariableRegistry, node: SubcanvasNodeWithSlot): { appliedTokens?: Record<string, string> } {
+// With token contexts, the variable modes a Figma node sets for itself and its children (`explicitVariableModes`) become the
+// themes of a Penpot token scope: the groups it does not name are inherited, as in Figma. Modes of unknown collections are
+// left out (warned once), so the node inherits them
+let hasWarnedUnknownVariableModes = false;
+
+// The Figma ID of the node a copy node mirrors in its near main: a nested node `I<instance>;<rest>` mirrors `<rest>` (itself
+// prefixed when nested deeper), an instance its component node. Same "near main" as Penpot's `shapeRef`
+function getNearMainNodeId(node: SubcanvasNodeWithSlot): string | undefined {
+  if (node.id.startsWith('I') && node.id.includes(';')) {
+    const rest = node.id.slice(node.id.indexOf(';') + 1);
+
+    return rest.includes(';') ? `I${rest}` : rest;
+  }
+
+  return node.type === 'INSTANCE' ? node.componentId : undefined;
+}
+
+function translateThemeIds(registry: BoundVariableRegistry, node: SubcanvasNodeWithSlot, explicitVariableModes: Record<string, string>): string[] {
+  const themes: string[] = [];
+  const unknown: string[] = [];
+
+  for (const [collectionId, modeId] of Object.entries(explicitVariableModes)) {
+    const themeId = resolveThemeIdForMode(registry.getThemeIdsByCollectionMode(), collectionId, modeId);
+    if (themeId) {
+      themes.push(themeId);
+    } else {
+      unknown.push(collectionId);
+    }
+  }
+
+  if (unknown.length > 0 && !hasWarnedUnknownVariableModes) {
+    hasWarnedUnknownVariableModes = true;
+
+    console.warn(
+      `some Figma nodes (for example "${node.name}") set variable modes of collections the variables API does not describe (${unknown.join(', ')}), those modes are not transferred: synchronize with the libraries defining them`
+    );
+  }
+
+  return themes;
+}
+
+function transformTokenScope(registry: BoundVariableRegistry, node: SubcanvasNodeWithSlot): TokenScope | undefined {
+  const explicitVariableModes = node.explicitVariableModes;
+  if (!explicitVariableModes) {
+    return undefined;
+  }
+
+  // Sorted so the comparison with the Penpot file does not see a difference from the order alone
+  const themes = translateThemeIds(registry, node, explicitVariableModes).sort();
+  if (themes.length === 0) {
+    return undefined;
+  }
+
+  // A copy node whose modes Figma marks as overridden lists the groups it changes compared to its near main: Penpot keeps
+  // those on sync and follows the main for the others. When the main is not in this file (library component), the list
+  // is left out and Penpot keeps the whole scope
+  const { explicitModesByNodeId, themeGroupById } = registry.getTokenScopeIndex();
+  const mainNodeId = getNearMainNodeId(node);
+  const overridden = (registry as Partial<AbstractRegistry>).getOverrides?.(node.id)?.includes('explicitVariableModes');
+
+  if (overridden && mainNodeId && explicitModesByNodeId.has(mainNodeId)) {
+    const mainModes = explicitModesByNodeId.get(mainNodeId);
+    const mainThemes = new Set(mainModes ? translateThemeIds(registry, node, mainModes) : []);
+    const themeSet = new Set(themes);
+    const overrides = new Set<string>();
+
+    for (const themeId of [...themes, ...mainThemes]) {
+      const group = themeGroupById.get(themeId);
+      if (group !== undefined && themeSet.has(themeId) !== mainThemes.has(themeId)) {
+        overrides.add(group);
+      }
+    }
+
+    return { themes: themes, overrides: [...overrides].sort() };
+  }
+
+  return { themes: themes };
+}
+
+export function transformAppliedTokens(
+  registry: BoundVariableRegistry,
+  node: SubcanvasNodeWithSlot
+): { appliedTokens?: Record<string, string>; tokenScope?: TokenScope } {
   const appliedTokens: Record<string, string> = {};
 
   function record(penpotProperty: string, tokenType: TokenType, alias: VariableAlias | VariableAlias[] | undefined): void {
@@ -98,8 +182,10 @@ export function transformAppliedTokens(registry: BoundVariableRegistry, node: Su
   applyPaintColorToken(appliedTokens, registry, 'fill', 'fills' in node ? node.fills : undefined);
   applyPaintColorToken(appliedTokens, registry, 'strokeColor', 'strokes' in node ? node.strokes : undefined);
 
+  const tokenScope = isTokenContextsEnabled() ? transformTokenScope(registry, node) : undefined;
+
   const explicitVariableModes = node.explicitVariableModes;
-  if (!hasWarnedExplicitVariableModes && explicitVariableModes && Object.keys(explicitVariableModes).length > 0) {
+  if (!isTokenContextsEnabled() && !hasWarnedExplicitVariableModes && explicitVariableModes && Object.keys(explicitVariableModes).length > 0) {
     hasWarnedExplicitVariableModes = true;
 
     console.warn(
@@ -107,5 +193,8 @@ export function transformAppliedTokens(registry: BoundVariableRegistry, node: Su
     );
   }
 
-  return Object.keys(appliedTokens).length > 0 ? { appliedTokens: appliedTokens } : {};
+  return {
+    ...(Object.keys(appliedTokens).length > 0 ? { appliedTokens: appliedTokens } : {}),
+    ...(tokenScope ? { tokenScope: tokenScope } : {}),
+  };
 }

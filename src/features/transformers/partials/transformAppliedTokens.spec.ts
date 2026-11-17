@@ -44,3 +44,79 @@ describe('transformAppliedTokens()', () => {
     expect(transformAppliedTokens(registry, node)).toEqual({ appliedTokens: { fontSize: 'font.size.lg' } });
   });
 });
+
+describe('transformAppliedTokens() with token contexts', () => {
+  const previous = process.env.FIGPOT_TOKEN_CONTEXTS;
+
+  beforeAll(() => {
+    process.env.FIGPOT_TOKEN_CONTEXTS = 'true';
+  });
+
+  afterAll(() => {
+    process.env.FIGPOT_TOKEN_CONTEXTS = previous;
+  });
+
+  // Collections `C:action` (modes primary, secondary) and `C:size` (modes medium, large), a main component `1:1` setting
+  // Primary and Medium
+  function makeContextRegistry(overriddenFields: string[] | null) {
+    return {
+      getVariableTokenNames: () => new Map(),
+      getThemeIdsByCollectionMode: () =>
+        new Map([
+          ['C:action/primary', 'T:primary'],
+          ['C:action/secondary', 'T:secondary'],
+          ['C:size/medium', 'T:medium'],
+          ['C:size/large', 'T:large'],
+        ]),
+      getTokenScopeIndex: () => ({
+        explicitModesByNodeId: new Map<string, Record<string, string> | undefined>([['1:1', { 'C:action': 'primary', 'C:size': 'medium' }]]),
+        themeGroupById: new Map([
+          ['T:primary', 'Action'],
+          ['T:secondary', 'Action'],
+          ['T:medium', 'Size'],
+          ['T:large', 'Size'],
+        ]),
+      }),
+      getOverrides: () => overriddenFields,
+    } as unknown as BoundVariableRegistry;
+  }
+
+  it('lists the groups an overridden instance changes compared to its main', () => {
+    const node = {
+      id: '2:1',
+      type: 'INSTANCE',
+      componentId: '1:1',
+      explicitVariableModes: { 'C:action': 'secondary', 'C:size': 'medium' },
+    } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(makeContextRegistry(['explicitVariableModes']), node)).toEqual({
+      tokenScope: { themes: ['T:medium', 'T:secondary'], overrides: ['Action'] },
+    });
+  });
+
+  it('keeps the whole scope when the main is not in the file', () => {
+    const node = {
+      id: '2:1',
+      type: 'INSTANCE',
+      componentId: '9:9',
+      explicitVariableModes: { 'C:action': 'secondary' },
+    } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(makeContextRegistry(['explicitVariableModes']), node)).toEqual({
+      tokenScope: { themes: ['T:secondary'] },
+    });
+  });
+
+  it('gives no overrides to a copy whose modes are not overridden', () => {
+    const node = {
+      id: '2:1',
+      type: 'INSTANCE',
+      componentId: '1:1',
+      explicitVariableModes: { 'C:action': 'primary', 'C:size': 'medium' },
+    } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(makeContextRegistry(null), node)).toEqual({
+      tokenScope: { themes: ['T:medium', 'T:primary'] },
+    });
+  });
+});

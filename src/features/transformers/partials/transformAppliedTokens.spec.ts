@@ -86,6 +86,29 @@ describe('transformAppliedTokens() bindings', () => {
     });
   });
 
+  it('binds the stroke weights per side as the REST API names them', () => {
+    const registry = makeRegistry({ 'V:w/borderWidth': 'border.weight' });
+    const node = {
+      boundVariables: {
+        individualStrokeWeights: {
+          BORDER_TOP_WEIGHT: alias('V:w'),
+          BORDER_RIGHT_WEIGHT: alias('V:w'),
+          BORDER_BOTTOM_WEIGHT: alias('V:w'),
+          BORDER_LEFT_WEIGHT: alias('V:w'),
+        },
+      },
+    } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(registry, node)).toEqual({
+      appliedTokens: {
+        strokeWidthTop: 'border.weight',
+        strokeWidthRight: 'border.weight',
+        strokeWidthBottom: 'border.weight',
+        strokeWidthLeft: 'border.weight',
+      },
+    });
+  });
+
   it('binds no line height token, Penpot would apply its pixels as a ratio of the font size', () => {
     const registry = makeRegistry({ 'V:lh/sizing': 'line.24', 'V:fs/fontSize': 'font.16' });
     const node = {

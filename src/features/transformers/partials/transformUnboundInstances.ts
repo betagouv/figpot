@@ -28,7 +28,18 @@ export function transformUnboundInstances(page: PenpotPage): void {
   };
 
   for (const node of Object.values(page.objects)) {
-    if (node.componentId === nullId) {
+    if (node.componentId !== nullId) {
+      continue;
+    }
+
+    if (node.shapeRef && node.shapeRef !== nullId) {
+      // Inside a bound copy, the unbound instance is a plain part of the copy (its equivalent in the main is detached the
+      // same way): it keeps its reference and so do its descendants, otherwise Penpot would see shapes foreign to the main
+      // and recreate them (new IDs, overrides lost) the next time it syncs the copy
+      delete node.componentId;
+      delete node.componentFile;
+      delete node.componentRoot;
+    } else {
       detach(node);
     }
   }

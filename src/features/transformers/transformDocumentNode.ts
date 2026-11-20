@@ -3,6 +3,7 @@ import { MappingType, ReplaceFontPatternType } from '@figpot/src/features/docume
 import { FigmaDefinedColor, FigmaDefinedEffectStyle, FigmaDefinedTypography } from '@figpot/src/features/figma';
 import { MainCopies } from '@figpot/src/features/mainCopies';
 import { initializeInstanceSwaps, releaseInstanceSwaps } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
+import { transformStrokeWidthTokens } from '@figpot/src/features/transformers/partials/transformStrokeWidthTokens';
 import { transformUnboundInstances } from '@figpot/src/features/transformers/partials/transformUnboundInstances';
 import { transformPageNode } from '@figpot/src/features/transformers/transformPageNode';
 import { translateEffectStyleTokens } from '@figpot/src/features/translators/tokens/translateEffectStyleTokens';
@@ -136,6 +137,20 @@ export function cleanFigmaDefects(figmaNode: GetFileResponse) {
   }
 }
 
+type BooleanOperandNode = { type: string; children?: BooleanOperandNode[]; insideBooleanOperation?: boolean };
+
+// Penpot computes a boolean from the paths of its operands, ignoring their strokes: an operand must keep the outline Figma
+// gives (see `transformVectorPaths`), so the operands are marked beforehand
+export function markBooleanOperands(node: BooleanOperandNode, inside = false): void {
+  if (inside) {
+    node.insideBooleanOperation = true;
+  }
+
+  for (const child of node.children ?? []) {
+    markBooleanOperands(child, inside || node.type === 'BOOLEAN_OPERATION');
+  }
+}
+
 export function transformDocumentNode(
   figmaNode: GetFileResponse,
   figmaDefinedColors: FigmaDefinedColor[],
@@ -154,6 +169,7 @@ export function transformDocumentNode(
 
   cleanFigmaDefects(figmaNode);
   adaptFillingOnlyChildren(figmaNode.document as unknown as LayoutNode);
+  markBooleanOperands(figmaNode.document as unknown as BooleanOperandNode);
 
   // Swapped instances are detected by comparing nested instances with the shapes they replace in their near main
   initializeInstanceSwaps(figmaNode.document as unknown as SubcanvasNode, figmaNode.components, remoteComponentSourceFiles, libraryMainCopies);
@@ -290,6 +306,7 @@ export function transformDocumentNode(
 
     const penpotPageNode = transformPageNode(pageRegistry, child);
     transformUnboundInstances(penpotPageNode);
+    transformStrokeWidthTokens(penpotPageNode);
 
     return penpotPageNode;
   });

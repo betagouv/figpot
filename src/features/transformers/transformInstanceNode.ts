@@ -84,7 +84,13 @@ export function transformInstanceNode(registry: AbstractRegistry, node: Instance
 
   instanceFrame.componentFile = nullId;
   instanceFrame.componentId = nullId;
-  instanceFrame.shapeRef = nullId;
+
+  // Inside a copy, an instance whose component cannot be bound (a library not synchronized) stays a plain shape of the
+  // copy: it keeps referring to its equivalent in the main (set by `transformInheritance()`), otherwise Penpot would see
+  // a shape foreign to the main and recreate it (with new IDs and without its overrides) the next time it syncs the copy
+  if (!instanceFrame.shapeRef) {
+    instanceFrame.shapeRef = nullId;
+  }
 
   return instanceFrame;
 }

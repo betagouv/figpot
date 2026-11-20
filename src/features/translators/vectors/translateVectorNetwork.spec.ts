@@ -29,3 +29,22 @@ describe('translateVectorNetwork()', () => {
     expect(hasVectorNetwork({})).toBe(false);
   });
 });
+
+describe('translateVectorNetwork() bounds', () => {
+  it('scales from the bounds of the curves, not only of the vertices', () => {
+    // A half circle bulging to x = 10 between two vertices at x = 0: its drawn width is 10, already the node size
+    const k = 0.5523 * 10;
+    const vectorNetwork = {
+      vertices: [{ position: { x: 0, y: 0 } }, { position: { x: 0, y: 20 } }],
+      segments: [{ start: 0, end: 1, startTangent: { x: k * 1.81, y: 0 }, endTangent: { x: k * 1.81, y: 0 } }],
+    };
+
+    const path = translateVectorNetwork(vectorNetwork, { x: 10, y: 20 }, true).path;
+    const numbers = path.match(/-?\d+(\.\d+)?/g)!.map(Number);
+
+    expect(numbers[0]).toBeCloseTo(0);
+    expect(numbers[numbers.length - 1]).toBeCloseTo(20);
+    // The end vertex keeps x = 0 (no horizontal stretch from a zero vertex width)
+    expect(numbers[numbers.length - 2]).toBeCloseTo(0);
+  });
+});

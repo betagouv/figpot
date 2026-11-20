@@ -2104,45 +2104,6 @@ export const CompareOptions = z.object({
 });
 export type CompareOptionsType = z.infer<typeof CompareOptions>;
 
-/**
- * Figma does not always give the geometry of boolean operations (some layers of instances), so their content is
- * transformed empty and Penpot computes it from the children once the page is opened. To not empty them again at each
- * synchronization, the content computed by Penpot is kept (along with the geometry it implies)
- */
-export function keepComputedBoolContents(hostedDocument: PenpotDocument, transformedDocument: PenpotDocument): number {
-  let kept = 0;
-
-  for (const [pageId, transformedPage] of Object.entries(transformedDocument.data.pagesIndex ?? {})) {
-    const hostedObjects = (hostedDocument.data.pagesIndex as Record<string, { objects?: Record<string, any> }> | undefined)?.[pageId]?.objects;
-    if (!hostedObjects) {
-      continue;
-    }
-
-    for (const [objectId, transformedObject] of Object.entries((transformedPage as { objects?: Record<string, any> }).objects ?? {})) {
-      const hostedObject = hostedObjects[objectId];
-
-      if (
-        transformedObject.type === 'bool' &&
-        Array.isArray(transformedObject.content) &&
-        transformedObject.content.length === 0 &&
-        hostedObject?.type === 'bool' &&
-        Array.isArray(hostedObject.content) &&
-        hostedObject.content.length > 0
-      ) {
-        for (const key of ['content', 'selrect', 'points', 'x', 'y', 'width', 'height']) {
-          if (key in hostedObject) {
-            transformedObject[key] = hostedObject[key];
-          }
-        }
-
-        kept++;
-      }
-    }
-  }
-
-  return kept;
-}
-
 export async function compare(options: CompareOptionsType) {
   // Take the Penpot one that has Figma node IDs and use the one from the mappings
   // Get documents from Penpot if already synchronized in the past
@@ -2187,7 +2148,6 @@ export async function compare(options: CompareOptionsType) {
     const transformedDocument = await readTransformedFigmaTreeFile(options.dataDir, document.figmaDocument, document.penpotDocument);
 
     const hostedCoreDocument = cleanHostedDocument(hostedDocument);
-    keepComputedBoolContents(hostedCoreDocument, transformedDocument);
 
     const diff = getDifferences(hostedCoreDocument, transformedDocument, {
       tokensStatus: await penpotSupportsTokensStatus(),

@@ -203,12 +203,16 @@ export function transformAppliedTokens(
     // Missing from the generated types although the REST API sends them
     const extraBoundVariables = boundVariables as { strokeWeight?: VariableAlias; gridRowGap?: VariableAlias; gridColumnGap?: VariableAlias };
 
-    // Penpot has a stroke width token per side, a uniform weight binds the four of them
-    const strokeWeights = boundVariables.individualStrokeWeights;
-    record('strokeWidthTop', 'borderWidth', strokeWeights?.top ?? extraBoundVariables.strokeWeight);
-    record('strokeWidthRight', 'borderWidth', strokeWeights?.right ?? extraBoundVariables.strokeWeight);
-    record('strokeWidthBottom', 'borderWidth', strokeWeights?.bottom ?? extraBoundVariables.strokeWeight);
-    record('strokeWidthLeft', 'borderWidth', strokeWeights?.left ?? extraBoundVariables.strokeWeight);
+    // Penpot has a stroke width token per side, a uniform weight binds the four of them. The REST API names the sides
+    // `BORDER_TOP_WEIGHT`... whereas the generated types (from the Plugin API) name them `top`...
+    const strokeWeights = boundVariables.individualStrokeWeights as
+      | (Partial<Record<'top' | 'right' | 'bottom' | 'left', VariableAlias>> &
+          Partial<Record<'BORDER_TOP_WEIGHT' | 'BORDER_RIGHT_WEIGHT' | 'BORDER_BOTTOM_WEIGHT' | 'BORDER_LEFT_WEIGHT', VariableAlias>>)
+      | undefined;
+    record('strokeWidthTop', 'borderWidth', strokeWeights?.top ?? strokeWeights?.BORDER_TOP_WEIGHT ?? extraBoundVariables.strokeWeight);
+    record('strokeWidthRight', 'borderWidth', strokeWeights?.right ?? strokeWeights?.BORDER_RIGHT_WEIGHT ?? extraBoundVariables.strokeWeight);
+    record('strokeWidthBottom', 'borderWidth', strokeWeights?.bottom ?? strokeWeights?.BORDER_BOTTOM_WEIGHT ?? extraBoundVariables.strokeWeight);
+    record('strokeWidthLeft', 'borderWidth', strokeWeights?.left ?? strokeWeights?.BORDER_LEFT_WEIGHT ?? extraBoundVariables.strokeWeight);
 
     // Grid layouts have their own gap fields
     record('rowGap', 'spacing', extraBoundVariables.gridRowGap);

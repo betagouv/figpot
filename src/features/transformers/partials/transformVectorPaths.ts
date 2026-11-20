@@ -8,9 +8,10 @@ import { transformLayoutAttributes } from '@figpot/src/features/transformers/par
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
+import { translateStrokeCap } from '@figpot/src/features/translators/translateStrokes';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { translateEvenOddToNonZero } from '@figpot/src/features/translators/vectors/translateEvenOddToNonZero';
-import { hasVectorNetwork, translateVectorNetwork } from '@figpot/src/features/translators/vectors/translateVectorNetwork';
+import { hasVectorNetwork, isStrokablePath, translateVectorNetwork } from '@figpot/src/features/translators/vectors/translateVectorNetwork';
 import { translateWindingRule } from '@figpot/src/features/translators/vectors/translateWindingRule';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { PathShape } from '@figpot/src/models/entities/penpot/shapes/path';
@@ -18,6 +19,16 @@ import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 const { parseSVG } = svgPathParser;
+
+function hasBoundStrokeWeight(node: VectorNode): boolean {
+  const boundVariables = (node.boundVariables ?? {}) as Record<string, unknown>;
+
+  return boundVariables['strokeWeight'] !== undefined || boundVariables['individualStrokeWeights'] !== undefined;
+}
+
+function hasVisibleStroke(node: VectorNode): boolean {
+  return (node.strokes ?? []).some((paint) => paint.visible !== false);
+}
 
 function getMergedFill(node: VectorNode, vectorPath: Path): Paint[] | null {
   if (node.fillOverrideTable && vectorPath.overrideID && node.fillOverrideTable[vectorPath.overrideID]?.fills) {
@@ -99,6 +110,34 @@ export function transformVectorPaths(registry: AbstractRegistry, node: VectorNod
         transformStrokes(registry, node)
       ),
     ];
+  }
+
+  // An outline whose weight follows a variable (an icon whose strokes thicken with a font weight theme) needs a real Penpot
+  // stroke for the token to change it: its center line is rebuilt from the vector network and stroked natively (centered
+  // strokes only, an inside or outside one would need the closed outline Figma does not give here)
+  // Not for masks and boolean operands (their outline is the area they cut), rounded corners (Penpot strokes cannot round the corners of a path) or
+  // lone vertices (dots): the exact outline from `strokeGeometry` is kept then
+  // Experimental (`FIGPOT_NATIVE_BOUND_STROKES=true`): the REST API does not give the per-vertex styles of a network (only a
+  // `meta` index into a table it omits: rounded corners, caps...), and a small closed path Figma fills with its stroke
+  // becomes a ring, so some outlines differ from Figma
+  if (
+    process.env.FIGPOT_NATIVE_BOUND_STROKES === 'true' &&
+    hasBoundStrokeWeight(node) &&
+    hasVectorNetwork(node) &&
+    isStrokablePath(node.vectorNetwork, node.strokeWeight ?? 0) &&
+    !node.isMask &&
+    !(node as { insideBooleanOperation?: boolean }).insideBooleanOperation &&
+    !((node as { cornerRadius?: number }).cornerRadius ?? 0) &&
+    (node.strokeAlign ?? 'CENTER') === 'CENTER' &&
+    hasVisibleStroke(node)
+  ) {
+    const networkPath = translateVectorNetwork(node.vectorNetwork, node.size ?? { x: 0, y: 0 }, true);
+    const cap = translateStrokeCap(node);
+    const strokes = transformStrokes(registry, node).strokes?.map((stroke, index) =>
+      index === 0 && cap && (cap === 'round' || cap === 'square') ? { ...stroke, strokeCapStart: cap, strokeCapEnd: cap } : stroke
+    );
+
+    return [transformVectorPath(registry, node, figmaNodeTransform, networkPath, { fills: [] }, { strokes: strokes })];
   }
 
   // A vector with no fill (an outline-only shape) only exposes `strokeGeometry`, which is the stroke already

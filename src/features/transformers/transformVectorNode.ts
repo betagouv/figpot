@@ -88,6 +88,5 @@ export function transformVectorNode(
     shapes: shapes,
     ...transformGroupNodeLike(registry, node, figmaNodeTransform),
     ...(unionBounds ? dimensionRotationPosition : {}),
-    ...transformConstraints(node),
   };
 }

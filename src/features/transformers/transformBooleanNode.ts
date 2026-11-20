@@ -3,6 +3,7 @@ import svgPathParser from 'svg-path-parser';
 import { BooleanOperationNode, Transform } from '@figpot/src/clients/figma';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformChildren } from '@figpot/src/features/transformers/partials/transformChildren';
+import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
@@ -51,6 +52,7 @@ export function transformBooleanNode(
     ...transformEffects(registry, node),
     ...transformStrokes(registry, node),
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
+    ...transformConstraints(node),
     ...transformSceneNode(node),
     ...transformBlend(node),
     ...transformProportion(node),

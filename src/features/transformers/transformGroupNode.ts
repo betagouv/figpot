@@ -1,6 +1,7 @@
 import { GroupNode, HasLayoutTrait, IsLayerTrait, Transform } from '@figpot/src/clients/figma';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformChildren } from '@figpot/src/features/transformers/partials/transformChildren';
+import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
@@ -33,6 +34,7 @@ export function transformGroupNodeLike(
     type: 'group',
     name: node.name,
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
+    ...transformConstraints(node),
     ...transformSceneNode(node),
     ...transformInheritance(registry, node),
   };

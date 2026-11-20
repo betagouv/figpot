@@ -17,6 +17,7 @@ export type SyncGroups =
   | 'bool-group'
   | 'exports-group'
   | 'grids-group'
+  | 'token-scope-group'
   | 'layout-container'
   | 'layout-align-content'
   | 'layout-align-items'

@@ -26,12 +26,19 @@ export type StyleBinding = {
   isRemote: boolean;
 };
 
+// With token contexts: the Penpot theme of each Figma variable mode (see `resolveThemeIdForMode()`), and the Penpot theme group of each theme ID
+export type TokenContexts = {
+  themeIdsByCollectionMode: Map<string, string>;
+  themeGroupById: Map<string, string>;
+};
+
 export interface BoundVariableRegistry {
   getColors(): Map<string, Color>;
   getTypographies(): Map<string, LibraryTypography>;
   getComponents(): Map<string, LibraryComponent>;
   getMapping(): MappingType;
   getVariableTokenNames(): Map<string, string>;
+  getTokenContexts(): TokenContexts;
   resolveComponent(figmaComponentNodeId: string): ComponentBinding | undefined;
   resolveStyle(figmaStyleNodeId: string, paintIndex?: number): StyleBinding | undefined;
   getDataDir(): string;
@@ -93,6 +100,10 @@ export class ComponentInstanceRegistry implements AbstractRegistry {
 
   public getVariableTokenNames(): Map<string, string> {
     return this.pageRegistry.getVariableTokenNames();
+  }
+
+  public getTokenContexts(): TokenContexts {
+    return this.pageRegistry.getTokenContexts();
   }
 
   public resolveComponent(figmaComponentNodeId: string): ComponentBinding | undefined {
@@ -158,6 +169,10 @@ export class ComponentRegistry implements AbstractRegistry {
     return this.pageRegistry.getVariableTokenNames();
   }
 
+  public getTokenContexts(): TokenContexts {
+    return this.pageRegistry.getTokenContexts();
+  }
+
   public resolveComponent(figmaComponentNodeId: string): ComponentBinding | undefined {
     return this.pageRegistry.resolveComponent(figmaComponentNodeId);
   }
@@ -221,6 +236,10 @@ export class PageRegistry implements AbstractRegistry {
     return this.globalRegistry.getVariableTokenNames();
   }
 
+  public getTokenContexts(): TokenContexts {
+    return this.globalRegistry.getTokenContexts();
+  }
+
   public resolveComponent(figmaComponentNodeId: string): ComponentBinding | undefined {
     return this.globalRegistry.resolveComponent(figmaComponentNodeId);
   }
@@ -244,6 +263,7 @@ export class Registry implements BoundVariableRegistry {
   protected readonly typographies: Map<string, LibraryTypography> = new Map();
   protected readonly components: Map<string, LibraryComponent> = new Map();
   protected readonly variableTokenNames: Map<string, string> = new Map();
+  protected tokenContexts: TokenContexts = { themeIdsByCollectionMode: new Map(), themeGroupById: new Map() };
   protected figmaComponents: Record<string, Component> = {};
   protected libraryFiles: Map<string, string> = new Map();
   protected remoteComponentSourceFiles: Map<string, string> = new Map();
@@ -307,6 +327,14 @@ export class Registry implements BoundVariableRegistry {
 
   public getVariableTokenNames(): Map<string, string> {
     return this.variableTokenNames;
+  }
+
+  public registerTokenContexts(tokenContexts: TokenContexts) {
+    this.tokenContexts = tokenContexts;
+  }
+
+  public getTokenContexts(): TokenContexts {
+    return this.tokenContexts;
   }
 
   // Seeds the cross-file component binding state (to call once at the start of a document transform)

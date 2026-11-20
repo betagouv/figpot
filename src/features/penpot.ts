@@ -219,6 +219,14 @@ export function cleanHostedDocument(hostedTree: PostGetFileResponse): PenpotDocu
         object.touched = object.touched.sort();
       }
 
+      // Penpot keeps the themes and overrides of a token scope as sets, returned in any order, whereas the transformation sorts them
+      if (object.tokenScope) {
+        object.tokenScope.themes = [...object.tokenScope.themes].sort();
+        if (object.tokenScope.overrides) {
+          object.tokenScope.overrides = [...object.tokenScope.overrides].sort();
+        }
+      }
+
       if (object.type === 'text') {
         // From the UI this is passed with all position for each texts, it would be really difficult to calculate it
         // on our own. Hopefully they are not required for the text to be correctly created, so ignoring it :)

@@ -1,10 +1,11 @@
 import { Paint, VariableAlias } from '@figpot/src/clients/figma';
+import { isTokenContextsEnabled } from '@figpot/src/features/translators/tokens/translateTokens';
 import { hasCounterAxisSpacing } from '@figpot/src/features/translators/translateLayout';
 import { SubcanvasNodeWithSlot } from '@figpot/src/models/entities/figma/slot';
 import { TokenType } from '@figpot/src/models/entities/penpot/traits/token';
 import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 
-// Warned at most once per process: per-frame variable mode overrides have no Penpot equivalent
+// Warned at most once per process: without token contexts, per-frame variable mode overrides have no Penpot equivalent
 // (theme switching is document-wide), so flagging every offending node would be noise
 let hasWarnedExplicitVariableModes = false;
 
@@ -176,7 +177,7 @@ export function transformAppliedTokens(registry: BoundVariableRegistry, node: Su
   applyPaintColorToken(appliedTokens, registry, 'strokeColor', 'strokes' in node ? node.strokes : undefined);
 
   const explicitVariableModes = node.explicitVariableModes;
-  if (!hasWarnedExplicitVariableModes && explicitVariableModes && Object.keys(explicitVariableModes).length > 0) {
+  if (!isTokenContextsEnabled() && !hasWarnedExplicitVariableModes && explicitVariableModes && Object.keys(explicitVariableModes).length > 0) {
     hasWarnedExplicitVariableModes = true;
 
     console.warn(

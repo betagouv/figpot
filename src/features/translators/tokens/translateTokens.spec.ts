@@ -368,3 +368,52 @@ describe('translateTokens() aliases', () => {
     });
   });
 });
+
+describe('translateTokens() with token contexts', () => {
+  const previous = process.env.FIGPOT_TOKEN_CONTEXTS;
+
+  beforeAll(() => {
+    process.env.FIGPOT_TOKEN_CONTEXTS = 'true';
+  });
+
+  afterAll(() => {
+    process.env.FIGPOT_TOKEN_CONTEXTS = previous;
+  });
+
+  it('makes one theme group of a collection and its extensions, named after the one holding the variables', () => {
+    const modes = [
+      { modeId: 'm:1', name: 'Light' },
+      { modeId: 'm:2', name: 'Dark' },
+    ];
+    // Nodes set the modes of the empty parent, the values live in the extension sharing its key and mode IDs
+    const parent = makeCollection({ id: 'C:parent', key: 'K', name: 'Theme', modes, defaultModeId: 'm:1', variableIds: [], remote: true });
+    const extension = makeCollection({
+      id: 'C:ext',
+      key: 'K',
+      name: '❖ Brand theme',
+      modes,
+      defaultModeId: 'm:1',
+      variableIds: ['V:1'],
+      remote: true,
+    });
+    const variable = makeVariable({
+      id: 'V:1',
+      name: 'brand/accent',
+      variableCollectionId: 'C:ext',
+      resolvedType: 'COLOR',
+      scopes: ['ALL_FILLS'],
+      valuesByMode: { 'm:1': { r: 1, g: 1, b: 0, a: 1 }, 'm:2': { r: 0, g: 0, b: 1, a: 1 } },
+      remote: true,
+    });
+
+    const result = translateTokens(makeData([parent, extension], [variable]), makeMapping());
+    const groups = new Set(Object.values(result.tokenThemes).map((theme) => theme.group));
+
+    expect(groups).toEqual(new Set(['Brand theme']));
+    expect(result.tokenThemes['Brand theme/Dark'].sets).toEqual(['BrandTheme/Dark']);
+    // The mode set on the parent and on the extension resolve to the same theme
+    expect(result.themeIdsByCollectionMode.get('C:parent/m:2')).toBe(result.tokenThemes['Brand theme/Dark'].id);
+    expect(result.themeIdsByCollectionMode.get('C:ext/m:2')).toBe(result.tokenThemes['Brand theme/Dark'].id);
+    expect(result.activeThemes).toEqual(['Brand theme/Light']);
+  });
+});

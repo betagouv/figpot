@@ -198,26 +198,96 @@ export function translateLayoutGridDir(node: HasLayoutTrait): LayoutGridDir {
   return 'row';
 }
 
+/**
+ * Splits a CSS track list on its top-level spaces (the ones outside parentheses)
+ */
+function splitTrackList(trackList: string): string[] {
+  const tracks: string[] = [];
+  let depth = 0;
+  let current = '';
+
+  for (const character of trackList) {
+    if (character === '(') {
+      depth++;
+    } else if (character === ')') {
+      depth--;
+    }
+
+    if (/\s/.test(character) && depth === 0) {
+      if (current) {
+        tracks.push(current);
+        current = '';
+      }
+    } else {
+      current += character;
+    }
+  }
+
+  if (current) {
+    tracks.push(current);
+  }
+
+  return tracks;
+}
+
+function translateGridTrack(track: string): GridTrack {
+  const fraction = /^(?:minmax\([^,]+,)?([\d.]+)fr\)?$/.exec(track);
+  if (fraction) {
+    return { type: 'flex', value: parseFloat(fraction[1]) };
+  }
+
+  const pixels = /^(?:minmax\([^,]+,)?([\d.]+)px\)?$/.exec(track);
+  if (pixels) {
+    return { type: 'fixed', value: parseFloat(pixels[1]) };
+  }
+
+  const percent = /^([\d.]+)%$/.exec(track);
+  if (percent) {
+    return { type: 'percent', value: parseFloat(percent[1]) };
+  }
+
+  // `fit-content(100%)` is the "hug" of Figma, as `auto`, `min-content` and `max-content` it sizes the track from its content
+  if (/^(fit-content\(.*\)|auto|min-content|max-content)$/.test(track)) {
+    return { type: 'auto' };
+  }
+
+  return { type: 'flex', value: 1 };
+}
+
+/**
+ * Translates the CSS-like track sizes Figma gives (`repeat(2,fit-content(100%))`, `372px 372px`, `minmax(0,1fr)`...),
+ * equal fractions are kept when they cannot be read or do not match the track count
+ */
+export function translateGridTracks(sizing: string | undefined, count: number): GridTrack[] {
+  const tracks: GridTrack[] = [];
+
+  for (const track of splitTrackList(sizing ?? '')) {
+    const repeat = /^repeat\((\d+),(.*)\)$/.exec(track);
+
+    if (repeat) {
+      const repeated = splitTrackList(repeat[2]).map(translateGridTrack);
+
+      for (let i = 0; i < parseInt(repeat[1], 10); i++) {
+        tracks.push(...repeated);
+      }
+    } else {
+      tracks.push(translateGridTrack(track));
+    }
+  }
+
+  if (tracks.length !== count) {
+    return Array.from({ length: count }, () => ({ type: 'flex', value: 1 }));
+  }
+
+  return tracks;
+}
+
 export function translateLayoutGridColumns(node: HasLayoutTrait): GridTrack[] {
-  // TODO: should be more complex, maybe parsed from
-  // `"gridColumnsSizing": "  fit-content(100%) fit-content(100%)",`
-  return Array.from({ length: node.gridColumnCount ?? 0 }, () => {
-    return {
-      type: 'flex',
-      value: 1,
-    };
-  });
+  return translateGridTracks(node.gridColumnsSizing, node.gridColumnCount ?? 0);
 }
 
 export function translateLayoutGridRows(node: HasLayoutTrait): GridTrack[] {
-  // TODO: should be more complex, maybe parsed from
-  // `"gridRowsSizing": "  fit-content(100%) fit-content(100%)",`
-  return Array.from({ length: node.gridRowCount ?? 0 }, () => {
-    return {
-      type: 'flex',
-      value: 1,
-    };
-  });
+  return translateGridTracks(node.gridRowsSizing, node.gridRowCount ?? 0);
 }
 
 export function translateGridChildAlign(align?: FigmaGridChildAlign): 'start' | 'center' | 'end' | undefined {

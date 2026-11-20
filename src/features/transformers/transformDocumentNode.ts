@@ -1,5 +1,5 @@
 import { GetFileResponse, SubcanvasNode } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
+import { MappingType, ReplaceFontPatternType } from '@figpot/src/features/document';
 import { FigmaDefinedColor, FigmaDefinedEffectStyle, FigmaDefinedTypography } from '@figpot/src/features/figma';
 import { MainCopies } from '@figpot/src/features/mainCopies';
 import { initializeInstanceSwaps, releaseInstanceSwaps } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
@@ -56,6 +56,49 @@ function registerComponentSubtreeIds(figmaNode: GetFileResponse, mapping: Mappin
   }
 }
 
+type LayoutNode = {
+  type: string;
+  layoutMode?: string;
+  layoutPositioning?: string;
+  layoutSizingHorizontal?: string;
+  layoutSizingVertical?: string;
+  visible?: boolean;
+  style?: { textAutoResize?: string };
+  children?: LayoutNode[];
+};
+
+// In Figma a child filling an axis of an auto layout frame that hugs its content on that axis, as the only child laid
+// out in it (absolute ones aside), just takes its own size: the frame hugs that child. Penpot does not allow a child
+// filling a hugging parent, so the child is made to hug instead, which renders the same and lets the frame grow or shrink
+// with it (a text whose size follows the tokens of a theme). With several children laid out, filling keeps its meaning and
+// `translateLayoutSizing()` fixes the size of the frame instead
+export function adaptFillingOnlyChildren(node: LayoutNode): void {
+  if (node.layoutMode === 'HORIZONTAL' || node.layoutMode === 'VERTICAL') {
+    const laidOutChildren = (node.children ?? []).filter((child) => child.layoutPositioning !== 'ABSOLUTE' && child.visible !== false);
+
+    if (laidOutChildren.length === 1) {
+      const [child] = laidOutChildren;
+
+      if (node.layoutSizingHorizontal === 'HUG' && child.layoutSizingHorizontal === 'FILL') {
+        child.layoutSizingHorizontal = 'HUG';
+
+        // A text hugging its width no longer wraps
+        if (child.type === 'TEXT' && child.style && child.style.textAutoResize === 'HEIGHT') {
+          child.style.textAutoResize = 'WIDTH_AND_HEIGHT';
+        }
+      }
+
+      if (node.layoutSizingVertical === 'HUG' && child.layoutSizingVertical === 'FILL') {
+        child.layoutSizingVertical = 'HUG';
+      }
+    }
+  }
+
+  for (const child of node.children ?? []) {
+    adaptFillingOnlyChildren(child);
+  }
+}
+
 export function cleanFigmaDefects(figmaNode: GetFileResponse) {
   // [WORKAROUND] For whatever reason Figma may list components as being local whereas they are not (and not remote too) (maybe on old Figma files that have evolved with their internal changes)
   // We mark them as remote to adjust since it's fine with our logic with the Penpot one, but we could also try to replace `INSTANCE` by a basic frame
@@ -104,11 +147,13 @@ export function transformDocumentNode(
   remoteStyleSourceFiles: Map<string, string>,
   mapping: MappingType,
   dataDir: string,
-  libraryMainCopies: Map<string, MainCopies> = new Map()
+  libraryMainCopies: Map<string, MainCopies> = new Map(),
+  replaceFontPatterns: ReplaceFontPatternType[] = []
 ): PenpotDocument {
   // We use `GetFileResponse` type instead of the type `DocumentNode` to have the "document" title
 
   cleanFigmaDefects(figmaNode);
+  adaptFillingOnlyChildren(figmaNode.document as unknown as LayoutNode);
 
   // Swapped instances are detected by comparing nested instances with the shapes they replace in their near main
   initializeInstanceSwaps(figmaNode.document as unknown as SubcanvasNode, figmaNode.components, remoteComponentSourceFiles, libraryMainCopies);
@@ -132,7 +177,7 @@ export function transformDocumentNode(
     usedTokenNames,
     inferredScopeNames,
     suffixedVariableNames,
-  } = translateTokens(figmaVariables, mapping);
+  } = translateTokens(figmaVariables, mapping, replaceFontPatterns);
 
   registry.registerVariableTokenNames(variableTokenNames);
   registry.registerThemeIdsByCollectionMode(themeIdsByCollectionMode);

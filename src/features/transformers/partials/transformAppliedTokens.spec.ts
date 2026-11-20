@@ -45,6 +45,67 @@ describe('transformAppliedTokens()', () => {
   });
 });
 
+describe('transformAppliedTokens() bindings', () => {
+  it('binds corner radii, minimum and maximum sizes, stroke weights and grid gaps', () => {
+    const registry = makeRegistry({
+      'V:r/borderRadius': 'radius.md',
+      'V:min/sizing': 'size.min',
+      'V:max/sizing': 'size.max',
+      'V:stroke/borderWidth': 'border.thin',
+      'V:gap/spacing': 'space.gap',
+    });
+    const node = {
+      boundVariables: {
+        rectangleCornerRadii: {
+          RECTANGLE_TOP_LEFT_CORNER_RADIUS: alias('V:r'),
+          RECTANGLE_TOP_RIGHT_CORNER_RADIUS: alias('V:r'),
+          RECTANGLE_BOTTOM_RIGHT_CORNER_RADIUS: alias('V:r'),
+          RECTANGLE_BOTTOM_LEFT_CORNER_RADIUS: alias('V:r'),
+        },
+        minHeight: alias('V:min'),
+        maxWidth: alias('V:max'),
+        strokeWeight: alias('V:stroke'),
+        gridRowGap: alias('V:gap'),
+      },
+    } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(registry, node)).toEqual({
+      appliedTokens: {
+        r1: 'radius.md',
+        r2: 'radius.md',
+        r3: 'radius.md',
+        r4: 'radius.md',
+        layoutItemMinH: 'size.min',
+        layoutItemMaxW: 'size.max',
+        strokeWidthTop: 'border.thin',
+        strokeWidthRight: 'border.thin',
+        strokeWidthBottom: 'border.thin',
+        strokeWidthLeft: 'border.thin',
+        rowGap: 'space.gap',
+      },
+    });
+  });
+
+  it('binds no line height token, Penpot would apply its pixels as a ratio of the font size', () => {
+    const registry = makeRegistry({ 'V:lh/sizing': 'line.24', 'V:fs/fontSize': 'font.16' });
+    const node = {
+      type: 'TEXT',
+      boundVariables: { lineHeight: [alias('V:lh')] },
+      style: { boundVariables: { lineHeight: alias('V:lh'), fontSize: alias('V:fs') } },
+    } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(registry, node)).toEqual({ appliedTokens: { fontSize: 'font.16' } });
+  });
+
+  it('falls back to a token of another type the variable gives', () => {
+    // A variable scoped to sizes only gives a `sizing` token, bound here to a radius
+    const registry = makeRegistry({ 'V:size/sizing': 'size.4' });
+    const node = { boundVariables: { topLeftRadius: alias('V:size') } } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(registry, node)).toEqual({ appliedTokens: { r1: 'size.4' } });
+  });
+});
+
 describe('transformAppliedTokens() with token contexts', () => {
   const previous = process.env.FIGPOT_TOKEN_CONTEXTS;
 

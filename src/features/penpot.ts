@@ -139,7 +139,9 @@ function extractTokenLibrary(
     const themePath = dtcgTheme.group ? `${dtcgTheme.group}/${dtcgTheme.name}` : dtcgTheme.name;
     const sets = Object.entries(dtcgTheme.selectedTokenSets ?? {})
       .filter(([, status]) => status === 'enabled' || status === 'source')
-      .map(([setPath]) => setPath);
+      .map(([setPath]) => setPath)
+      // Penpot keeps them as a set, returned in any order, whereas the transformation sorts them
+      .sort();
 
     // The DTCG `id` is an external identifier (not the one used by operations), so the theme identifier is derived
     // like on the Figma side

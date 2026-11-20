@@ -1,7 +1,7 @@
 import fs from 'fs';
 
-import { GetLocalVariablesResponse, LocalVariable, RGBA, VariableAlias } from '@figpot/src/clients/figma';
-import { MappingType } from '@figpot/src/features/document';
+import { GetLocalVariablesResponse, LocalVariable, LocalVariableCollection, RGBA, VariableAlias } from '@figpot/src/clients/figma';
+import { MappingType, ReplaceFontPatternType } from '@figpot/src/features/document';
 import { hasInferredScope, isMultiTypeVariable, translateScope } from '@figpot/src/features/translators/tokens/translateScope';
 import { translateTokenName, translateTokenSetPath, uniqueName } from '@figpot/src/features/translators/tokens/translateTokenName';
 import { translateTokenId, translateTokenSetId, translateTokenThemeId } from '@figpot/src/features/translators/translateId';
@@ -98,8 +98,9 @@ function translateTokenValueForType(
   rawValue: FigmaVariableValue,
   type: TokenType,
   variables: FigmaVariablesData['variables'],
-  resolveAliasName: (aliasedVariable: LocalVariable, type: TokenType) => string,
-  mapping: MappingType
+  resolveAliasName: (aliasedVariable: LocalVariable, type: TokenType) => string | undefined,
+  mapping: MappingType,
+  replaceFontPatterns: ReplaceFontPatternType[] = []
 ): string | string[] | undefined {
   if (isVariableAlias(rawValue)) {
     const aliasedVariable = variables[rawValue.id];
@@ -113,7 +114,16 @@ function translateTokenValueForType(
       return undefined;
     }
 
-    return `{${resolveAliasName(aliasedVariable, type)}}`;
+    // Same when the aliased variable gives no token at all (unsupported values), the reference would dangle
+    const aliasName = resolveAliasName(aliasedVariable, type);
+    if (aliasName === undefined) {
+      console.warn(
+        `skipping the token for the Figma variable "${variable.name}" because the variable it aliases ("${aliasedVariable.name}") gives no Penpot token`
+      );
+      return undefined;
+    }
+
+    return `{${aliasName}}`;
   }
 
   switch (type) {
@@ -133,7 +143,11 @@ function translateTokenValueForType(
     case 'fontFamily': {
       // Penpot's font resolver picks up the array form and looks up the matching font
       // when applying the token to a shape's `fontFamily` slot (if no found it's displaying "Missing font")
-      return [String(rawValue)];
+      // Redirected like the fonts of the nodes, or applying the token in Penpot would set back a font it does not have
+      const fontFamily = String(rawValue);
+      const replaceFontPattern = replaceFontPatterns.find((pattern) => pattern.search.test(fontFamily));
+
+      return [replaceFontPattern ? replaceFontPattern.set : fontFamily];
     }
     case 'boolean':
     case 'string':
@@ -157,13 +171,30 @@ function withExtraVariables(data: FigmaVariablesData): FigmaVariablesData {
   const content = JSON.parse(fs.readFileSync(extraPath, 'utf-8')) as { meta: Partial<FigmaVariablesData> } | Partial<FigmaVariablesData>;
   const extra = 'meta' in content ? content.meta : content;
 
+  // A remote collection the REST API describes only lists the variables the file binds: its variables are completed with
+  // those of the export, which lists all of them
+  const variableCollections = { ...extra.variableCollections, ...data.variableCollections };
+  for (const [id, extraCollection] of Object.entries(extra.variableCollections ?? {})) {
+    const collection = data.variableCollections[id];
+    if (collection) {
+      variableCollections[id] = {
+        ...collection,
+        variableIds: [...new Set([...collection.variableIds, ...extraCollection.variableIds])],
+      };
+    }
+  }
+
   return {
     variables: { ...extra.variables, ...data.variables },
-    variableCollections: { ...extra.variableCollections, ...data.variableCollections },
+    variableCollections: variableCollections,
   };
 }
 
-export function translateTokens(originalData: FigmaVariablesData, mapping: MappingType): TranslatedTokens {
+export function translateTokens(
+  originalData: FigmaVariablesData,
+  mapping: MappingType,
+  replaceFontPatterns: ReplaceFontPatternType[] = []
+): TranslatedTokens {
   const data = withExtraVariables(originalData);
 
   const tokenSets: Record<string, TokenSet> = {};
@@ -200,115 +231,189 @@ export function translateTokens(originalData: FigmaVariablesData, mapping: Mappi
     return finalName;
   };
 
+  // The name of the token an alias refers to: the token of the aliased variable with the same type, or else one of the
+  // types it does give (a Figma alias has no type, an `ALL_SCOPES` variable can alias a variable scoped to a single
+  // use). Only names of tokens that exist: naming a (variable, type) pair the aliased variable does not give would
+  // reserve a name for a token never written, so the reference would dangle and push the real token to a `-1` name
+  const resolveAliasName = (aliasedVariable: LocalVariable, type: TokenType): string | undefined => {
+    const sameType = variableTokenNames.get(`${aliasedVariable.id}/${type}`);
+    if (sameType !== undefined) {
+      return sameType;
+    }
+
+    for (const otherType of translateScope(aliasedVariable)) {
+      const name = variableTokenNames.get(`${aliasedVariable.id}/${otherType}`);
+      if (name !== undefined) {
+        return name;
+      }
+    }
+
+    return undefined;
+  };
+
+  // With token contexts, the collections sharing a key are one family: Figma "extended collections" keep the key and the
+  // mode IDs of the collection they extend, and setting a mode of the parent on a node also switches the variables of its
+  // extensions (a node can set the mode of an empty parent collection whose variables all live in an extension). A family is one theme group whose
+  // theme of a mode activates the sets of every member for that mode. Without token contexts each collection stays alone
+  const families = new Map<string, LocalVariableCollection[]>();
   for (const collection of Object.values(data.variableCollections)) {
     if (collection.remote && !tokenContexts) {
       continue;
     }
 
-    // Two libraries can have collections with the same name, a theme group must be unique
-    const groupName = tokenContexts ? uniqueName(collection.name, usedGroupNames) : collection.name;
+    const familyKey = tokenContexts && collection.key ? `key:${collection.key}` : `id:${collection.id}`;
+    families.set(familyKey, [...(families.get(familyKey) ?? []), collection]);
+  }
 
-    for (const mode of collection.modes) {
-      const setPath = uniqueName(`${translateTokenSetPath(groupName)}/${translateTokenSetPath(mode.name)}`, usedSetPaths);
-      const tokens: Record<string, Token> = {};
+  // The variables to translate with their values, in the order tokens are written
+  const collectVariableModes = (collection: LocalVariableCollection, modeId: string) =>
+    collection.variableIds.flatMap((variableId) => {
+      const variable = data.variables[variableId];
+      if (!variable || (variable.remote && !tokenContexts)) {
+        return [];
+      }
 
-      for (const variableId of collection.variableIds) {
-        const variable = data.variables[variableId];
-        if (!variable || (variable.remote && !tokenContexts)) {
-          continue;
-        }
+      const rawValue = variable.valuesByMode[modeId];
 
-        const rawValue = variable.valuesByMode[mode.modeId];
-        if (rawValue === undefined) {
-          continue;
-        }
+      return rawValue === undefined ? [] : [{ variable: variable, rawValue: rawValue }];
+    });
 
-        // A color composed with another variable (for its color or its opacity) has no Penpot token equivalent for now
-        if (typeof rawValue === 'object' && rawValue !== null && 'color' in rawValue && 'opacity' in rawValue) {
-          console.warn(
-            `skipping the token for the Figma variable "${variable.name}" because its color is composed with another variable, which figpot cannot translate`
-          );
-
-          continue;
-        }
-
-        const types = translateScope(variable);
-
-        // Track warning-surface lists once per variable (the inner loop runs again for every mode
-        // but the names array would just grow with duplicates, so guard on first occurrence)
-        if (hasInferredScope(variable) && !inferredScopeNames.includes(variable.name)) {
-          inferredScopeNames.push(variable.name);
-        }
-
-        if (types.length > 1 && !suffixedVariableNames.includes(variable.name)) {
-          suffixedVariableNames.push(variable.name);
-        }
-
-        for (const type of types) {
-          const value = translateTokenValueForType(variable, rawValue, type, data.variables, getName, mapping);
-          if (value === undefined) {
+  // First pass: name every token that will be written (an alias is assumed valid here, its target is checked when
+  // writing), so references only use names of written tokens whatever the order collections come in
+  for (const members of families.values()) {
+    for (const collection of members) {
+      for (const mode of collection.modes) {
+        for (const { variable, rawValue } of collectVariableModes(collection, mode.modeId)) {
+          if (typeof rawValue === 'object' && rawValue !== null && 'color' in rawValue && 'opacity' in rawValue) {
             continue;
           }
 
-          const name = getName(variable, type);
-          tokens[name] = {
-            id: translateTokenId(setPath, name),
-            name: name,
-            type: type,
-            value: value,
-            description: variable.description || undefined,
-          };
+          for (const type of translateScope(variable)) {
+            if (
+              isVariableAlias(rawValue) ||
+              translateTokenValueForType(variable, rawValue, type, data.variables, () => undefined, mapping) !== undefined
+            ) {
+              getName(variable, type);
+            }
+          }
         }
       }
+    }
+  }
 
-      tokenSets[setPath] = {
-        id: translateTokenSetId(setPath),
-        name: setPath,
-        tokens: tokens,
-      };
+  for (const members of families.values()) {
+    // Named after the member holding the most variables (the one designers see the values of), without the "❖" mark
+    // Figma shows on extensions, and unique since two libraries can have collections with the same name
+    const namingMember = [...members].sort((a, b) => b.variableIds.length - a.variableIds.length)[0];
+    const baseGroupName = tokenContexts ? namingMember.name.replace(/^❖\s*/, '') : namingMember.name;
+    const groupName = tokenContexts ? uniqueName(baseGroupName, usedGroupNames) : baseGroupName;
+    const familyThemes = new Map<string, { name: string; sets: string[]; emptySets: string[]; collections: LocalVariableCollection[] }>();
 
-      if (tokenContexts) {
-        const themePath = `${groupName}/${mode.name}`;
-        const themeId = translateTokenThemeId(themePath, mapping);
+    for (const collection of members) {
+      const setGroupName = members.length > 1 ? collection.name.replace(/^❖\s*/, '') : groupName;
 
-        tokenThemes[themePath] = {
-          id: themeId,
-          name: mode.name,
-          group: groupName,
-          sets: [setPath],
+      for (const mode of collection.modes) {
+        const setPath = uniqueName(`${translateTokenSetPath(setGroupName)}/${translateTokenSetPath(mode.name)}`, usedSetPaths);
+        const tokens: Record<string, Token> = {};
+
+        for (const { variable, rawValue } of collectVariableModes(collection, mode.modeId)) {
+          // A color composed with another variable (for its color or its opacity) has no Penpot token equivalent for now
+          if (typeof rawValue === 'object' && rawValue !== null && 'color' in rawValue && 'opacity' in rawValue) {
+            console.warn(
+              `skipping the token for the Figma variable "${variable.name}" because its color is composed with another variable, which figpot cannot translate`
+            );
+
+            continue;
+          }
+
+          const types = translateScope(variable);
+
+          // Track warning-surface lists once per variable (the inner loop runs again for every mode
+          // but the names array would just grow with duplicates, so guard on first occurrence)
+          if (hasInferredScope(variable) && !inferredScopeNames.includes(variable.name)) {
+            inferredScopeNames.push(variable.name);
+          }
+
+          if (types.length > 1 && !suffixedVariableNames.includes(variable.name)) {
+            suffixedVariableNames.push(variable.name);
+          }
+
+          for (const type of types) {
+            const value = translateTokenValueForType(variable, rawValue, type, data.variables, resolveAliasName, mapping, replaceFontPatterns);
+            if (value === undefined) {
+              continue;
+            }
+
+            const name = getName(variable, type);
+            tokens[name] = {
+              id: translateTokenId(setPath, name),
+              name: name,
+              type: type,
+              value: value,
+              description: variable.description || undefined,
+            };
+          }
+        }
+
+        tokenSets[setPath] = {
+          id: translateTokenSetId(setPath),
+          name: setPath,
+          tokens: tokens,
         };
 
-        themeIdsByCollectionMode.set(`${collection.id}/${mode.modeId}`, themeId);
-
-        // Figma "extended collections" keep the key and the mode IDs of the collection they extend, and the REST API only
-        // lists the extended ones when the file binds their variables: a mode set on a node through an extension is then
-        // matched to the theme of its parent collection (see `resolveThemeIdForMode()`)
-        if (collection.key && !themeIdsByCollectionMode.has(`key:${collection.key}/${mode.modeId}`)) {
-          themeIdsByCollectionMode.set(`key:${collection.key}/${mode.modeId}`, themeId);
+        if (tokenContexts) {
+          const familyTheme = familyThemes.get(mode.modeId) ?? { name: mode.name, sets: [], emptySets: [], collections: [] };
+          (Object.keys(tokens).length > 0 ? familyTheme.sets : familyTheme.emptySets).push(setPath);
+          familyTheme.collections.push(collection);
+          familyThemes.set(mode.modeId, familyTheme);
         }
 
-        if (mode.modeId === collection.defaultModeId) {
-          activeThemes.push(themePath);
+        // Token themes are intentionally NOT emitted at sync. Penpot's set picker is multi-select
+        // and works directly on sets — themes are purely user-defined bundles that toggle several
+        // sets at once. Figma's data has no cross-collection grouping we could read to deduce a
+        // useful bundle (e.g. "this Colors mode goes with this Spacing mode"), so any theme we
+        // auto-emit would just be a one-button alias for the matching set's checkbox — pure noise.
+        //
+        // The plumbing below is kept ready so that, if a user wants named themes (typical when a
+        // file is published once and not re-synced regularly), they can create them by hand in
+        // Penpot's UI; we still own the id mapping via `translateTokenThemeId` should we ever
+        // re-introduce automatic emission (e.g. via a future CLI hint or a Figma-side convention).
+        //
+        // tokenThemes[setPath] = {
+        //   id: translateTokenThemeId(`xxx`, mapping),
+        //   name: themeName,
+        //   group: themeGroup,
+        //   sets: [yyy],
+        // };
+      }
+    }
+
+    for (const [modeId, familyTheme] of familyThemes) {
+      const themePath = `${groupName}/${familyTheme.name}`;
+      const themeId = translateTokenThemeId(themePath, mapping);
+
+      tokenThemes[themePath] = {
+        id: themeId,
+        name: familyTheme.name,
+        group: groupName,
+        // The empty sets of the family only when no member has tokens for this mode, so the theme still has a set
+        // Sorted since Penpot keeps them as a set: the comparison would otherwise see a difference from the order alone
+        sets: [...(familyTheme.sets.length > 0 ? familyTheme.sets : familyTheme.emptySets)].sort(),
+      };
+
+      for (const collection of familyTheme.collections) {
+        themeIdsByCollectionMode.set(`${collection.id}/${modeId}`, themeId);
+
+        // The REST API only lists the extended collections when the file binds their variables: a mode set on a node
+        // through an unlisted member of the family is matched by key (see `resolveThemeIdForMode()`)
+        if (collection.key && !themeIdsByCollectionMode.has(`key:${collection.key}/${modeId}`)) {
+          themeIdsByCollectionMode.set(`key:${collection.key}/${modeId}`, themeId);
         }
       }
 
-      // Token themes are intentionally NOT emitted at sync. Penpot's set picker is multi-select
-      // and works directly on sets — themes are purely user-defined bundles that toggle several
-      // sets at once. Figma's data has no cross-collection grouping we could read to deduce a
-      // useful bundle (e.g. "this Colors mode goes with this Spacing mode"), so any theme we
-      // auto-emit would just be a one-button alias for the matching set's checkbox — pure noise.
-      //
-      // The plumbing below is kept ready so that, if a user wants named themes (typical when a
-      // file is published once and not re-synced regularly), they can create them by hand in
-      // Penpot's UI; we still own the id mapping via `translateTokenThemeId` should we ever
-      // re-introduce automatic emission (e.g. via a future CLI hint or a Figma-side convention).
-      //
-      // tokenThemes[setPath] = {
-      //   id: translateTokenThemeId(`xxx`, mapping),
-      //   name: themeName,
-      //   group: themeGroup,
-      //   sets: [yyy],
-      // };
+      if (modeId === namingMember.defaultModeId) {
+        activeThemes.push(themePath);
+      }
     }
   }
 

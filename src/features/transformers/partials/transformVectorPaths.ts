@@ -10,6 +10,7 @@ import { transformSceneNode } from '@figpot/src/features/transformers/partials/t
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { translateEvenOddToNonZero } from '@figpot/src/features/translators/vectors/translateEvenOddToNonZero';
+import { hasVectorNetwork, translateVectorNetwork } from '@figpot/src/features/translators/vectors/translateVectorNetwork';
 import { translateWindingRule } from '@figpot/src/features/translators/vectors/translateWindingRule';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { PathShape } from '@figpot/src/models/entities/penpot/shapes/path';
@@ -80,6 +81,24 @@ export function transformVectorPaths(registry: AbstractRegistry, node: VectorNod
         strokes
       )
     );
+  }
+
+  // Without any geometry from Figma (it happens for some layers of instances) the vector would end as an empty group, which
+  // hides everything when used as a mask and breaks Penpot group computations, so the path is rebuilt from the vector network
+  // and Penpot draws the fills and strokes natively
+  if (node.strokeGeometry.length === 0 && hasVectorNetwork(node)) {
+    const networkPath = translateVectorNetwork(node.vectorNetwork, node.size ?? { x: 0, y: 0 });
+
+    return [
+      transformVectorPath(
+        registry,
+        node,
+        figmaNodeTransform,
+        networkPath,
+        transformVectorFills(registry, node, networkPath, getMergedFill(node, networkPath)),
+        transformStrokes(registry, node)
+      ),
+    ];
   }
 
   // A vector with no fill (an outline-only shape) only exposes `strokeGeometry`, which is the stroke already

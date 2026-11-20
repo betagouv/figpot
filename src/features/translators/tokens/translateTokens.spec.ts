@@ -254,3 +254,111 @@ describe('translateTokens()', () => {
     expect(second.tokenSets['C/M'].tokens['c'].id).toBe(first.tokenSets['C/M'].tokens['c'].id);
   });
 });
+
+describe('translateTokens() aliases', () => {
+  it('refers to a token the aliased variable gives, whatever the order and the scopes', () => {
+    const modes = [{ modeId: 'm:1', name: 'Default' }];
+    // `spacing.any` (all scopes, so one token per type) is listed before the variable it aliases, which is scoped to sizes
+    // only: the alias of its `borderRadius` token cannot refer to a `borderRadius` token of `size.4`, there is none
+    const collection = makeCollection({ id: 'C:1', name: 'Dimensions', modes, defaultModeId: 'm:1', variableIds: ['V:any', 'V:4'] });
+    const any = makeVariable({
+      id: 'V:any',
+      name: 'spacing/any',
+      variableCollectionId: 'C:1',
+      resolvedType: 'FLOAT',
+      scopes: ['ALL_SCOPES'],
+      valuesByMode: { 'm:1': { type: 'VARIABLE_ALIAS', id: 'V:4' } },
+    });
+    const four = makeVariable({
+      id: 'V:4',
+      name: 'size/4',
+      variableCollectionId: 'C:1',
+      resolvedType: 'FLOAT',
+      scopes: ['WIDTH_HEIGHT'],
+      valuesByMode: { 'm:1': 4 },
+    });
+
+    const result = translateTokens(makeData([collection], [any, four]), makeMapping());
+    const tokens = result.tokenSets['Dimensions/Default'].tokens;
+
+    // The aliased token keeps its own name (no `-1` from a name reserved for a token never written)
+    expect(tokens['size.4']).toMatchObject({ type: 'sizing', value: '4' });
+    expect(tokens['spacing.any-borderRadius']).toMatchObject({ type: 'borderRadius', value: '{size.4}' });
+
+    // Every reference points to an existing token
+    const names = new Set(Object.keys(tokens));
+    for (const token of Object.values(tokens)) {
+      for (const [, reference] of String(token.value).matchAll(/\{([^}]+)\}/g)) {
+        expect(names).toContain(reference);
+      }
+    }
+  });
+});
+
+describe('translateTokens() font families', () => {
+  it('redirects font family values like the fonts of the nodes', () => {
+    const modes = [{ modeId: 'm:1', name: 'Default' }];
+    const collection = makeCollection({ id: 'C:1', name: 'Typography', modes, defaultModeId: 'm:1', variableIds: ['V:font'] });
+    const font = makeVariable({
+      id: 'V:font',
+      name: 'font/family',
+      variableCollectionId: 'C:1',
+      resolvedType: 'STRING',
+      scopes: ['FONT_FAMILY'],
+      valuesByMode: { 'm:1': 'Brand Variable' },
+    });
+
+    const result = translateTokens(makeData([collection], [font]), makeMapping(), [{ search: /^Brand Variable$/, set: 'Brand' }]);
+
+    expect(result.tokenSets['Typography/Default'].tokens['font.family']).toMatchObject({ type: 'fontFamily', value: ['Brand'] });
+  });
+});
+
+describe('translateTokens() with token contexts', () => {
+  const previous = process.env.FIGPOT_TOKEN_CONTEXTS;
+
+  beforeAll(() => {
+    process.env.FIGPOT_TOKEN_CONTEXTS = 'true';
+  });
+
+  afterAll(() => {
+    process.env.FIGPOT_TOKEN_CONTEXTS = previous;
+  });
+
+  it('makes one theme group of a collection and its extensions, named after the one holding the variables', () => {
+    const modes = [
+      { modeId: 'm:1', name: 'Light' },
+      { modeId: 'm:2', name: 'Dark' },
+    ];
+    // Nodes set the modes of the empty parent, the values live in the extension sharing its key and mode IDs
+    const parent = makeCollection({ id: 'C:parent', key: 'K', name: 'Theme', modes, defaultModeId: 'm:1', variableIds: [], remote: true });
+    const extension = makeCollection({
+      id: 'C:ext',
+      key: 'K',
+      name: '❖ Brand theme',
+      modes,
+      defaultModeId: 'm:1',
+      variableIds: ['V:1'],
+      remote: true,
+    });
+    const variable = makeVariable({
+      id: 'V:1',
+      name: 'brand/accent',
+      variableCollectionId: 'C:ext',
+      resolvedType: 'COLOR',
+      scopes: ['ALL_FILLS'],
+      valuesByMode: { 'm:1': { r: 1, g: 1, b: 0, a: 1 }, 'm:2': { r: 0, g: 0, b: 1, a: 1 } },
+      remote: true,
+    });
+
+    const result = translateTokens(makeData([parent, extension], [variable]), makeMapping());
+    const groups = new Set(Object.values(result.tokenThemes).map((theme) => theme.group));
+
+    expect(groups).toEqual(new Set(['Brand theme']));
+    expect(result.tokenThemes['Brand theme/Dark'].sets).toEqual(['BrandTheme/Dark']);
+    // The mode set on the parent and on the extension resolve to the same theme
+    expect(result.themeIdsByCollectionMode.get('C:parent/m:2')).toBe(result.tokenThemes['Brand theme/Dark'].id);
+    expect(result.themeIdsByCollectionMode.get('C:ext/m:2')).toBe(result.tokenThemes['Brand theme/Dark'].id);
+    expect(result.activeThemes).toEqual(['Brand theme/Light']);
+  });
+});

@@ -1,5 +1,5 @@
 import { HasGeometryTrait, IndividualStrokesTrait } from '@figpot/src/clients/figma';
-import { translateStrokes } from '@figpot/src/features/translators/translateStrokes';
+import { translateStrokeDashes, translateStrokes } from '@figpot/src/features/translators/translateStrokes';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
 describe('translateStrokes', () => {
@@ -25,5 +25,14 @@ describe('translateStrokes', () => {
       expect(stroke.strokeWidth).toBe(1);
       expect(stroke).not.toHaveProperty('strokeWidthTop');
     }
+  });
+});
+
+describe('translateStrokeDashes()', () => {
+  it('keeps the first dash and gap of the Figma pattern', () => {
+    expect(translateStrokeDashes([0.2, 0.4, 1, 2])).toEqual({ strokeDash: 0.2, strokeGap: 0.4 });
+    expect(translateStrokeDashes([3])).toEqual({ strokeDash: 3, strokeGap: 3 });
+    expect(translateStrokeDashes([])).toEqual({});
+    expect(translateStrokeDashes(undefined)).toEqual({});
   });
 });

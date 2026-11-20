@@ -17,10 +17,26 @@ export function translateStrokes(
     ...translateStrokeSideWeights(node),
     strokeAlignment: node.strokeAlign ? translateStrokeAlignment(node.strokeAlign) : undefined,
     strokeStyle: !!node.strokeDashes && node.strokeDashes.length > 0 ? 'dashed' : 'solid',
+    ...translateStrokeDashes(node.strokeDashes),
   };
 
   // Strokes are layered in reverse order in Penpot compared to Figma (same as fills), so we reverse them
   return node.strokes.map((paint, index) => translateStroke(registry, paint, sharedStrokeProperties, strokeCaps, index === 0)).reverse();
+}
+
+/**
+ * Penpot has a single dash and gap length: the first pair of the Figma pattern (a single value is used for both, like in SVG).
+ * Without them Penpot falls back to dashes of the stroke width plus 10, which makes thin dashed strokes look solid
+ */
+export function translateStrokeDashes(strokeDashes?: number[]): Pick<Stroke, 'strokeDash' | 'strokeGap'> {
+  if (!strokeDashes || strokeDashes.length === 0) {
+    return {};
+  }
+
+  return {
+    strokeDash: strokeDashes[0],
+    strokeGap: strokeDashes[1] ?? strokeDashes[0],
+  };
 }
 
 export function translateStroke(

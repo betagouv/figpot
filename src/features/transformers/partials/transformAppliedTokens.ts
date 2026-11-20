@@ -25,11 +25,32 @@ function applyToken(
     return;
   }
 
-  const tokenName = registry.getVariableTokenNames().get(`${single.id}/${tokenType}`);
+  // The token of the property's type, or else one the variable gives: Figma can bind a variable scoped to another use
+  // (a size variable on a radius), its token then holds the same value
+  const variableTokenNames = registry.getVariableTokenNames();
+  const tokenName =
+    variableTokenNames.get(`${single.id}/${tokenType}`) ??
+    FALLBACK_TOKEN_TYPES.map((type) => variableTokenNames.get(`${single.id}/${type}`)).find((name) => name !== undefined);
   if (tokenName !== undefined) {
     appliedTokens[penpotProperty] = tokenName;
   }
 }
+
+const FALLBACK_TOKEN_TYPES: TokenType[] = [
+  'sizing',
+  'spacing',
+  'borderRadius',
+  'borderWidth',
+  'number',
+  'opacity',
+  'fontSize',
+  'fontWeight',
+  'letterSpacing',
+  'fontFamily',
+  'color',
+  'string',
+  'boolean',
+];
 
 // Figma layers paints front-to-back so the visible colour belongs to the topmost solid paint; the
 // variable (if any) is bound on that specific paint, not on the node
@@ -163,9 +184,40 @@ export function transformAppliedTokens(
     record('fontFamily', 'fontFamily', boundVariables.fontFamily);
     record('fontSize', 'fontSize', boundVariables.fontSize);
     record('fontWeight', 'fontWeight', boundVariables.fontWeight);
-    record('lineHeight', 'sizing', boundVariables.lineHeight);
     record('letterSpacing', 'letterSpacing', boundVariables.letterSpacing);
+
+    // Components and instances bind their corner radii there instead of the `*Radius` fields
+    const cornerRadii = boundVariables.rectangleCornerRadii;
+    record('r1', 'borderRadius', cornerRadii?.RECTANGLE_TOP_LEFT_CORNER_RADIUS);
+    record('r2', 'borderRadius', cornerRadii?.RECTANGLE_TOP_RIGHT_CORNER_RADIUS);
+    record('r3', 'borderRadius', cornerRadii?.RECTANGLE_BOTTOM_RIGHT_CORNER_RADIUS);
+    record('r4', 'borderRadius', cornerRadii?.RECTANGLE_BOTTOM_LEFT_CORNER_RADIUS);
+
+    // Penpot only applies the minimum and maximum sizes to children of a flex or grid layout, whereas Figma also applies
+    // them to an auto layout frame itself: the token is kept anyway so the value follows the theme where Penpot uses it
+    record('layoutItemMinW', 'sizing', boundVariables.minWidth);
+    record('layoutItemMaxW', 'sizing', boundVariables.maxWidth);
+    record('layoutItemMinH', 'sizing', boundVariables.minHeight);
+    record('layoutItemMaxH', 'sizing', boundVariables.maxHeight);
+
+    // Missing from the generated types although the REST API sends them
+    const extraBoundVariables = boundVariables as { strokeWeight?: VariableAlias; gridRowGap?: VariableAlias; gridColumnGap?: VariableAlias };
+
+    // Penpot has a stroke width token per side, a uniform weight binds the four of them
+    const strokeWeights = boundVariables.individualStrokeWeights;
+    record('strokeWidthTop', 'borderWidth', strokeWeights?.top ?? extraBoundVariables.strokeWeight);
+    record('strokeWidthRight', 'borderWidth', strokeWeights?.right ?? extraBoundVariables.strokeWeight);
+    record('strokeWidthBottom', 'borderWidth', strokeWeights?.bottom ?? extraBoundVariables.strokeWeight);
+    record('strokeWidthLeft', 'borderWidth', strokeWeights?.left ?? extraBoundVariables.strokeWeight);
+
+    // Grid layouts have their own gap fields
+    record('rowGap', 'spacing', extraBoundVariables.gridRowGap);
+    record('columnGap', 'spacing', extraBoundVariables.gridColumnGap);
   }
+
+  // No line height token: Penpot has none on its own (only inside a typography token, where a value in pixels is turned
+  // into a ratio of the font size), and it would apply the pixels of a Figma line height variable as that ratio (24px
+  // becoming 24 times the font size). The ratio written in the text content stays right, it just does not follow themes
 
   if (node.type === 'TEXT') {
     const styleBoundVariables = node.style.boundVariables;
@@ -174,7 +226,6 @@ export function transformAppliedTokens(
       record('fontFamily', 'fontFamily', styleBoundVariables.fontFamily);
       record('fontSize', 'fontSize', styleBoundVariables.fontSize);
       record('fontWeight', 'fontWeight', styleBoundVariables.fontWeight);
-      record('lineHeight', 'sizing', styleBoundVariables.lineHeight);
       record('letterSpacing', 'letterSpacing', styleBoundVariables.letterSpacing);
     }
   }

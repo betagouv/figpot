@@ -21,6 +21,8 @@ export type Stroke = {
   strokeWidthBottom?: number;
   strokeWidthLeft?: number;
   strokeAlignment?: StrokeAlignment;
+  strokeDash?: number;
+  strokeGap?: number;
   strokeCapStart?: StrokeCaps;
   strokeCapEnd?: StrokeCaps;
   strokeColorGradient?: Gradient;

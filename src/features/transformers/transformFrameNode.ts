@@ -7,7 +7,12 @@ import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/t
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
 import { transformInheritance } from '@figpot/src/features/transformers/partials/transformInheritance';
-import { buildLayoutGridCells, transformAutoLayout, transformLayoutAttributes } from '@figpot/src/features/transformers/partials/transformLayout';
+import {
+  adaptFillingOnlyChild,
+  buildLayoutGridCells,
+  transformAutoLayout,
+  transformLayoutAttributes,
+} from '@figpot/src/features/transformers/partials/transformLayout';
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
@@ -48,6 +53,9 @@ export function transformFrameNode(
   let frameSpecificAttributes: Partial<FrameShape> = {};
 
   if (!isSectionNode(node)) {
+    // Before translating the frame sizing and its children since it adjusts them
+    adaptFillingOnlyChild(node);
+
     // TODO: Figma API does not expose strokes, blend modes, corner radius, or constraint proportions for sections,
     // they plan to add it in the future. Refactor this when available.
     frameSpecificAttributes = {

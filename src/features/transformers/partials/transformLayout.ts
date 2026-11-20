@@ -74,6 +74,85 @@ export function transformAutoLayout(node: HasFramePropertiesTrait & HasLayoutTra
   return {};
 }
 
+type FillingChild = {
+  type: string;
+  layoutMode?: string;
+  layoutPositioning?: string;
+  layoutSizingHorizontal?: string;
+  layoutSizingVertical?: string;
+  visible?: boolean;
+  absoluteBoundingBox?: { height: number } | null;
+  style?: { textAutoResize?: string; lineHeightPx?: number };
+};
+
+function isSingleLineText(node: FillingChild): boolean {
+  const height = node.absoluteBoundingBox?.height;
+  const lineHeight = node.style?.lineHeightPx;
+
+  return height !== undefined && lineHeight !== undefined && height < lineHeight * 1.5;
+}
+
+/**
+ * Gives the sizing that keeps the current size of a child no longer filling its parent on an axis
+ */
+function translateFilledSizing(child: FillingChild, axis: 'horizontal' | 'vertical'): 'HUG' | 'FIXED' {
+  if (child.layoutMode === 'HORIZONTAL' || child.layoutMode === 'VERTICAL') {
+    // Figma sizes it from its content, as when it hugs
+    return 'HUG';
+  } else if (child.type === 'TEXT' && child.style) {
+    if (axis === 'vertical') {
+      return child.style.textAutoResize === 'HEIGHT' || child.style.textAutoResize === 'WIDTH_AND_HEIGHT' ? 'HUG' : 'FIXED';
+    } else if (child.style.textAutoResize === 'WIDTH_AND_HEIGHT') {
+      return 'HUG';
+    } else if (child.style.textAutoResize === 'HEIGHT' && isSingleLineText(child)) {
+      // A single line text hugs its width without going on another line
+      child.style.textAutoResize = 'WIDTH_AND_HEIGHT';
+
+      return 'HUG';
+    }
+  }
+
+  // A wrapping text would go on a single line, and other shapes cannot hug anything
+  return 'FIXED';
+}
+
+/**
+ * In Figma a child filling an axis of an auto layout frame hugging its content on that axis, when it is the only child laid
+ * out in it (absolute and hidden ones aside), just keeps its own size and the frame hugs it. Penpot does not allow a child
+ * filling a hugging parent (`translateLayoutSizing()` then fixes the size of the frame), so the child keeps its size instead:
+ * it renders the same and the frame still follows the size of its child (a text whose font size comes from tokens).
+ *
+ * It must run on a frame before translating its own sizing and its children (it adjusts the Figma children in place)
+ */
+export function adaptFillingOnlyChild(node: {
+  layoutMode?: string;
+  layoutSizingHorizontal?: string;
+  layoutSizingVertical?: string;
+  children?: object[];
+}): void {
+  if (node.layoutMode !== 'HORIZONTAL' && node.layoutMode !== 'VERTICAL') {
+    return;
+  }
+
+  // Only the properties read here matter, whatever the type of the Figma children
+  const laidOutChildren = ((node.children ?? []) as FillingChild[]).filter(
+    (child) => child.layoutPositioning !== 'ABSOLUTE' && child.visible !== false
+  );
+  if (laidOutChildren.length !== 1) {
+    return;
+  }
+
+  const [child] = laidOutChildren;
+
+  if (node.layoutSizingHorizontal === 'HUG' && child.layoutSizingHorizontal === 'FILL') {
+    child.layoutSizingHorizontal = translateFilledSizing(child, 'horizontal');
+  }
+
+  if (node.layoutSizingVertical === 'HUG' && child.layoutSizingVertical === 'FILL') {
+    child.layoutSizingVertical = translateFilledSizing(child, 'vertical');
+  }
+}
+
 export function transformLayoutAttributes(
   node: HasLayoutTrait & Partial<HasChildrenTrait>
 ): Pick<

@@ -156,6 +156,8 @@ export function translateLayoutSizing<A extends 'layoutSizingHorizontal' | 'layo
       //
       // Note: in Figma if there is multiple direct children, setting "take 100%" on one will automatically set "fixed size" on the parent frame
       // So it makes more sense to choose to mimic this behavior in Penpot when there is just one child
+      //
+      // A single child laid out is already made to hug before by `adaptFillingOnlyChild()`, so this only applies to several children
       if (
         node.children &&
         node.children.some((childNode) => {

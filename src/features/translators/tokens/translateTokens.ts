@@ -1,4 +1,4 @@
-import { GetLocalVariablesResponse, LocalVariable, RGBA, VariableAlias } from '@figpot/src/clients/figma';
+import { GetLocalVariablesResponse, LocalVariable, LocalVariableCollection, RGBA, VariableAlias } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
 import { hasInferredScope, isMultiTypeVariable, translateScope } from '@figpot/src/features/translators/tokens/translateScope';
 import { translateTokenName, translateTokenSetPath, uniqueName } from '@figpot/src/features/translators/tokens/translateTokenName';
@@ -10,6 +10,26 @@ export type FigmaVariablesData = GetLocalVariablesResponse['meta'];
 
 export const emptyFigmaVariablesData: FigmaVariablesData = { variables: {}, variableCollections: {} };
 
+// Experimental "token contexts" mode (Penpot branch with token scopes): every Figma collection becomes a theme group whose
+// themes are its modes, the default modes are activated, and the variable modes set on nodes (`explicitVariableModes`)
+// become token scopes on the Penpot shapes. Library collections are kept too since the modes set on nodes mostly target them
+export function isTokenContextsEnabled(): boolean {
+  return process.env.FIGPOT_TOKEN_CONTEXTS === 'true';
+}
+
+// The Penpot theme of a Figma variable mode set on a node (`explicitVariableModes`), if its collection is known
+export function resolveThemeIdForMode(themeIdsByCollectionMode: Map<string, string>, collectionId: string, modeId: string): string | undefined {
+  const direct = themeIdsByCollectionMode.get(`${collectionId}/${modeId}`);
+  if (direct) {
+    return direct;
+  }
+
+  // Library collection IDs are formatted `VariableCollectionId:<collection key>/<local id>`
+  const key = collectionId.match(/^VariableCollectionId:([0-9a-f]+)\//)?.[1];
+
+  return key ? themeIdsByCollectionMode.get(`key:${key}/${modeId}`) : undefined;
+}
+
 export type TranslatedTokens = {
   tokenSets: Record<string, TokenSet>;
   tokenThemes: Record<string, TokenTheme>;
@@ -20,6 +40,7 @@ export type TranslatedTokens = {
   suffixedVariableNames: string[]; // variables that ended up split into multiple typed tokens
   aliasesToUnknownNames: string[]; // variables skipped since aliasing a variable the Figma data do not describe
   aliasesToUntokenizedNames: string[]; // variables skipped since aliasing a variable giving no token
+  themeIdsByCollectionMode: Map<string, string>; // `${figmaCollectionId}/${figmaModeId}` -> Penpot theme ID (token contexts only)
 };
 
 // Derived from the generated client since the Figma API keeps adding value kinds (like composed colors)
@@ -195,11 +216,12 @@ export function translateTokens(listedData: FigmaVariablesData, mapping: Mapping
     return finalName;
   };
 
-  // The collections whose variables are written, and these variables
-  const collections = Object.values(data.variableCollections).filter((collection) => !collection.remote);
+  // The collections whose variables are written, and these variables (library ones only with token contexts)
+  const tokenContexts = isTokenContextsEnabled();
+  const collections = Object.values(data.variableCollections).filter((collection) => tokenContexts || !collection.remote);
   const writtenVariableIds = new Set(
     collections.flatMap((collection) =>
-      collection.variableIds.filter((variableId) => data.variables[variableId] && !data.variables[variableId].remote)
+      collection.variableIds.filter((variableId) => data.variables[variableId] && (tokenContexts || !data.variables[variableId].remote))
     )
   );
 
@@ -294,83 +316,124 @@ export function translateTokens(listedData: FigmaVariablesData, mapping: Mapping
     }
   }
 
+  // With token contexts, the collections sharing a key are one family: Figma "extended collections" keep the key and the
+  // mode IDs of the collection they extend, and setting a mode of the parent on a node also switches the variables of its
+  // extensions (a node can set the mode of an empty parent collection whose variables all live in an extension). A family
+  // is one theme group whose theme of a mode activates the sets of every member for that mode
+  const families = new Map<string, LocalVariableCollection[]>();
   for (const collection of collections) {
-    for (const mode of collection.modes) {
-      const setPath = uniqueName(`${translateTokenSetPath(collection.name)}/${translateTokenSetPath(mode.name)}`, usedSetPaths);
-      const tokens: Record<string, Token> = {};
+    const familyKey = tokenContexts && collection.key ? `key:${collection.key}` : `id:${collection.id}`;
+    families.set(familyKey, [...(families.get(familyKey) ?? []), collection]);
+  }
 
-      for (const variableId of collection.variableIds) {
-        const variable = data.variables[variableId];
-        if (!writtenVariableIds.has(variableId)) {
-          continue;
-        }
+  const usedGroupNames = new Set<string>();
+  const themeIdsByCollectionMode = new Map<string, string>();
 
-        const rawValue = variable.valuesByMode[mode.modeId];
-        if (rawValue === undefined) {
-          continue;
-        }
+  for (const members of families.values()) {
+    // Named after the member holding the most variables (the one designers see the values of), without the "❖" mark Figma
+    // shows on extensions, and unique since two libraries can have collections with the same name
+    const namingMember = members.reduce((best, member) => (member.variableIds.length > best.variableIds.length ? member : best));
+    const groupName = tokenContexts ? uniqueName(namingMember.name.replace(/^❖\s*/, ''), usedGroupNames) : namingMember.name;
+    const familyThemes = new Map<string, { name: string; sets: string[]; emptySets: string[] }>(); // by mode ID
 
-        // A color composed with another variable (for its color or its opacity) has no Penpot token equivalent for now
-        if (isComposedColor(rawValue)) {
-          console.warn(
-            `skipping the token for the Figma variable "${variable.name}" because its color is composed with another variable, which figpot cannot translate`
-          );
+    for (const collection of members) {
+      const setGroupName = members.length > 1 ? collection.name.replace(/^❖\s*/, '') : groupName;
 
-          continue;
-        }
+      for (const mode of collection.modes) {
+        const setPath = uniqueName(`${translateTokenSetPath(setGroupName)}/${translateTokenSetPath(mode.name)}`, usedSetPaths);
+        const tokens: Record<string, Token> = {};
 
-        const types = translateScope(variable);
-
-        // Track warning-surface lists once per variable (the inner loop runs again for every mode
-        // but the names array would just grow with duplicates, so guard on first occurrence)
-        if (hasInferredScope(variable) && !inferredScopeNames.includes(variable.name)) {
-          inferredScopeNames.push(variable.name);
-        }
-
-        if (types.length > 1 && !suffixedVariableNames.includes(variable.name)) {
-          suffixedVariableNames.push(variable.name);
-        }
-
-        for (const type of types) {
-          const value = translateTokenValueForType(variable, rawValue, type, resolveAliasName, mapping);
-          if (value === undefined) {
+        for (const variableId of collection.variableIds) {
+          const variable = data.variables[variableId];
+          if (!writtenVariableIds.has(variableId)) {
             continue;
           }
 
-          const name = getName(variable, type);
-          tokens[name] = {
-            id: translateTokenId(setPath, name),
-            name: name,
-            type: type,
-            value: value,
-            description: variable.description || undefined,
-          };
+          const rawValue = variable.valuesByMode[mode.modeId];
+          if (rawValue === undefined) {
+            continue;
+          }
+
+          // A color composed with another variable (for its color or its opacity) has no Penpot token equivalent for now
+          if (isComposedColor(rawValue)) {
+            console.warn(
+              `skipping the token for the Figma variable "${variable.name}" because its color is composed with another variable, which figpot cannot translate`
+            );
+
+            continue;
+          }
+
+          const types = translateScope(variable);
+
+          // Track warning-surface lists once per variable (the inner loop runs again for every mode
+          // but the names array would just grow with duplicates, so guard on first occurrence)
+          if (hasInferredScope(variable) && !inferredScopeNames.includes(variable.name)) {
+            inferredScopeNames.push(variable.name);
+          }
+
+          if (types.length > 1 && !suffixedVariableNames.includes(variable.name)) {
+            suffixedVariableNames.push(variable.name);
+          }
+
+          for (const type of types) {
+            const value = translateTokenValueForType(variable, rawValue, type, resolveAliasName, mapping);
+            if (value === undefined) {
+              continue;
+            }
+
+            const name = getName(variable, type);
+            tokens[name] = {
+              id: translateTokenId(setPath, name),
+              name: name,
+              type: type,
+              value: value,
+              description: variable.description || undefined,
+            };
+          }
+        }
+
+        tokenSets[setPath] = {
+          id: translateTokenSetId(setPath),
+          name: setPath,
+          tokens: tokens,
+        };
+
+        if (tokenContexts) {
+          const familyTheme = familyThemes.get(mode.modeId) ?? { name: mode.name, sets: [], emptySets: [] };
+          (Object.keys(tokens).length > 0 ? familyTheme.sets : familyTheme.emptySets).push(setPath);
+          familyThemes.set(mode.modeId, familyTheme);
+        }
+      }
+    }
+
+    // Without token contexts, token themes are not emitted: Penpot's set picker is multi-select and works directly on sets,
+    // and Figma's data has no cross-collection grouping to deduce a useful bundle from, so a theme would just be a one-button
+    // alias of the checkbox of its set. Users can still create themes by hand in Penpot
+    for (const [modeId, familyTheme] of familyThemes) {
+      const themePath = `${groupName}/${familyTheme.name}`;
+      const themeId = translateTokenThemeId(themePath, mapping);
+
+      tokenThemes[themePath] = {
+        id: themeId,
+        name: familyTheme.name,
+        group: groupName,
+        // The empty sets of the family only when no member has tokens for this mode, so the theme still has a set
+        sets: familyTheme.sets.length > 0 ? familyTheme.sets : familyTheme.emptySets,
+      };
+
+      for (const collection of members) {
+        themeIdsByCollectionMode.set(`${collection.id}/${modeId}`, themeId);
+
+        // The REST API only lists the extended collections when the file binds their variables: a mode set on a node through
+        // an unlisted member of the family is matched by key (see `resolveThemeIdForMode()`)
+        if (collection.key && !themeIdsByCollectionMode.has(`key:${collection.key}/${modeId}`)) {
+          themeIdsByCollectionMode.set(`key:${collection.key}/${modeId}`, themeId);
         }
       }
 
-      tokenSets[setPath] = {
-        id: translateTokenSetId(setPath),
-        name: setPath,
-        tokens: tokens,
-      };
-
-      // Token themes are intentionally NOT emitted at sync. Penpot's set picker is multi-select
-      // and works directly on sets — themes are purely user-defined bundles that toggle several
-      // sets at once. Figma's data has no cross-collection grouping we could read to deduce a
-      // useful bundle (e.g. "this Colors mode goes with this Spacing mode"), so any theme we
-      // auto-emit would just be a one-button alias for the matching set's checkbox — pure noise.
-      //
-      // The plumbing below is kept ready so that, if a user wants named themes (typical when a
-      // file is published once and not re-synced regularly), they can create them by hand in
-      // Penpot's UI; we still own the id mapping via `translateTokenThemeId` should we ever
-      // re-introduce automatic emission (e.g. via a future CLI hint or a Figma-side convention).
-      //
-      // tokenThemes[setPath] = {
-      //   id: translateTokenThemeId(`xxx`, mapping),
-      //   name: themeName,
-      //   group: themeGroup,
-      //   sets: [yyy],
-      // };
+      if (modeId === namingMember.defaultModeId) {
+        activeThemes.push(themePath);
+      }
     }
   }
 
@@ -384,5 +447,6 @@ export function translateTokens(listedData: FigmaVariablesData, mapping: Mapping
     suffixedVariableNames,
     aliasesToUnknownNames: [...aliasesToUnknownNames],
     aliasesToUntokenizedNames: [...aliasesToUntokenizedNames],
+    themeIdsByCollectionMode,
   };
 }

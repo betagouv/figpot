@@ -133,9 +133,14 @@ export function transformDocumentNode(
     suffixedVariableNames,
     aliasesToUnknownNames,
     aliasesToUntokenizedNames,
+    themeIdsByCollectionMode,
   } = translateTokens(figmaVariables, mapping);
 
   registry.registerVariableTokenNames(variableTokenNames);
+  registry.registerTokenContexts({
+    themeIdsByCollectionMode: themeIdsByCollectionMode,
+    themeGroupById: new Map(Object.values(tokenThemes).map((theme) => [theme.id, theme.group])),
+  });
 
   if (inferredScopeNames.length > 0) {
     console.warn(

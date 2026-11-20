@@ -10,6 +10,7 @@ import { Selrect } from '@figpot/src/models/entities/penpot/traits/selrect';
 import { Shadow } from '@figpot/src/models/entities/penpot/traits/shadow';
 import { Stroke } from '@figpot/src/models/entities/penpot/traits/stroke';
 import { SyncGroups } from '@figpot/src/models/entities/penpot/traits/syncGroups';
+import { TokenScope } from '@figpot/src/models/entities/penpot/traits/token';
 import { Uuid } from '@figpot/src/models/entities/penpot/traits/uuid';
 
 export type GrowType = 'auto-width' | 'auto-height' | 'fixed';
@@ -42,6 +43,7 @@ export type ShapeBaseAttributes = {
 export type ShapeAttributes = {
   name?: string;
   appliedTokens?: Record<string, string>;
+  tokenScope?: TokenScope;
   componentId?: string;
   componentFile?: string;
   componentRoot?: boolean;

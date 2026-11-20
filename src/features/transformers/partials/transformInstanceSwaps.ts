@@ -99,6 +99,24 @@ function getReplacedComponentKey(anchorId: string, replacedNodeId: string): stri
   return replacedNode && replacedNode.type === 'INSTANCE' ? getComponentKey(replacedNode.componentId) : undefined;
 }
 
+// The Figma node a copy node mirrors in its near main (as Penpot's `shapeRef`): for a nested node the node at its path in
+// the main of its anchor, for an instance its component. Unknown when that main is in a library (only its copies are)
+// Note: the swapped instances among the ancestors must be registered already, as when transforming the tree
+export function getNearMainNode(node: SubcanvasNode): SubcanvasNode | undefined {
+  const relatedPath = getRelatedPath(node.id);
+  if (relatedPath) {
+    const anchorNode = context.nodes.get(relatedPath.anchorId) ?? context.nodes.get(relatedPath.anchorId.replace(/^I/, ''));
+
+    return anchorNode && anchorNode.type === 'INSTANCE' && context.components[anchorNode.componentId]?.remote !== true
+      ? context.nodes.get(getNearMainNodeId(relatedPath.relatedNodeId))
+      : undefined;
+  } else if (node.type === 'INSTANCE' && context.components[node.componentId]?.remote !== true) {
+    return context.nodes.get(node.componentId);
+  }
+
+  return undefined;
+}
+
 // Must be called before the instance children are transformed so their references follow the swap
 export function registerInstanceSwap(node: InstanceNode): string | undefined {
   const relatedPath = getRelatedPath(node.id);

@@ -173,6 +173,21 @@ export function translateLayoutSizing<A extends 'layoutSizingHorizontal' | 'layo
         return 'fix';
       }
 
+      // Figma keeps the size of a frame hugging its content when no child is laid out (they are all absolutely positioned
+      // or hidden), whereas Penpot shrinks it to nothing and its absolute children with it (an icon frame placed absolutely
+      // in a "wrap" frame disappears as soon as Penpot computes the layout again, for example after a variant switch)
+      if (
+        node.children &&
+        node.children.length > 0 &&
+        node.children.every((childNode) => {
+          const child = childNode as { layoutPositioning?: string; visible?: boolean };
+
+          return child.layoutPositioning === 'ABSOLUTE' || child.visible === false;
+        })
+      ) {
+        return 'fix';
+      }
+
       return 'auto';
     case 'FILL':
       return 'fill';

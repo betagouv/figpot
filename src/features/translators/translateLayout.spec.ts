@@ -1,4 +1,4 @@
-import { translateGridTracks } from '@figpot/src/features/translators/translateLayout';
+import { translateGridTracks, translateLayoutSizing } from '@figpot/src/features/translators/translateLayout';
 
 describe('translateGridTracks()', () => {
   it('makes hugging tracks auto', () => {
@@ -30,5 +30,28 @@ describe('translateGridTracks()', () => {
       { type: 'flex', value: 1 },
       { type: 'flex', value: 1 },
     ]);
+  });
+});
+
+describe('translateLayoutSizing() with absolute children', () => {
+  it('keeps the size of a hugging frame whose children are all absolute or hidden', () => {
+    const node = {
+      layoutSizingHorizontal: 'HUG',
+      children: [
+        { type: 'FRAME', layoutPositioning: 'ABSOLUTE' },
+        { type: 'TEXT', visible: false },
+      ],
+    } as any;
+
+    expect(translateLayoutSizing(node, 'layoutSizingHorizontal')).toBe('fix');
+  });
+
+  it('keeps hugging when a child is laid out', () => {
+    const node = {
+      layoutSizingHorizontal: 'HUG',
+      children: [{ type: 'FRAME', layoutPositioning: 'ABSOLUTE' }, { type: 'TEXT' }],
+    } as any;
+
+    expect(translateLayoutSizing(node, 'layoutSizingHorizontal')).toBe('auto');
   });
 });

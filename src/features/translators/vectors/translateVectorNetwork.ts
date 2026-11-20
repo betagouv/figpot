@@ -127,12 +127,36 @@ export function translateVectorNetwork(vectorNetwork: VectorNetwork, size: Point
   const used = new Set<number>();
   const commands: string[] = [];
 
-  for (let firstIndex = 0; firstIndex < vectorNetwork.segments.length; firstIndex++) {
-    if (used.has(firstIndex)) {
-      continue;
+  // Number of segments not yet drawn touching each vertex: a run starting from a free end draws a joined line through the
+  // vertices it passes (a run starting in the middle would split a corner into two capped ends)
+  const freeDegree = (vertex: number) =>
+    vectorNetwork.segments.reduce(
+      (count, segment, index) => count + (!used.has(index) && (segment.start === vertex || segment.end === vertex) ? 1 : 0),
+      0
+    );
+
+  for (;;) {
+    const unused = vectorNetwork.segments.map((_, index) => index).filter((index) => !used.has(index));
+    if (unused.length === 0) {
+      break;
     }
 
-    const runStart = vectorNetwork.segments[firstIndex].start;
+    let firstIndex = unused[0];
+    let runStart = vectorNetwork.segments[firstIndex].start;
+    for (const index of unused) {
+      const segment = vectorNetwork.segments[index];
+      if (freeDegree(segment.start) === 1) {
+        firstIndex = index;
+        runStart = segment.start;
+        break;
+      }
+      if (freeDegree(segment.end) === 1) {
+        firstIndex = index;
+        runStart = segment.end;
+        break;
+      }
+    }
+
     let current = runStart;
     let segmentIndex: number | undefined = firstIndex;
 

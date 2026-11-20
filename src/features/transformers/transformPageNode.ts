@@ -7,6 +7,11 @@ import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { rgbToHex } from '@figpot/src/utils/color';
 import { neutralTransform } from '@figpot/src/utils/matrix';
 
+// Figma shows a page named only with dashes (hyphens, en or em dashes) as a divider, Penpot only one named exactly "---"
+export function translatePageName(name: string): string {
+  return /^[\s\-\u2010-\u2015\u2212\u2500]+$/.test(name) && /[^\s]/.test(name) ? '---' : name;
+}
+
 export function transformPageNode(registry: PageRegistry, figmaNode: CanvasNode): PenpotPage {
   const penpotPageId = translateId(figmaNode.id, registry.getMapping());
 
@@ -23,7 +28,7 @@ export function transformPageNode(registry: PageRegistry, figmaNode: CanvasNode)
 
   const page: PenpotPage = {
     id: penpotPageId,
-    name: figmaNode.name,
+    name: translatePageName(figmaNode.name),
     background: rgbToHex(figmaNode.backgroundColor),
     objects: {
       [penpotRootFrameId]: {

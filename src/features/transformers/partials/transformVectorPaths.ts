@@ -117,11 +117,11 @@ export function transformVectorPaths(registry: AbstractRegistry, node: VectorNod
   // strokes only, an inside or outside one would need the closed outline Figma does not give here)
   // Not for masks and boolean operands (their outline is the area they cut), rounded corners (Penpot strokes cannot round the corners of a path) or
   // lone vertices (dots): the exact outline from `strokeGeometry` is kept then
-  // Experimental (`FIGPOT_NATIVE_BOUND_STROKES=true`): the REST API does not give the per-vertex styles of a network (only a
+  // Default, `FIGPOT_NATIVE_BOUND_STROKES=false` keeps the exact outlines instead. The REST API does not give the per-vertex styles of a network (only a
   // `meta` index into a table it omits: rounded corners, caps...), and a small closed path Figma fills with its stroke
   // becomes a ring, so some outlines differ from Figma
   if (
-    process.env.FIGPOT_NATIVE_BOUND_STROKES === 'true' &&
+    process.env.FIGPOT_NATIVE_BOUND_STROKES !== 'false' &&
     hasBoundStrokeWeight(node) &&
     hasVectorNetwork(node) &&
     isStrokablePath(node.vectorNetwork, node.strokeWeight ?? 0) &&

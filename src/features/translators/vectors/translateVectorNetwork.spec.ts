@@ -1,4 +1,4 @@
-import { hasVectorNetwork, translateVectorNetwork } from '@figpot/src/features/translators/vectors/translateVectorNetwork';
+import { hasVectorNetwork, isStrokablePath, translateVectorNetwork } from '@figpot/src/features/translators/vectors/translateVectorNetwork';
 
 describe('translateVectorNetwork()', () => {
   it('chains unordered segments into a closed path scaled to the node size', () => {
@@ -40,5 +40,42 @@ describe('translateVectorNetwork()', () => {
     expect(hasVectorNetwork({ vectorNetwork: { vertices: [], segments: [{ start: 0, end: 1 }] } })).toBe(true);
     expect(hasVectorNetwork({ vectorNetwork: { vertices: [], segments: [] } })).toBe(false);
     expect(hasVectorNetwork({})).toBe(false);
+  });
+});
+
+describe('translateVectorNetwork() with curve bounds', () => {
+  it('scales from the bounds of the curves, not only of the vertices', () => {
+    // A half circle bulging to x = 10 between two vertices at x = 0: its drawn width is 10, already the node size
+    const tangent = 0.5523 * 10 * 1.81;
+    const vectorNetwork = {
+      vertices: [{ position: { x: 0, y: 0 } }, { position: { x: 0, y: 20 } }],
+      segments: [{ start: 0, end: 1, startTangent: { x: tangent, y: 0 }, endTangent: { x: tangent, y: 0 } }],
+    };
+
+    const numbers = (translateVectorNetwork(vectorNetwork, { x: 10, y: 20 }, 'curves').path.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+
+    expect(numbers[0]).toBeCloseTo(0);
+    // The end vertex keeps x = 0 (no horizontal stretch from a zero vertex width)
+    expect(numbers[numbers.length - 2]).toBeCloseTo(0);
+    expect(numbers[numbers.length - 1]).toBeCloseTo(20);
+  });
+});
+
+describe('isStrokablePath()', () => {
+  const line = {
+    vertices: [{ position: { x: 0, y: 0 } }, { position: { x: 10, y: 0 } }],
+    segments: [{ start: 0, end: 1 }],
+  };
+
+  it('accepts a path fully drawn by its stroke', () => {
+    expect(isStrokablePath(line, 2)).toBe(true);
+  });
+
+  it('refuses lone vertices, styles per vertex and shapes smaller than their stroke', () => {
+    expect(isStrokablePath({ ...line, vertices: [...line.vertices, { position: { x: 5, y: 5 } }] }, 2)).toBe(false);
+    expect(
+      isStrokablePath({ ...line, vertices: [{ position: { x: 0, y: 0 }, meta: 1 } as (typeof line.vertices)[number], line.vertices[1]] }, 2)
+    ).toBe(false);
+    expect(isStrokablePath(line, 5)).toBe(false);
   });
 });

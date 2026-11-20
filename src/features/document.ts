@@ -50,6 +50,7 @@ import {
   extractStylesTypographies,
   mergeStylesColors,
   patchDocument,
+  patchVariables,
   retrieveDocument,
   retrieveFigmaFileAccessInfo,
   retrieveFigmaFileName,
@@ -961,6 +962,7 @@ export async function transform(options: TransformOptionsType) {
     const remoteStyleSourceFiles = new Map(Object.entries(figmaRemoteStyles));
 
     patchDocument(figmaTree, figmaColors, figmaTypographies, options.excludePatterns, options.replaceFontPatterns);
+    patchVariables(figmaVariables, options.replaceFontPatterns);
 
     const libraryMainCopies = await readFigmaLibraryMainCopiesFile(options.dataDir, document.figmaDocument);
 

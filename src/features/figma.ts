@@ -30,6 +30,8 @@ import {
 } from '@figpot/src/clients/figma';
 import { DocumentOptionsType, ExcludePatternsType, ReplaceFontPatternType } from '@figpot/src/features/document';
 import { MainCopies, buildMainCopies } from '@figpot/src/features/mainCopies';
+import { translateScope } from '@figpot/src/features/translators/tokens/translateScope';
+import type { FigmaVariablesData } from '@figpot/src/features/translators/tokens/translateTokens';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { sleep } from '@figpot/src/utils/sleep';
 
@@ -634,6 +636,30 @@ export function patchFontFamily(fontSettings: TypeStyle, replaceFontPatterns: Re
     }
 
     return;
+  }
+}
+
+// The font family variables are redirected like the fonts of the nodes, or applying their tokens in Penpot would set back a
+// font it does not have
+export function patchVariables(variables: FigmaVariablesData, replaceFontPatterns: ReplaceFontPatternType[]) {
+  if (replaceFontPatterns.length === 0) {
+    return;
+  }
+
+  for (const variable of Object.values(variables.variables)) {
+    if (variable.resolvedType !== 'STRING' || !translateScope(variable).includes('fontFamily')) {
+      continue;
+    }
+
+    for (const [modeId, value] of Object.entries(variable.valuesByMode)) {
+      if (typeof value === 'string') {
+        const replaceFontPattern = replaceFontPatterns.find((pattern) => pattern.search.test(value));
+
+        if (replaceFontPattern) {
+          variable.valuesByMode[modeId] = replaceFontPattern.set;
+        }
+      }
+    }
   }
 }
 

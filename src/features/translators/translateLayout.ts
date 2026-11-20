@@ -198,26 +198,99 @@ export function translateLayoutGridDir(node: HasLayoutTrait): LayoutGridDir {
   return 'row';
 }
 
+/**
+ * Splits a CSS track list on its top-level spaces and commas (the ones outside parentheses)
+ */
+function splitTrackList(trackList: string, separator: RegExp): string[] {
+  const tracks: string[] = [];
+  let depth = 0;
+  let current = '';
+
+  for (const character of trackList) {
+    if (character === '(') {
+      depth++;
+    } else if (character === ')') {
+      depth--;
+    }
+
+    if (depth === 0 && separator.test(character)) {
+      if (current.trim()) {
+        tracks.push(current.trim());
+      }
+      current = '';
+    } else {
+      current += character;
+    }
+  }
+
+  if (current.trim()) {
+    tracks.push(current.trim());
+  }
+
+  return tracks;
+}
+
+/**
+ * Translates one CSS track size, `undefined` when it cannot be read
+ */
+function translateGridTrack(track: string): GridTrack | undefined {
+  // Penpot has no minimum per track, the maximum is the size the track gets once there is room (`minmax(0,1fr)` is `1fr`)
+  const minmax = /^minmax\((.*)\)$/.exec(track);
+  if (minmax) {
+    const bounds = splitTrackList(minmax[1], /,/);
+
+    return bounds.length === 2 ? translateGridTrack(bounds[1]) : undefined;
+  }
+
+  const size = /^(\d+(?:\.\d+)?)(fr|px|%)$/.exec(track);
+  if (size) {
+    const value = parseFloat(size[1]);
+
+    return size[2] === 'fr' ? { type: 'flex', value: value } : size[2] === 'px' ? { type: 'fixed', value: value } : { type: 'percent', value: value };
+  }
+
+  // `fit-content(100%)` is the "hug" of Figma, like `auto`, `min-content` and `max-content` it sizes the track from its content
+  if (/^(fit-content\(.*\)|auto|min-content|max-content)$/.test(track)) {
+    return { type: 'auto' };
+  }
+
+  return undefined;
+}
+
+/**
+ * Translates the CSS-like track sizes Figma gives (`repeat(2,fit-content(100%))`, `372px 372px`, `minmax(0,1fr)`...).
+ * Equal fractions are kept, as before reading them, when a size cannot be read or the sizes do not match the track count
+ */
+export function translateGridTracks(sizing: string | undefined, count: number): GridTrack[] {
+  const tracks: (GridTrack | undefined)[] = [];
+
+  for (const track of splitTrackList(sizing ?? '', /\s/)) {
+    const repeat = /^repeat\((\d+),(.*)\)$/.exec(track);
+
+    if (repeat) {
+      const repeated = splitTrackList(repeat[2], /\s/).map(translateGridTrack);
+
+      for (let i = 0; i < parseInt(repeat[1], 10); i++) {
+        tracks.push(...repeated);
+      }
+    } else {
+      tracks.push(translateGridTrack(track));
+    }
+  }
+
+  if (tracks.length !== count || tracks.some((track) => track === undefined)) {
+    return Array.from({ length: count }, () => ({ type: 'flex', value: 1 }));
+  }
+
+  return tracks as GridTrack[];
+}
+
 export function translateLayoutGridColumns(node: HasLayoutTrait): GridTrack[] {
-  // TODO: should be more complex, maybe parsed from
-  // `"gridColumnsSizing": "  fit-content(100%) fit-content(100%)",`
-  return Array.from({ length: node.gridColumnCount ?? 0 }, () => {
-    return {
-      type: 'flex',
-      value: 1,
-    };
-  });
+  return translateGridTracks(node.gridColumnsSizing, node.gridColumnCount ?? 0);
 }
 
 export function translateLayoutGridRows(node: HasLayoutTrait): GridTrack[] {
-  // TODO: should be more complex, maybe parsed from
-  // `"gridRowsSizing": "  fit-content(100%) fit-content(100%)",`
-  return Array.from({ length: node.gridRowCount ?? 0 }, () => {
-    return {
-      type: 'flex',
-      value: 1,
-    };
-  });
+  return translateGridTracks(node.gridRowsSizing, node.gridRowCount ?? 0);
 }
 
 export function translateGridChildAlign(align?: FigmaGridChildAlign): 'start' | 'center' | 'end' | undefined {

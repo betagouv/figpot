@@ -1347,6 +1347,11 @@ export interface DifferencesOptions {
   tokensStatus?: boolean;
 }
 
+// Penpot keeps the active token themes and the sets of a theme as sets, returned in any order: they are compared sorted
+function sortedItems(items: string[]): string[] {
+  return [...items].sort();
+}
+
 export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocument, options: DifferencesOptions = {}): Differences {
   const newDocumentName = currentTree.name !== newTree.name ? newTree.name : undefined;
   const newMediasToUpload: string[] = [];
@@ -1431,6 +1436,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
       flattenCurrentGlobalTree.set(currentTheme.id, {
         _apiType: 'token-theme',
         ...currentTheme,
+        sets: sortedItems(currentTheme.sets),
       });
     }
   }
@@ -1507,6 +1513,7 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
       flattenNewGlobalTree.set(newTheme.id, {
         _apiType: 'token-theme',
         ...newTheme,
+        sets: sortedItems(newTheme.sets),
       });
     }
   }
@@ -2084,8 +2091,11 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
   // Also adjust the active token themes
   const currentActiveThemes = currentTree.data.activeTokenThemes ?? [];
   const newActiveThemes = newTree.data.activeTokenThemes ?? [];
+  const sortedCurrentActiveThemes = sortedItems(currentActiveThemes);
+  const sortedNewActiveThemes = sortedItems(newActiveThemes);
   const activeThemesChanged =
-    currentActiveThemes.length !== newActiveThemes.length || currentActiveThemes.some((themePath, index) => themePath !== newActiveThemes[index]);
+    sortedCurrentActiveThemes.length !== sortedNewActiveThemes.length ||
+    sortedCurrentActiveThemes.some((themePath, index) => themePath !== sortedNewActiveThemes[index]);
   if (activeThemesChanged) {
     if (options.tokensStatus) {
       // Themes are referenced by path (`group/name`) and their sets by name, whereas this operation needs identifiers

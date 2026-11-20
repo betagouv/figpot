@@ -44,3 +44,85 @@ describe('transformAppliedTokens()', () => {
     expect(transformAppliedTokens(registry, node)).toEqual({ appliedTokens: { fontSize: 'font.size.lg' } });
   });
 });
+
+describe('transformAppliedTokens() bindings', () => {
+  it('binds rectangle corner radii, minimum and maximum sizes, and a stroke weight for all sides', () => {
+    const registry = makeRegistry({
+      'V:r/borderRadius': 'radius.md',
+      'V:min/sizing': 'size.min',
+      'V:max/sizing': 'size.max',
+      'V:stroke/borderWidth': 'border.thin',
+    });
+    const node = {
+      boundVariables: {
+        rectangleCornerRadii: {
+          RECTANGLE_TOP_LEFT_CORNER_RADIUS: alias('V:r'),
+          RECTANGLE_TOP_RIGHT_CORNER_RADIUS: alias('V:r'),
+          RECTANGLE_BOTTOM_RIGHT_CORNER_RADIUS: alias('V:r'),
+          RECTANGLE_BOTTOM_LEFT_CORNER_RADIUS: alias('V:r'),
+        },
+        minHeight: alias('V:min'),
+        maxWidth: alias('V:max'),
+        strokeWeight: alias('V:stroke'),
+      },
+    } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(registry, node)).toEqual({
+      appliedTokens: {
+        r1: 'radius.md',
+        r2: 'radius.md',
+        r3: 'radius.md',
+        r4: 'radius.md',
+        layoutItemMinH: 'size.min',
+        layoutItemMaxW: 'size.max',
+        strokeWidthTop: 'border.thin',
+        strokeWidthRight: 'border.thin',
+        strokeWidthBottom: 'border.thin',
+        strokeWidthLeft: 'border.thin',
+      },
+    });
+  });
+
+  it('binds the stroke weights per side as the REST API names them', () => {
+    const registry = makeRegistry({ 'V:w/borderWidth': 'border.weight' });
+    const node = {
+      boundVariables: {
+        individualStrokeWeights: {
+          BORDER_TOP_WEIGHT: alias('V:w'),
+          BORDER_RIGHT_WEIGHT: alias('V:w'),
+          BORDER_BOTTOM_WEIGHT: alias('V:w'),
+          BORDER_LEFT_WEIGHT: alias('V:w'),
+        },
+      },
+    } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(registry, node)).toEqual({
+      appliedTokens: {
+        strokeWidthTop: 'border.weight',
+        strokeWidthRight: 'border.weight',
+        strokeWidthBottom: 'border.weight',
+        strokeWidthLeft: 'border.weight',
+      },
+    });
+  });
+
+  it('binds the spacing of a flex layout to the gap along its direction, and the gaps of a grid layout', () => {
+    const registry = makeRegistry({ 'V:gap/spacing': 'space.gap', 'V:row/spacing': 'space.row' });
+    const flex = { layoutMode: 'VERTICAL', boundVariables: { itemSpacing: alias('V:gap') } } as unknown as SubcanvasNodeWithSlot;
+    const grid = {
+      layoutMode: 'GRID',
+      boundVariables: { gridRowGap: alias('V:row'), gridColumnGap: alias('V:gap') },
+    } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(registry, flex)).toEqual({ appliedTokens: { rowGap: 'space.gap' } });
+    expect(transformAppliedTokens(registry, grid)).toEqual({ appliedTokens: { rowGap: 'space.row', columnGap: 'space.gap' } });
+  });
+
+  it('falls back to another number token the variable gives, never to a color', () => {
+    // A variable scoped to sizes only gives a `sizing` token, bound here to a radius
+    const registry = makeRegistry({ 'V:size/sizing': 'size.4', 'V:c/color': 'color.brand' });
+    const node = { boundVariables: { topLeftRadius: alias('V:size'), topRightRadius: alias('V:c') } } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(registry, node)).toEqual({ appliedTokens: { r1: 'size.4' } });
+  });
+});

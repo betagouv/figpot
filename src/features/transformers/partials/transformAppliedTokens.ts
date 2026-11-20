@@ -7,6 +7,19 @@ import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 // (theme switching is document-wide), so flagging every offending node would be noise
 let hasWarnedExplicitVariableModes = false;
 
+// The token types a number variable can give, by preference when the expected one is missing
+const NUMBER_TOKEN_TYPES: TokenType[] = [
+  'sizing',
+  'spacing',
+  'borderRadius',
+  'borderWidth',
+  'number',
+  'opacity',
+  'fontSize',
+  'fontWeight',
+  'letterSpacing',
+];
+
 function applyToken(
   appliedTokens: Record<string, string>,
   registry: BoundVariableRegistry,
@@ -23,7 +36,15 @@ function applyToken(
     return;
   }
 
-  const tokenName = registry.getVariableTokenNames().get(`${single.id}/${tokenType}`);
+  const variableTokenNames = registry.getVariableTokenNames();
+  const tokenName =
+    variableTokenNames.get(`${single.id}/${tokenType}`) ??
+    // A number variable only gives the tokens of its Figma scopes (a variable scoped to sizes gives a `sizing` token, even when
+    // a radius uses it): Penpot applies a token to an attribute whatever its type, so another number token of it is fine
+    (NUMBER_TOKEN_TYPES.includes(tokenType)
+      ? NUMBER_TOKEN_TYPES.map((type) => variableTokenNames.get(`${single.id}/${type}`)).find((name) => name !== undefined)
+      : undefined);
+
   if (tokenName !== undefined) {
     appliedTokens[penpotProperty] = tokenName;
   }
@@ -63,19 +84,43 @@ export function transformAppliedTokens(registry: BoundVariableRegistry, node: Su
 
   const boundVariables = node.boundVariables;
   if (boundVariables) {
-    record('r1', 'borderRadius', boundVariables.topLeftRadius);
-    record('r2', 'borderRadius', boundVariables.topRightRadius);
-    record('r3', 'borderRadius', boundVariables.bottomRightRadius);
-    record('r4', 'borderRadius', boundVariables.bottomLeftRadius);
+    // The radii of a rectangle are bound per corner under another name than for frames
+    const cornerRadii = boundVariables.rectangleCornerRadii;
+    record('r1', 'borderRadius', boundVariables.topLeftRadius ?? cornerRadii?.RECTANGLE_TOP_LEFT_CORNER_RADIUS);
+    record('r2', 'borderRadius', boundVariables.topRightRadius ?? cornerRadii?.RECTANGLE_TOP_RIGHT_CORNER_RADIUS);
+    record('r3', 'borderRadius', boundVariables.bottomRightRadius ?? cornerRadii?.RECTANGLE_BOTTOM_RIGHT_CORNER_RADIUS);
+    record('r4', 'borderRadius', boundVariables.bottomLeftRadius ?? cornerRadii?.RECTANGLE_BOTTOM_LEFT_CORNER_RADIUS);
     record('p1', 'spacing', boundVariables.paddingTop);
     record('p2', 'spacing', boundVariables.paddingRight);
     record('p3', 'spacing', boundVariables.paddingBottom);
     record('p4', 'spacing', boundVariables.paddingLeft);
-    record('rowGap', 'spacing', boundVariables.itemSpacing);
-    record('columnGap', 'spacing', boundVariables.itemSpacing);
+
+    // Like the gap values (see `translateLayoutGap()`), the spacing of a flex layout is the gap along its direction, and grid
+    // layouts have their own gaps (missing from the API types)
+    const gridGaps = boundVariables as { gridRowGap?: VariableAlias; gridColumnGap?: VariableAlias };
+    const layoutMode = 'layoutMode' in node ? node.layoutMode : undefined;
+    record('rowGap', 'spacing', layoutMode === 'VERTICAL' ? boundVariables.itemSpacing : gridGaps.gridRowGap);
+    record('columnGap', 'spacing', layoutMode === 'HORIZONTAL' ? boundVariables.itemSpacing : gridGaps.gridColumnGap);
+
     record('opacity', 'opacity', boundVariables.opacity);
     record('width', 'sizing', boundVariables.size?.x);
     record('height', 'sizing', boundVariables.size?.y);
+    record('layoutItemMinW', 'sizing', boundVariables.minWidth);
+    record('layoutItemMaxW', 'sizing', boundVariables.maxWidth);
+    record('layoutItemMinH', 'sizing', boundVariables.minHeight);
+    record('layoutItemMaxH', 'sizing', boundVariables.maxHeight);
+
+    // The REST API names the sides `BORDER_*_WEIGHT` whereas its types name them like the Plugin API, and a single weight
+    // for all the sides is bound as `strokeWeight` (missing from the types)
+    const strokeWeights = boundVariables.individualStrokeWeights as
+      | (Partial<Record<'top' | 'right' | 'bottom' | 'left', VariableAlias>> &
+          Partial<Record<'BORDER_TOP_WEIGHT' | 'BORDER_RIGHT_WEIGHT' | 'BORDER_BOTTOM_WEIGHT' | 'BORDER_LEFT_WEIGHT', VariableAlias>>)
+      | undefined;
+    const strokeWeight = (boundVariables as { strokeWeight?: VariableAlias }).strokeWeight;
+    record('strokeWidthTop', 'borderWidth', strokeWeights?.top ?? strokeWeights?.BORDER_TOP_WEIGHT ?? strokeWeight);
+    record('strokeWidthRight', 'borderWidth', strokeWeights?.right ?? strokeWeights?.BORDER_RIGHT_WEIGHT ?? strokeWeight);
+    record('strokeWidthBottom', 'borderWidth', strokeWeights?.bottom ?? strokeWeights?.BORDER_BOTTOM_WEIGHT ?? strokeWeight);
+    record('strokeWidthLeft', 'borderWidth', strokeWeights?.left ?? strokeWeights?.BORDER_LEFT_WEIGHT ?? strokeWeight);
     record('fontFamily', 'fontFamily', boundVariables.fontFamily);
     record('fontSize', 'fontSize', boundVariables.fontSize);
     record('fontWeight', 'fontWeight', boundVariables.fontWeight);

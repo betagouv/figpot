@@ -137,9 +137,10 @@ describe('translateTokens()', () => {
       valuesByMode: { m: { type: 'VARIABLE_ALIAS', id: 'EXTERNAL_FILE_VARIABLE' } },
     });
 
-    const { tokenSets } = translateTokens(makeData([collection], [variable]), makeMapping());
+    const { tokenSets, aliasesToUnknownNames } = translateTokens(makeData([collection], [variable]), makeMapping());
 
     expect(tokenSets['C/M'].tokens).toEqual({});
+    expect(aliasesToUnknownNames).toEqual(['remote']);
   });
 
   it('routes FLOAT variables to token types through their scopes', () => {
@@ -337,8 +338,33 @@ describe('translateTokens() aliases', () => {
       }),
     ];
 
-    const tokens = translateTokens(makeData([collection, remoteCollection], variables), makeMapping()).tokenSets['Dimensions/Default'].tokens;
+    const { tokenSets, aliasesToUntokenizedNames } = translateTokens(makeData([collection, remoteCollection], variables), makeMapping());
 
-    expect(Object.keys(tokens)).toEqual(['ok']);
+    expect(Object.keys(tokenSets['Dimensions/Default'].tokens)).toEqual(['ok']);
+    expect(aliasesToUntokenizedNames).toEqual(['a', 'b']);
+  });
+
+  it('writes the unlisted variables an alias references, unless a listed variable has the same name', () => {
+    // `hidden` (hidden from publishing) and `copy` (the same variable as `regular` under another ID) are not listed
+    const collection = makeCollection({ id: 'C:1', name: 'Dimensions', modes, defaultModeId: 'm:1', variableIds: ['V:a', 'V:b', 'V:regular'] });
+    const variable = (id: string, name: string, value: number | { type: 'VARIABLE_ALIAS'; id: string }) =>
+      makeVariable({ id: id, name: name, variableCollectionId: 'C:1', resolvedType: 'FLOAT', scopes: ['GAP'], valuesByMode: { 'm:1': value } });
+    const variables = [
+      variable('V:a', 'a', { type: 'VARIABLE_ALIAS', id: 'V:hidden' }),
+      variable('V:b', 'b', { type: 'VARIABLE_ALIAS', id: 'V:copy' }),
+      variable('V:regular', 'regular', 4),
+      variable('V:hidden', 'hidden', 8),
+      variable('V:copy', 'regular', 4),
+      variable('V:unused', 'unused', 16),
+    ];
+
+    const tokens = translateTokens(makeData([collection], variables), makeMapping()).tokenSets['Dimensions/Default'].tokens;
+
+    expect(Object.fromEntries(Object.entries(tokens).map(([name, token]) => [name, token.value]))).toEqual({
+      a: '{hidden}',
+      b: '{regular}',
+      regular: '4',
+      hidden: '8',
+    });
   });
 });

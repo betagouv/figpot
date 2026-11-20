@@ -123,10 +123,17 @@ export function transformDocumentNode(
   registerComponentSubtreeIds(figmaNode, mapping);
 
   // Figma variables become Penpot design tokens so nodes can directly use them
-  const { tokenSets, tokenThemes, activeThemes, variableTokenNames, usedTokenNames, inferredScopeNames, suffixedVariableNames } = translateTokens(
-    figmaVariables,
-    mapping
-  );
+  const {
+    tokenSets,
+    tokenThemes,
+    activeThemes,
+    variableTokenNames,
+    usedTokenNames,
+    inferredScopeNames,
+    suffixedVariableNames,
+    aliasesToUnknownNames,
+    aliasesToUntokenizedNames,
+  } = translateTokens(figmaVariables, mapping);
 
   registry.registerVariableTokenNames(variableTokenNames);
 
@@ -138,6 +145,16 @@ export function transformDocumentNode(
   if (suffixedVariableNames.length > 0) {
     console.warn(
       `the following Figma variables produced several Penpot tokens (one per inferred or declared scope) named with a "-typeName" suffix because Penpot tokens are single-type: ${suffixedVariableNames.join(', ')}`
+    );
+  }
+  if (aliasesToUnknownNames.length > 0) {
+    console.warn(
+      `the following Figma variables give no Penpot token because they alias library variables the Figma REST API does not describe, export them with the "figma-plugins/variables-export" plugin and pass the file with "--extra-variables <figmaId>:<path>" (see the README): ${aliasesToUnknownNames.join(', ')}`
+    );
+  }
+  if (aliasesToUntokenizedNames.length > 0) {
+    console.warn(
+      `the following Figma variables give no Penpot token because the variables they alias give none (library variables are not synchronized, unsupported values...): ${aliasesToUntokenizedNames.join(', ')}`
     );
   }
 

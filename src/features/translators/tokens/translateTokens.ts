@@ -18,6 +18,8 @@ export type TranslatedTokens = {
   usedTokenNames: Set<string>; // shared with effect-style tokens so collisions get suffixed globally
   inferredScopeNames: string[]; // variables whose Figma scope was ALL_SCOPES or empty
   suffixedVariableNames: string[]; // variables that ended up split into multiple typed tokens
+  aliasesToUnknownNames: string[]; // variables skipped since aliasing a variable the Figma data do not describe
+  aliasesToUntokenizedNames: string[]; // variables skipped since aliasing a variable giving no token
 };
 
 type FigmaVariableValue = boolean | number | string | RGBA | VariableAlias;
@@ -74,32 +76,13 @@ function translateTokenValueForType(
   variable: LocalVariable,
   rawValue: FigmaVariableValue,
   type: TokenType,
-  variables: FigmaVariablesData['variables'],
-  resolveAliasName: (aliasedVariable: LocalVariable, type: TokenType) => string | undefined,
+  resolveAliasName: (variable: LocalVariable, alias: VariableAlias, type: TokenType) => string | undefined,
   mapping: MappingType
 ): string | string[] | undefined {
   if (isVariableAlias(rawValue)) {
-    const aliasedVariable = variables[rawValue.id];
+    const aliasName = resolveAliasName(variable, rawValue, type);
 
-    // Cross-file alias: REST API does not expose the value and Penpot has no cross-file token refs,
-    // so we drop the token rather than emit a dangling reference
-    if (!aliasedVariable) {
-      console.warn(
-        `skipping the token for the Figma variable "${variable.name}" because it aliases a variable from another file, which figpot cannot resolve`
-      );
-      return undefined;
-    }
-
-    // Same when the aliased variable gives no token (unsupported values, not synchronized...), the reference would dangle
-    const aliasName = resolveAliasName(aliasedVariable, type);
-    if (aliasName === undefined) {
-      console.warn(
-        `skipping the token for the Figma variable "${variable.name}" because the variable it aliases ("${aliasedVariable.name}") gives no Penpot token`
-      );
-      return undefined;
-    }
-
-    return `{${aliasName}}`;
+    return aliasName !== undefined ? `{${aliasName}}` : undefined;
   }
 
   switch (type) {
@@ -129,7 +112,57 @@ function translateTokenValueForType(
   }
 }
 
-export function translateTokens(data: FigmaVariablesData, mapping: MappingType): TranslatedTokens {
+// A library variable hidden from publishing is not listed by its collection, but variables can alias it: the aliases would
+// give no token, so the variables referenced this way (followed through aliases) are added to their collection, unless a
+// listed variable of that collection has their name (see `getWrittenEquivalent()`)
+export function withReferencedUnlistedVariables(data: FigmaVariablesData): FigmaVariablesData {
+  const listedIds = new Set(Object.values(data.variableCollections).flatMap((collection) => collection.variableIds));
+  const listedKeys = new Set(
+    [...listedIds].flatMap((variableId) => {
+      const variable = data.variables[variableId];
+
+      return variable ? [`${variable.variableCollectionId}/${variable.name}`] : [];
+    })
+  );
+
+  const addedIds = new Map<string, string[]>(); // collection ID -> variable IDs to add
+  const queue = [...listedIds].flatMap((variableId) => data.variables[variableId] ?? []);
+  const seenIds = new Set(listedIds);
+
+  for (let index = 0; index < queue.length; index++) {
+    for (const value of Object.values(queue[index].valuesByMode)) {
+      const target = isVariableAlias(value) && !seenIds.has(value.id) ? data.variables[value.id] : undefined;
+      if (!target || !data.variableCollections[target.variableCollectionId]) {
+        continue;
+      }
+
+      seenIds.add(target.id);
+      queue.push(target);
+
+      if (!listedKeys.has(`${target.variableCollectionId}/${target.name}`)) {
+        addedIds.set(target.variableCollectionId, [...(addedIds.get(target.variableCollectionId) ?? []), target.id]);
+      }
+    }
+  }
+
+  if (addedIds.size === 0) {
+    return data;
+  }
+
+  const variableCollections = { ...data.variableCollections };
+  for (const [collectionId, variableIds] of addedIds) {
+    variableCollections[collectionId] = {
+      ...variableCollections[collectionId],
+      variableIds: [...variableCollections[collectionId].variableIds, ...variableIds],
+    };
+  }
+
+  return { ...data, variableCollections: variableCollections };
+}
+
+export function translateTokens(listedData: FigmaVariablesData, mapping: MappingType): TranslatedTokens {
+  const data = withReferencedUnlistedVariables(listedData);
+
   const tokenSets: Record<string, TokenSet> = {};
   const tokenThemes: Record<string, TokenTheme> = {};
   const activeThemes: string[] = [];
@@ -169,6 +202,18 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
     )
   );
 
+  // A library can hold the same variable under two IDs (a copy the file subscribed to and the one its collection lists), an
+  // alias may target the one not written: the written variable of the same name in the same collection is used instead
+  const writtenVariablesByKey = new Map(
+    [...writtenVariableIds].map((variableId) => {
+      const variable = data.variables[variableId];
+
+      return [`${variable.variableCollectionId}/${variable.name}`, variable];
+    })
+  );
+  const getWrittenEquivalent = (variable: LocalVariable): LocalVariable =>
+    writtenVariableIds.has(variable.id) ? variable : writtenVariablesByKey.get(`${variable.variableCollectionId}/${variable.name}`) ?? variable;
+
   const isComposedColor = (rawValue: FigmaVariableValue) =>
     typeof rawValue === 'object' && rawValue !== null && 'color' in rawValue && 'opacity' in rawValue;
 
@@ -193,10 +238,10 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
       } else if (isVariableAlias(rawValue)) {
         const aliasedVariable = data.variables[rawValue.id];
 
-        return !!aliasedVariable && getAliasedType(aliasedVariable, type, visiting) !== undefined;
+        return !!aliasedVariable && getAliasedType(getWrittenEquivalent(aliasedVariable), type, visiting) !== undefined;
       }
 
-      return translateTokenValueForType(variable, rawValue, type, data.variables, () => undefined, mapping) !== undefined;
+      return translateTokenValueForType(variable, rawValue, type, () => undefined, mapping) !== undefined;
     });
 
     givesTokenCache.set(key, result);
@@ -211,10 +256,27 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
     return [type, ...types.filter((otherType) => otherType !== type)].find((candidate) => givesToken(aliasedVariable, candidate, visiting));
   };
 
-  const resolveAliasName = (aliasedVariable: LocalVariable, type: TokenType): string | undefined => {
-    const aliasedType = getAliasedType(aliasedVariable, type);
+  // An alias whose target gives no token is skipped (the reference would dangle in Penpot), and reported once whatever
+  // the number of its modes and types
+  const aliasesToUnknownNames = new Set<string>();
+  const aliasesToUntokenizedNames = new Set<string>();
+  const resolveAliasName = (variable: LocalVariable, alias: VariableAlias, type: TokenType): string | undefined => {
+    const aliasedVariable = data.variables[alias.id];
+    if (!aliasedVariable) {
+      aliasesToUnknownNames.add(variable.name);
 
-    return aliasedType !== undefined ? getName(aliasedVariable, aliasedType) : undefined;
+      return undefined;
+    }
+
+    const target = getWrittenEquivalent(aliasedVariable);
+    const aliasedType = getAliasedType(target, type);
+    if (aliasedType === undefined) {
+      aliasesToUntokenizedNames.add(variable.name);
+
+      return undefined;
+    }
+
+    return getName(target, aliasedType);
   };
 
   // The tokens are named in the order of the collections before writing any, so the names (made unique in naming order)
@@ -269,7 +331,7 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
         }
 
         for (const type of types) {
-          const value = translateTokenValueForType(variable, rawValue, type, data.variables, resolveAliasName, mapping);
+          const value = translateTokenValueForType(variable, rawValue, type, resolveAliasName, mapping);
           if (value === undefined) {
             continue;
           }
@@ -319,5 +381,7 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
     usedTokenNames,
     inferredScopeNames,
     suffixedVariableNames,
+    aliasesToUnknownNames: [...aliasesToUnknownNames],
+    aliasesToUntokenizedNames: [...aliasesToUntokenizedNames],
   };
 }

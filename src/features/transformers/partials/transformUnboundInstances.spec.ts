@@ -32,4 +32,38 @@ describe('transformUnboundInstances()', () => {
     expect(page.objects['nestedChild']).toEqual({ id: 'nestedChild', type: 'path' });
     expect(page.objects['root']).toEqual({ id: 'root', type: 'frame', shapes: ['unbound'] });
   });
+
+  it('should keep the references of an unbound instance inside a bound copy, as a plain part of the copy', () => {
+    const page = {
+      id: 'page',
+      name: 'Page',
+      objects: {
+        copy: { id: 'copy', type: 'frame', componentId: 'component', componentFile: 'file', shapeRef: 'main', componentRoot: true, shapes: ['icon'] },
+        icon: { id: 'icon', type: 'frame', componentId: nullId, componentFile: nullId, shapeRef: 'main-icon', shapes: ['iconChild'] },
+        iconChild: { id: 'iconChild', type: 'path', shapeRef: 'main-icon-child' },
+      },
+    } as unknown as PenpotPage;
+
+    transformUnboundInstances(page);
+
+    expect(page.objects['icon']).toEqual({ id: 'icon', type: 'frame', shapeRef: 'main-icon', shapes: ['iconChild'] });
+    expect(page.objects['iconChild']).toEqual({ id: 'iconChild', type: 'path', shapeRef: 'main-icon-child' });
+    expect(page.objects['copy']).toMatchObject({ componentId: 'component', shapeRef: 'main' });
+  });
+
+  it('should detach an unbound instance inside an unbound one, whatever their order', () => {
+    const page = {
+      id: 'page',
+      name: 'Page',
+      objects: {
+        icon: { id: 'icon', type: 'frame', componentId: nullId, componentFile: nullId, shapeRef: 'main-icon', shapes: [] },
+        outer: { id: 'outer', type: 'frame', componentId: nullId, componentFile: nullId, shapeRef: nullId, shapes: ['icon'] },
+      },
+    } as unknown as PenpotPage;
+
+    transformUnboundInstances(page);
+
+    expect(page.objects['icon']).toEqual({ id: 'icon', type: 'frame', shapes: [] });
+    expect(page.objects['outer']).toEqual({ id: 'outer', type: 'frame', shapes: ['icon'] });
+  });
 });

@@ -91,6 +91,19 @@ Due to this, our advices would be:
 
 ## Frequently Asked Questions
 
+### Some library variables are missing (aliases dropped, modes without values)?
+
+The Figma REST API (`GET /v1/files/:key/variables/local`) only describes the library variables a file binds directly to some nodes. It leaves out the library collections the file only sets a mode of, and the variables its aliases point to. This is not a plan limitation: the REST API only gives more if you can open the library files themselves (a `403 You don't have permission` on `GET /v1/components/:key` means you cannot). This is typical of a `.fig` imported without access to its libraries.
+
+The Figma file still keeps a copy of those variables, which the Plugin API can read. To export them:
+
+1. Get the plugin folder (the 3 files of [`figma-plugins/variables-export`](./figma-plugins/variables-export)) with `npx degit betagouv/figpot/figma-plugins/variables-export figpot-variables-export`, or from the whole repository archive (`Code > Download ZIP` on GitHub)
+2. In the Figma desktop app, open the file, then `Plugins > Development > Import plugin from manifest…` and pick `manifest.json` from that folder
+3. Run `Plugins > Development > figpot variables export`, which downloads `<file name>.variables.json` (a few MB for a big design system)
+4. Synchronize with `--extra-variables <figmaId>:/path/to/<file name>.variables.json` (repeat it for each document concerned): these variables complete the REST ones (the REST ones win on common ids)
+
+Run the export again when the libraries change.
+
 ### What the difference between parameters `-d` and `-l`?
 
 - `-d` stands for a document to synchronize into Penpot

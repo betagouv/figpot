@@ -30,5 +30,12 @@ module.exports = {
         'no-undef': 'off',
       },
     },
+    {
+      files: ['figma-plugins/**/*.js'],
+      globals: {
+        figma: 'readonly',
+        __html__: 'readonly',
+      },
+    },
   ],
 };

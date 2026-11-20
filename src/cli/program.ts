@@ -124,6 +124,28 @@ const replaceFontPatternsOption = new Option(
   `regexp + replacement family in the form '<regex>:<family>' — matched against the Figma fontFamily AND fontPostScriptName. Optionally append ':<weight>' and/or ':<normal|italic>' to also force the weight/style (useful when a single-weight Figma variant like 'Arial-Black' maps to a Penpot font registered at a different weight). Examples: '^Arial:Helvetica', '^Arial-Black$:Arial Black:400:normal' ${patternInfo}`
 );
 
+const extraVariablesOption = new Option(
+  '--extra-variables [extraVariables...]',
+  'complete the variables of a Figma document with those exported by the "figma-plugins/variables-export" plugin, in the form `figmaId:path` (the Figma REST API misses the library variables a document does not bind directly, see the documentation)'
+);
+
+function formatExtraVariables(extraVariables: unknown): Record<string, string> {
+  if (!Array.isArray(extraVariables)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    extraVariables.map((parameter: string) => {
+      const separatorIndex = parameter.indexOf(':');
+      if (separatorIndex === -1) {
+        throw new Error(`the --extra-variables must be in the form of "figmaId:path"`);
+      }
+
+      return [parameter.substring(0, separatorIndex), parameter.substring(separatorIndex + 1)];
+    })
+  );
+}
+
 function formatReplaceFontPatterns(replaceFontPattern: string[]): object[] {
   return replaceFontPattern.map((patternSettings): object => {
     let remaining = patternSettings;
@@ -190,6 +212,7 @@ document
   .addOption(excludeTypographyPatternsOption)
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
+  .addOption(extraVariablesOption)
   .addOption(syncMappingWithGitOption)
   .addOption(pruneMappingOption)
   .addOption(serverValidationOption)
@@ -241,6 +264,7 @@ document
           colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
         },
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
+        extraVariables: formatExtraVariables(options.extraVariables),
         hydrate: options.hydrate,
         hydrateTimeout: options.hydrateTimeout || null,
         syncMappingWithGit: options.syncMappingWithGit || false,
@@ -275,6 +299,7 @@ document
   .addOption(excludeTypographyPatternsOption)
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
+  .addOption(extraVariablesOption)
   .requiredOption(
     '-p, --project <projectId>',
     'Penpot project the files are meant for: its team custom fonts are used, and the files are imported into it with "--import"'
@@ -324,6 +349,7 @@ document
           colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
         },
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
+        extraVariables: formatExtraVariables(options.extraVariables),
         useCachedFigmaData: options.useCachedFigmaData || false,
         prompting: !options.ci,
         penpotProjectId: options.project,
@@ -405,6 +431,7 @@ debugDocument
   .addOption(excludeTypographyPatternsOption)
   .addOption(excludeColorPatternsOption)
   .addOption(replaceFontPatternsOption)
+  .addOption(extraVariablesOption)
   .addOption(syncMappingWithGitOption)
   .addOption(pruneMappingOption)
   .addOption(dataDirOption)
@@ -429,6 +456,7 @@ debugDocument
           colorNamePatterns: Array.isArray(options.excludeColorPattern) ? options.excludeColorPattern : undefined,
         },
         replaceFontPatterns: Array.isArray(options.replaceFontPattern) ? formatReplaceFontPatterns(options.replaceFontPattern) : [],
+        extraVariables: formatExtraVariables(options.extraVariables),
         syncMappingWithGit: options.syncMappingWithGit || false,
         pruneMapping: options.pruneMapping || false,
         prompting: !options.ci,

@@ -639,6 +639,29 @@ export function patchFontFamily(fontSettings: TypeStyle, replaceFontPatterns: Re
   }
 }
 
+/**
+ * The REST API only describes the library variables a file binds to some nodes: it misses the library collections a file
+ * only sets a mode of and the targets of aliases. The `figma-plugins/variables-export` plugin exports them all (the Plugin
+ * API resolves them from the copies the file keeps) in the same format, they complete the REST ones which win on common IDs
+ */
+export function mergeExtraVariables(variables: FigmaVariablesData, extra: Partial<FigmaVariablesData>): FigmaVariablesData {
+  const variableCollections = { ...extra.variableCollections, ...variables.variableCollections };
+
+  // A library collection the REST API describes only lists the variables the file binds, the export lists all of them
+  for (const [id, extraCollection] of Object.entries(extra.variableCollections ?? {})) {
+    const collection = variables.variableCollections[id];
+
+    if (collection) {
+      variableCollections[id] = { ...collection, variableIds: [...new Set([...collection.variableIds, ...extraCollection.variableIds])] };
+    }
+  }
+
+  return {
+    variables: { ...extra.variables, ...variables.variables },
+    variableCollections: variableCollections,
+  };
+}
+
 // The font family variables are redirected like the fonts of the nodes, or applying their tokens in Penpot would set back a
 // font it does not have
 export function patchVariables(variables: FigmaVariablesData, replaceFontPatterns: ReplaceFontPatternType[]) {

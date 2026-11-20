@@ -48,6 +48,7 @@ import {
   countTotalElements,
   extractStylesEffects,
   extractStylesTypographies,
+  mergeExtraVariables,
   mergeStylesColors,
   patchDocument,
   patchVariables,
@@ -330,6 +331,17 @@ export async function readFigmaTypographiesFile(dataDir: string, documentId: str
   const figmaTypographiesString = await fs.readFile(figmaTypographiesPath, 'utf-8');
 
   return JSON.parse(figmaTypographiesString) as FigmaDefinedTypography[];
+}
+
+// Accepts the format of the REST response (`{ meta: { variableCollections, variables } }`) or its `meta` only
+export async function readExtraVariablesFile(filePath: string): Promise<FigmaVariablesData> {
+  if (!fsSync.existsSync(filePath)) {
+    throw new Error(`the extra variables file "${filePath}" does not exist`);
+  }
+
+  const content = JSON.parse(await fs.readFile(filePath, 'utf-8')) as { meta: FigmaVariablesData } | FigmaVariablesData;
+
+  return 'meta' in content ? content.meta : content;
 }
 
 export async function readFigmaVariablesFile(dataDir: string, documentId: string): Promise<FigmaVariablesData> {
@@ -922,11 +934,15 @@ export const ReplaceFontPattern = z.object({
 });
 export type ReplaceFontPatternType = z.infer<typeof ReplaceFontPattern>;
 
+// Per Figma document, the path of a JSON file exported by the `figma-plugins/variables-export` plugin
+export const ExtraVariables = z.record(z.string(), z.string()).default({});
+
 export const TransformOptions = z.object({
   dataDir: z.string(),
   documents: z.array(DocumentOptions),
   excludePatterns: ExcludePatterns,
   replaceFontPatterns: z.array(ReplaceFontPattern),
+  extraVariables: ExtraVariables,
   syncMappingWithGit: z.boolean(),
   pruneMapping: z.boolean().default(false),
   prompting: Prompting,
@@ -953,7 +969,10 @@ export async function transform(options: TransformOptionsType) {
     const figmaTree = await readFigmaTreeFile(options.dataDir, document.figmaDocument);
     const figmaColors = await readFigmaColorsFile(options.dataDir, document.figmaDocument);
     const figmaTypographies = await readFigmaTypographiesFile(options.dataDir, document.figmaDocument);
-    const figmaVariables = await readFigmaVariablesFile(options.dataDir, document.figmaDocument);
+    const extraVariablesPath = options.extraVariables[document.figmaDocument];
+    const figmaVariables = extraVariablesPath
+      ? mergeExtraVariables(await readFigmaVariablesFile(options.dataDir, document.figmaDocument), await readExtraVariablesFile(extraVariablesPath))
+      : await readFigmaVariablesFile(options.dataDir, document.figmaDocument);
     const figmaEffectStyles = await readFigmaEffectsFile(options.dataDir, document.figmaDocument);
     const figmaRemoteComponents = await readFigmaRemoteComponentsFile(options.dataDir, document.figmaDocument);
     const figmaRemoteStyles = await readFigmaRemoteStylesFile(options.dataDir, document.figmaDocument);
@@ -3088,6 +3107,7 @@ export const SynchronizeOptions = z.object({
   documents: z.array(DocumentOptions),
   excludePatterns: ExcludePatterns,
   replaceFontPatterns: z.array(ReplaceFontPattern),
+  extraVariables: ExtraVariables,
   hydrate: z.boolean(),
   hydrateTimeout: Duration.nullable(),
   syncMappingWithGit: z.boolean(),
@@ -3145,6 +3165,7 @@ export async function synchronize(options: SynchronizeOptionsType, figmaMetaCach
     documents: resolvedOptions.documents,
     excludePatterns: resolvedOptions.excludePatterns,
     replaceFontPatterns: resolvedOptions.replaceFontPatterns,
+    extraVariables: resolvedOptions.extraVariables,
     syncMappingWithGit: resolvedOptions.syncMappingWithGit,
     pruneMapping: resolvedOptions.pruneMapping,
     prompting: resolvedOptions.prompting,

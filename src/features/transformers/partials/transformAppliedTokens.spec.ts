@@ -128,6 +128,17 @@ describe('transformAppliedTokens() bindings', () => {
     expect(transformAppliedTokens(registry, notWrapping)).toEqual({ appliedTokens: { columnGap: 'space.gap' } });
   });
 
+  it('binds no line height token, Penpot would apply its pixels as a ratio of the font size', () => {
+    const registry = makeRegistry({ 'V:lh/sizing': 'line.24', 'V:fs/fontSize': 'font.16' });
+    const node = {
+      type: 'TEXT',
+      boundVariables: { lineHeight: [alias('V:lh')] },
+      style: { boundVariables: { lineHeight: alias('V:lh'), fontSize: alias('V:fs') } },
+    } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(registry, node)).toEqual({ appliedTokens: { fontSize: 'font.16' } });
+  });
+
   it('falls back to another number token the variable gives, never to a color', () => {
     // A variable scoped to sizes only gives a `sizing` token, bound here to a radius
     const registry = makeRegistry({ 'V:size/sizing': 'size.4', 'V:c/color': 'color.brand' });

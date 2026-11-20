@@ -134,10 +134,11 @@ export function transformAppliedTokens(registry: BoundVariableRegistry, node: Su
     record('fontFamily', 'fontFamily', boundVariables.fontFamily);
     record('fontSize', 'fontSize', boundVariables.fontSize);
     record('fontWeight', 'fontWeight', boundVariables.fontWeight);
-    record('lineHeight', 'sizing', boundVariables.lineHeight);
     record('letterSpacing', 'letterSpacing', boundVariables.letterSpacing);
   }
 
+  // Line heights are not bound: Penpot applies the value of a token as a ratio of the font size, whereas a Figma variable
+  // gives pixels (a 24px line height would become 24 times the font size). The value itself is still translated as a ratio
   if (node.type === 'TEXT') {
     const styleBoundVariables = node.style.boundVariables;
 
@@ -145,7 +146,6 @@ export function transformAppliedTokens(registry: BoundVariableRegistry, node: Su
       record('fontFamily', 'fontFamily', styleBoundVariables.fontFamily);
       record('fontSize', 'fontSize', styleBoundVariables.fontSize);
       record('fontWeight', 'fontWeight', styleBoundVariables.fontWeight);
-      record('lineHeight', 'sizing', styleBoundVariables.lineHeight);
       record('letterSpacing', 'letterSpacing', styleBoundVariables.letterSpacing);
     }
   }

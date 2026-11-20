@@ -1,5 +1,5 @@
 import { EllipseNode, Transform, VectorNode } from '@figpot/src/clients/figma';
-import { transformAppliedTokens } from '@figpot/src/features/transformers/partials/transformAppliedTokens';
+import { dropUnstrokedWidthTokens, transformAppliedTokens } from '@figpot/src/features/transformers/partials/transformAppliedTokens';
 import { transformBooleanNode } from '@figpot/src/features/transformers/transformBooleanNode';
 import { transformComponentNode } from '@figpot/src/features/transformers/transformComponentNode';
 import { transformComponentSetNode } from '@figpot/src/features/transformers/transformComponentSetNode';
@@ -93,7 +93,8 @@ export function transformSceneNode(
   }
 
   // Bind the node to design tokens for any property driven by a Figma variable
-  Object.assign(penpotNode, transformAppliedTokens(registry, figmaNode));
+  const tokens = transformAppliedTokens(registry, figmaNode);
+  Object.assign(penpotNode, dropUnstrokedWidthTokens(tokens, penpotNode));
 
   return penpotNode;
 }

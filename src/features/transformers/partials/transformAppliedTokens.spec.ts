@@ -1,4 +1,4 @@
-import { transformAppliedTokens } from '@figpot/src/features/transformers/partials/transformAppliedTokens';
+import { dropUnstrokedWidthTokens, transformAppliedTokens } from '@figpot/src/features/transformers/partials/transformAppliedTokens';
 import { SubcanvasNodeWithSlot } from '@figpot/src/models/entities/figma/slot';
 import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 
@@ -145,5 +145,19 @@ describe('transformAppliedTokens() bindings', () => {
     const node = { boundVariables: { topLeftRadius: alias('V:size'), topRightRadius: alias('V:c') } } as unknown as SubcanvasNodeWithSlot;
 
     expect(transformAppliedTokens(registry, node)).toEqual({ appliedTokens: { r1: 'size.4' } });
+  });
+});
+
+describe('dropUnstrokedWidthTokens()', () => {
+  const result = { appliedTokens: { strokeWidthTop: 'w', strokeWidthLeft: 'w', fill: 'c' } };
+
+  it('drops the stroke width tokens of shapes without stroke only', () => {
+    expect(dropUnstrokedWidthTokens(result, { strokes: [] })).toEqual({ appliedTokens: { fill: 'c' } });
+    expect(dropUnstrokedWidthTokens(result, {})).toEqual({ appliedTokens: { fill: 'c' } });
+    expect(dropUnstrokedWidthTokens(result, { strokes: [{ strokeWidth: 1 }] })).toEqual(result);
+  });
+
+  it('gives no applied tokens when only stroke width ones were there', () => {
+    expect(dropUnstrokedWidthTokens({ appliedTokens: { strokeWidthTop: 'w' } }, {})).toEqual({});
   });
 });

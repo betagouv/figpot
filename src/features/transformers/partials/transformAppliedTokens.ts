@@ -51,6 +51,28 @@ function applyToken(
   }
 }
 
+const STROKE_WIDTH_PROPERTIES = ['strokeWidthTop', 'strokeWidthRight', 'strokeWidthBottom', 'strokeWidthLeft'];
+
+/**
+ * Figma can bind the weight of strokes on a node without any visible stroke (a component whose border only shows in some
+ * variants, or an outline-only vector drawn as fills from its stroke geometry). Penpot applying a stroke width token to a
+ * shape without stroke creates one with its default black color, so these tokens are dropped from such shapes
+ */
+export function dropUnstrokedWidthTokens(
+  result: { appliedTokens?: Record<string, string> },
+  penpotNode: object
+): { appliedTokens?: Record<string, string> } {
+  const strokes = 'strokes' in penpotNode ? penpotNode.strokes : undefined;
+
+  if (!result.appliedTokens || (Array.isArray(strokes) && strokes.length > 0)) {
+    return result;
+  }
+
+  const appliedTokens = Object.fromEntries(Object.entries(result.appliedTokens).filter(([property]) => !STROKE_WIDTH_PROPERTIES.includes(property)));
+
+  return Object.keys(appliedTokens).length > 0 ? { ...result, appliedTokens: appliedTokens } : {};
+}
+
 // Figma layers paints front-to-back so the visible colour belongs to the topmost solid paint; the
 // variable (if any) is bound on that specific paint, not on the node
 function applyPaintColorToken(

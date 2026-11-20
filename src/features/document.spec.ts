@@ -87,6 +87,66 @@ describe('document comparaison', () => {
     });
   });
 
+  describe('with token themes', () => {
+    function getEquivalentTrees() {
+      const mapping: MappingType = {
+        lastExport: new Date(),
+        assets: new Map(),
+        documents: new Map(),
+        fonts: new Map(),
+        nodes: new Map([
+          ['0:0', '00000000-0000-0000-0000-000000000000'],
+          ['0:1', '4bf0e9f6-08c8-809c-8004-85445179c2aa'],
+        ]),
+        colors: new Map(),
+        typographies: new Map(),
+        components: new Map(),
+        tokenSets: new Map(),
+        tokens: new Map(),
+        tokenThemes: new Map(),
+      };
+
+      const transformedTree = transformDocument(
+        emptyFigmaTree as GetFileResponse,
+        [],
+        [],
+        { variables: {}, variableCollections: {} },
+        [],
+        new Map(),
+        new Map(),
+        new Map(),
+        mapping,
+        '/tmp/figpot-test-data'
+      );
+      const cleanHostedTree = cleanHostedDocument(JSON.parse(JSON.stringify(emptyPenpotTree)));
+
+      return { cleanHostedTree, transformedTree };
+    }
+
+    const theme = (name: string, sets: string[]) => ({ id: `id-${name}`, name: name, group: 'G', sets: sets });
+
+    it('should ignore the order of the active themes and of the sets of a theme', () => {
+      const { cleanHostedTree, transformedTree } = getEquivalentTrees();
+
+      // Penpot keeps them as sets, returned in any order
+      cleanHostedTree.data.tokenThemes = { 'G/a': theme('a', ['s2', 's1']), 'G/b': theme('b', ['s3']) };
+      cleanHostedTree.data.activeTokenThemes = ['G/b', 'G/a'];
+      transformedTree.data.tokenThemes = { 'G/a': theme('a', ['s1', 's2']), 'G/b': theme('b', ['s3']) };
+      transformedTree.data.activeTokenThemes = ['G/a', 'G/b'];
+
+      expect(getDifferences(cleanHostedTree, transformedTree).newTreeOperations).toEqual([]);
+    });
+
+    it('should require changes when the sets differ', () => {
+      const { cleanHostedTree, transformedTree } = getEquivalentTrees();
+
+      cleanHostedTree.data.tokenThemes = { 'G/a': theme('a', ['s2', 's1']) };
+      transformedTree.data.tokenThemes = { 'G/a': theme('a', ['s1', 's3']) };
+
+      expect(getDifferences(cleanHostedTree, transformedTree).newTreeOperations.map((operation) => operation.type)).toEqual(['set-token-theme']);
+    });
+  });
+
   describe('with rectangle', () => {
     const penpotTree = JSON.parse(JSON.stringify(withRectangePenpotTree)); // Deep copy to isolate each test
 

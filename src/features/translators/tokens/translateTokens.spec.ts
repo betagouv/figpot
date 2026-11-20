@@ -254,3 +254,91 @@ describe('translateTokens()', () => {
     expect(second.tokenSets['C/M'].tokens['c'].id).toBe(first.tokenSets['C/M'].tokens['c'].id);
   });
 });
+
+describe('translateTokens() aliases', () => {
+  const modes = [{ modeId: 'm:1', name: 'Default' }];
+
+  function expectNoDanglingReference(tokens: Record<string, { value: unknown }>) {
+    const names = new Set(Object.keys(tokens));
+
+    for (const token of Object.values(tokens)) {
+      for (const [, reference] of String(token.value).matchAll(/\{([^}]+)\}/g)) {
+        expect(names).toContain(reference);
+      }
+    }
+  }
+
+  it('refers to a token the aliased variable gives, whatever the order and the scopes', () => {
+    // `spacing.any` (all scopes, so one token per type) is listed before the variable it aliases, which is scoped to sizes
+    // only: the alias of its `borderRadius` token cannot refer to a `borderRadius` token of `size.4`, there is none
+    const collection = makeCollection({ id: 'C:1', name: 'Dimensions', modes, defaultModeId: 'm:1', variableIds: ['V:any', 'V:4'] });
+    const any = makeVariable({
+      id: 'V:any',
+      name: 'spacing/any',
+      variableCollectionId: 'C:1',
+      resolvedType: 'FLOAT',
+      scopes: ['ALL_SCOPES'],
+      valuesByMode: { 'm:1': { type: 'VARIABLE_ALIAS', id: 'V:4' } },
+    });
+    const four = makeVariable({
+      id: 'V:4',
+      name: 'size/4',
+      variableCollectionId: 'C:1',
+      resolvedType: 'FLOAT',
+      scopes: ['WIDTH_HEIGHT'],
+      valuesByMode: { 'm:1': 4 },
+    });
+
+    const tokens = translateTokens(makeData([collection], [any, four]), makeMapping()).tokenSets['Dimensions/Default'].tokens;
+
+    // The aliased token keeps its own name (no `-1` from a name reserved for a token never written)
+    expect(tokens['size.4']).toMatchObject({ type: 'sizing', value: '4' });
+    expect(tokens['spacing.any-borderRadius']).toMatchObject({ type: 'borderRadius', value: '{size.4}' });
+    expectNoDanglingReference(tokens);
+  });
+
+  it('skips the aliases leading to a variable that gives no token, through a chain of aliases', () => {
+    // `a` aliases `b` which aliases a variable of a remote collection (not synchronized)
+    const collection = makeCollection({ id: 'C:1', name: 'Dimensions', modes, defaultModeId: 'm:1', variableIds: ['V:a', 'V:b', 'V:ok'] });
+    const remoteCollection = makeCollection({
+      id: 'C:remote',
+      name: 'Library',
+      modes,
+      defaultModeId: 'm:1',
+      variableIds: ['V:remote'],
+      remote: true,
+    });
+    const variables = [
+      makeVariable({
+        id: 'V:a',
+        name: 'a',
+        variableCollectionId: 'C:1',
+        resolvedType: 'FLOAT',
+        scopes: ['GAP'],
+        valuesByMode: { 'm:1': { type: 'VARIABLE_ALIAS', id: 'V:b' } },
+      }),
+      makeVariable({
+        id: 'V:b',
+        name: 'b',
+        variableCollectionId: 'C:1',
+        resolvedType: 'FLOAT',
+        scopes: ['GAP'],
+        valuesByMode: { 'm:1': { type: 'VARIABLE_ALIAS', id: 'V:remote' } },
+      }),
+      makeVariable({ id: 'V:ok', name: 'ok', variableCollectionId: 'C:1', resolvedType: 'FLOAT', scopes: ['GAP'], valuesByMode: { 'm:1': 8 } }),
+      makeVariable({
+        id: 'V:remote',
+        name: 'remote',
+        variableCollectionId: 'C:remote',
+        resolvedType: 'FLOAT',
+        scopes: ['GAP'],
+        valuesByMode: { 'm:1': 4 },
+        remote: true,
+      }),
+    ];
+
+    const tokens = translateTokens(makeData([collection, remoteCollection], variables), makeMapping()).tokenSets['Dimensions/Default'].tokens;
+
+    expect(Object.keys(tokens)).toEqual(['ok']);
+  });
+});

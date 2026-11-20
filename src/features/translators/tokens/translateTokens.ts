@@ -75,7 +75,7 @@ function translateTokenValueForType(
   rawValue: FigmaVariableValue,
   type: TokenType,
   variables: FigmaVariablesData['variables'],
-  resolveAliasName: (aliasedVariable: LocalVariable, type: TokenType) => string,
+  resolveAliasName: (aliasedVariable: LocalVariable, type: TokenType) => string | undefined,
   mapping: MappingType
 ): string | string[] | undefined {
   if (isVariableAlias(rawValue)) {
@@ -90,7 +90,16 @@ function translateTokenValueForType(
       return undefined;
     }
 
-    return `{${resolveAliasName(aliasedVariable, type)}}`;
+    // Same when the aliased variable gives no token (unsupported values, not synchronized...), the reference would dangle
+    const aliasName = resolveAliasName(aliasedVariable, type);
+    if (aliasName === undefined) {
+      console.warn(
+        `skipping the token for the Figma variable "${variable.name}" because the variable it aliases ("${aliasedVariable.name}") gives no Penpot token`
+      );
+      return undefined;
+    }
+
+    return `{${aliasName}}`;
   }
 
   switch (type) {
@@ -152,18 +161,84 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
     return finalName;
   };
 
-  for (const collection of Object.values(data.variableCollections)) {
-    if (collection.remote) {
-      continue;
+  // The collections whose variables are written, and these variables
+  const collections = Object.values(data.variableCollections).filter((collection) => !collection.remote);
+  const writtenVariableIds = new Set(
+    collections.flatMap((collection) =>
+      collection.variableIds.filter((variableId) => data.variables[variableId] && !data.variables[variableId].remote)
+    )
+  );
+
+  const isComposedColor = (rawValue: FigmaVariableValue) =>
+    typeof rawValue === 'object' && rawValue !== null && 'color' in rawValue && 'opacity' in rawValue;
+
+  // Whether a variable gives a token of a type in at least one of its modes, following its aliases (an alias gives a token
+  // only if the variable it aliases does, maybe with another type: a Figma alias has no type, and an `ALL_SCOPES` variable
+  // can alias a variable scoped to a single use)
+  const givesTokenCache = new Map<string, boolean>();
+  const givesToken = (variable: LocalVariable, type: TokenType, visiting = new Set<string>()): boolean => {
+    const key = `${variable.id}/${type}`;
+    const cached = givesTokenCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    } else if (visiting.has(key) || !writtenVariableIds.has(variable.id) || !translateScope(variable).includes(type)) {
+      return false;
     }
 
+    visiting.add(key);
+
+    const result = Object.values(variable.valuesByMode).some((rawValue) => {
+      if (isComposedColor(rawValue)) {
+        return false;
+      } else if (isVariableAlias(rawValue)) {
+        const aliasedVariable = data.variables[rawValue.id];
+
+        return !!aliasedVariable && getAliasedType(aliasedVariable, type, visiting) !== undefined;
+      }
+
+      return translateTokenValueForType(variable, rawValue, type, data.variables, () => undefined, mapping) !== undefined;
+    });
+
+    givesTokenCache.set(key, result);
+
+    return result;
+  };
+
+  // The type of the token an alias refers to: the same type if the aliased variable gives it, or else another one it gives
+  const getAliasedType = (aliasedVariable: LocalVariable, type: TokenType, visiting?: Set<string>): TokenType | undefined => {
+    const types = translateScope(aliasedVariable);
+
+    return [type, ...types.filter((otherType) => otherType !== type)].find((candidate) => givesToken(aliasedVariable, candidate, visiting));
+  };
+
+  const resolveAliasName = (aliasedVariable: LocalVariable, type: TokenType): string | undefined => {
+    const aliasedType = getAliasedType(aliasedVariable, type);
+
+    return aliasedType !== undefined ? getName(aliasedVariable, aliasedType) : undefined;
+  };
+
+  // The tokens are named in the order of the collections before writing any, so the names (made unique in naming order)
+  // do not depend on the aliases
+  for (const collection of collections) {
+    for (const variableId of collection.variableIds) {
+      const variable = data.variables[variableId];
+
+      for (const type of variable && writtenVariableIds.has(variableId) ? translateScope(variable) : []) {
+        if (givesToken(variable, type)) {
+          getName(variable, type);
+        }
+      }
+    }
+  }
+
+  for (const collection of collections) {
     for (const mode of collection.modes) {
       const setPath = uniqueName(`${translateTokenSetPath(collection.name)}/${translateTokenSetPath(mode.name)}`, usedSetPaths);
       const tokens: Record<string, Token> = {};
 
       for (const variableId of collection.variableIds) {
         const variable = data.variables[variableId];
-        if (!variable || variable.remote) {
+        if (!writtenVariableIds.has(variableId)) {
           continue;
         }
 
@@ -173,7 +248,7 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
         }
 
         // A color composed with another variable (for its color or its opacity) has no Penpot token equivalent for now
-        if (typeof rawValue === 'object' && rawValue !== null && 'color' in rawValue && 'opacity' in rawValue) {
+        if (isComposedColor(rawValue)) {
           console.warn(
             `skipping the token for the Figma variable "${variable.name}" because its color is composed with another variable, which figpot cannot translate`
           );
@@ -194,7 +269,7 @@ export function translateTokens(data: FigmaVariablesData, mapping: MappingType):
         }
 
         for (const type of types) {
-          const value = translateTokenValueForType(variable, rawValue, type, data.variables, getName, mapping);
+          const value = translateTokenValueForType(variable, rawValue, type, data.variables, resolveAliasName, mapping);
           if (value === undefined) {
             continue;
           }

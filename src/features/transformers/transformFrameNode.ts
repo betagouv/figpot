@@ -10,6 +10,7 @@ import { transformInheritance } from '@figpot/src/features/transformers/partials
 import {
   adaptFillingOnlyChild,
   buildLayoutGridCells,
+  freezeHuggingFrameWithoutLaidOutChildren,
   transformAutoLayout,
   transformLayoutAttributes,
 } from '@figpot/src/features/transformers/partials/transformLayout';
@@ -53,8 +54,9 @@ export function transformFrameNode(
   let frameSpecificAttributes: Partial<FrameShape> = {};
 
   if (!isSectionNode(node)) {
-    // Before translating the frame sizing and its children since it adjusts them
+    // Before translating the frame sizing and its children since they adjust them
     adaptFillingOnlyChild(node);
+    freezeHuggingFrameWithoutLaidOutChildren(node);
 
     // TODO: Figma API does not expose strokes, blend modes, corner radius, or constraint proportions for sections,
     // they plan to add it in the future. Refactor this when available.

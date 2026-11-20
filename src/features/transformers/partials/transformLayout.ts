@@ -153,6 +153,58 @@ export function adaptFillingOnlyChild(node: {
   }
 }
 
+/**
+ * An auto layout frame hugging its content takes the size of the children laid out in it. When there are none (they are all
+ * positioned absolutely, hidden, or removed by the exclusions), Figma keeps the frame size whereas Penpot collapses it at the
+ * next layout computation, with its absolute children (an icon placed absolutely in a frame disappears after a variant switch).
+ * Its Figma size is kept as a fixed one on the hugging axes instead.
+ *
+ * It must run on a frame before translating its own sizing (it adjusts the Figma node in place)
+ */
+export function freezeHuggingFrameWithoutLaidOutChildren(
+  node: Partial<
+    Pick<
+      HasFramePropertiesTrait & HasLayoutTrait,
+      'layoutMode' | 'layoutSizingHorizontal' | 'layoutSizingVertical' | 'primaryAxisSizingMode' | 'counterAxisSizingMode'
+    >
+  > & {
+    children?: object[];
+  }
+): void {
+  if (!node.children || !node.layoutMode || node.layoutMode === 'NONE') {
+    return;
+  }
+
+  // Only the properties read here matter, whatever the type of the Figma children
+  const hasLaidOutChildren = (node.children as FillingChild[]).some((child) => child.layoutPositioning !== 'ABSOLUTE' && child.visible !== false);
+  if (hasLaidOutChildren) {
+    return;
+  }
+
+  const isHorizontalLayout = node.layoutMode === 'HORIZONTAL';
+
+  if (node.layoutSizingHorizontal === 'HUG') {
+    node.layoutSizingHorizontal = 'FIXED';
+
+    // Legacy properties expressing the same along the layout axes
+    if (isHorizontalLayout) {
+      node.primaryAxisSizingMode = 'FIXED';
+    } else {
+      node.counterAxisSizingMode = 'FIXED';
+    }
+  }
+
+  if (node.layoutSizingVertical === 'HUG') {
+    node.layoutSizingVertical = 'FIXED';
+
+    if (isHorizontalLayout) {
+      node.counterAxisSizingMode = 'FIXED';
+    } else {
+      node.primaryAxisSizingMode = 'FIXED';
+    }
+  }
+}
+
 export function transformLayoutAttributes(
   node: HasLayoutTrait & Partial<HasChildrenTrait>
 ): Pick<

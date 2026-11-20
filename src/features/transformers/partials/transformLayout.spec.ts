@@ -1,4 +1,4 @@
-import { adaptFillingOnlyChild } from '@figpot/src/features/transformers/partials/transformLayout';
+import { adaptFillingOnlyChild, freezeHuggingFrameWithoutLaidOutChildren } from '@figpot/src/features/transformers/partials/transformLayout';
 
 type Frame = Parameters<typeof adaptFillingOnlyChild>[0];
 function hugFrame(children: object[]): Frame {
@@ -53,5 +53,34 @@ describe('adaptFillingOnlyChild()', () => {
 
     expect(text.layoutSizingHorizontal).toBe('FILL');
     expect(text.style.textAutoResize).toBe('HEIGHT');
+  });
+});
+
+describe('freezeHuggingFrameWithoutLaidOutChildren()', () => {
+  it('fixes the hugging axes of a frame whose children are all absolute or hidden', () => {
+    const frame = {
+      layoutMode: 'HORIZONTAL' as const,
+      layoutSizingHorizontal: 'HUG' as const,
+      layoutSizingVertical: 'FIXED' as const,
+      primaryAxisSizingMode: 'AUTO' as const,
+      children: [{ layoutPositioning: 'ABSOLUTE' }, { visible: false }],
+    };
+
+    freezeHuggingFrameWithoutLaidOutChildren(frame);
+
+    expect(frame.layoutSizingHorizontal).toBe('FIXED');
+    expect(frame.primaryAxisSizingMode).toBe('FIXED');
+    expect(frame.layoutSizingVertical).toBe('FIXED');
+  });
+
+  it('keeps hugging when a child is laid out, or without auto layout', () => {
+    const laidOut = { layoutMode: 'VERTICAL' as const, layoutSizingVertical: 'HUG' as const, children: [{ layoutPositioning: 'ABSOLUTE' }, {}] };
+    const noLayout = { layoutMode: 'NONE' as const, layoutSizingVertical: 'HUG' as const, children: [{ layoutPositioning: 'ABSOLUTE' }] };
+
+    freezeHuggingFrameWithoutLaidOutChildren(laidOut);
+    freezeHuggingFrameWithoutLaidOutChildren(noLayout);
+
+    expect(laidOut.layoutSizingVertical).toBe('HUG');
+    expect(noLayout.layoutSizingVertical).toBe('HUG');
   });
 });

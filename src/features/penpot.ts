@@ -299,9 +299,21 @@ export function retrievePenpotVersion(): Promise<{ major: number; minor: number 
     penpotVersionPromise = (async () => {
       try {
         const response = await fetch(`${penpotBaseUrl}/version.txt`);
-        const match = response.ok ? (await response.text()).match(/^(\d+)\.(\d+)/) : null;
+        if (!response.ok) {
+          return null;
+        }
 
-        return match ? { major: parseInt(match[1], 10), minor: parseInt(match[2], 10) } : null;
+        const text = await response.text();
+        const match = text.match(/^(\d+)\.(\d+)/);
+        if (match) {
+          return { major: parseInt(match[1], 10), minor: parseInt(match[2], 10) };
+        }
+
+        // A release always has this file, whereas a development instance (built from sources) has none (the interface page is
+        // served instead) or reports no number: it is ahead of any release
+        console.warn(`the Penpot instance "${penpotBaseUrl}" reports no release version, considering it a development one ahead of any release`);
+
+        return { major: Number.MAX_SAFE_INTEGER, minor: 0 };
       } catch {
         return null;
       }

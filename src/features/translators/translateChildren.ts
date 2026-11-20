@@ -1,5 +1,6 @@
 import { HasLayoutTrait, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
 import { getRelatedNodeId } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
+import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
 import { transformGroupNodeLike } from '@figpot/src/features/transformers/transformGroupNode';
 import { transformSceneNode } from '@figpot/src/features/transformers/transformSceneNode';
 import { registerId, translateComponentShapeId, translateId } from '@figpot/src/features/translators/translateId';
@@ -122,6 +123,9 @@ export function translateMaskChildren(
     frameId: translateId(closestFigmaFrameId, registry.getMapping()),
     ...transformGroupNodeLike(registry, maskChild, parentCumulativeTransform),
     name: `${maskChild.name} - Mask group`,
+    // The group follows the mask when its parent is resized (an icon frame resized by a token scales its drawing), as in
+    // Figma where the constraints are those of the layers. Without any the group would stay anchored at its top left
+    ...transformConstraints(maskChild as HasLayoutTrait),
     maskedGroup: true,
     ...(maskRelatedNodeId ? { shapeRef: translateComponentShapeId(maskRelatedNodeId, 'M') } : {}),
     shapes: maskShapes,

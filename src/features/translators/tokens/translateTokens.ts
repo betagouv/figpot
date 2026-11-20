@@ -190,12 +190,61 @@ function withExtraVariables(data: FigmaVariablesData): FigmaVariablesData {
   };
 }
 
+// A library variable hidden from publishing is not listed by its collection, but variables of the file can alias it: such
+// a variable is added to its collection (when no listed variable of that collection has its name, see `resolveAliasName`),
+// or the aliases to it would give no token. Followed through aliases, only the variables actually referenced are added
+export function withReferencedUnlistedVariables(data: FigmaVariablesData): FigmaVariablesData {
+  const listed = new Set(Object.values(data.variableCollections).flatMap((collection) => collection.variableIds));
+  const listedNames = new Set(
+    Object.values(data.variables)
+      .filter((variable) => listed.has(variable.id))
+      .map((variable) => `${variable.variableCollectionId}/${variable.name}`)
+  );
+  const added = new Map<string, string[]>(); // collection ID -> variable IDs to add
+
+  const queue = Object.values(data.variables).filter((variable) => listed.has(variable.id));
+  const seen = new Set(queue.map((variable) => variable.id));
+  while (queue.length > 0) {
+    const variable = queue.shift() as LocalVariable;
+
+    for (const value of Object.values(variable.valuesByMode)) {
+      if (!isVariableAlias(value) || seen.has(value.id)) {
+        continue;
+      }
+      seen.add(value.id);
+
+      const target = data.variables[value.id];
+      if (!target || !data.variableCollections[target.variableCollectionId]) {
+        continue;
+      }
+
+      if (!listed.has(target.id) && !listedNames.has(`${target.variableCollectionId}/${target.name}`)) {
+        added.set(target.variableCollectionId, [...(added.get(target.variableCollectionId) ?? []), target.id]);
+      }
+
+      queue.push(target);
+    }
+  }
+
+  if (added.size === 0) {
+    return data;
+  }
+
+  const variableCollections = { ...data.variableCollections };
+  for (const [collectionId, variableIds] of added) {
+    const collection = variableCollections[collectionId];
+    variableCollections[collectionId] = { ...collection, variableIds: [...collection.variableIds, ...variableIds] };
+  }
+
+  return { ...data, variableCollections: variableCollections };
+}
+
 export function translateTokens(
   originalData: FigmaVariablesData,
   mapping: MappingType,
   replaceFontPatterns: ReplaceFontPatternType[] = []
 ): TranslatedTokens {
-  const data = withExtraVariables(originalData);
+  const data = withReferencedUnlistedVariables(withExtraVariables(originalData));
 
   const tokenSets: Record<string, TokenSet> = {};
   const tokenThemes: Record<string, TokenTheme> = {};
@@ -235,7 +284,7 @@ export function translateTokens(
   // types it does give (a Figma alias has no type, an `ALL_SCOPES` variable can alias a variable scoped to a single
   // use). Only names of tokens that exist: naming a (variable, type) pair the aliased variable does not give would
   // reserve a name for a token never written, so the reference would dangle and push the real token to a `-1` name
-  const resolveAliasName = (aliasedVariable: LocalVariable, type: TokenType): string | undefined => {
+  const resolveAliasNameOf = (aliasedVariable: LocalVariable, type: TokenType): string | undefined => {
     const sameType = variableTokenNames.get(`${aliasedVariable.id}/${type}`);
     if (sameType !== undefined) {
       return sameType;
@@ -245,6 +294,33 @@ export function translateTokens(
       const name = variableTokenNames.get(`${aliasedVariable.id}/${otherType}`);
       if (name !== undefined) {
         return name;
+      }
+    }
+
+    return undefined;
+  };
+
+  // A library can hold the same variable under two IDs (a copy the file subscribed to and the one its collection lists),
+  // aliases may target the one its collection does not list, which gives no token: the variable of the same name in the
+  // same collection stands for it
+  const variablesByCollectionAndName = new Map<string, LocalVariable[]>();
+  for (const variable of Object.values(data.variables)) {
+    const key = `${variable.variableCollectionId}/${variable.name}`;
+    variablesByCollectionAndName.set(key, [...(variablesByCollectionAndName.get(key) ?? []), variable]);
+  }
+
+  const resolveAliasName = (aliasedVariable: LocalVariable, type: TokenType): string | undefined => {
+    const direct = resolveAliasNameOf(aliasedVariable, type);
+    if (direct !== undefined) {
+      return direct;
+    }
+
+    for (const twin of variablesByCollectionAndName.get(`${aliasedVariable.variableCollectionId}/${aliasedVariable.name}`) ?? []) {
+      if (twin.id !== aliasedVariable.id) {
+        const name = resolveAliasNameOf(twin, type);
+        if (name !== undefined) {
+          return name;
+        }
       }
     }
 

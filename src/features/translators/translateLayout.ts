@@ -44,18 +44,27 @@ export function translateLayoutGapType(layoutMode: FigmaLayoutMode, itemSpacing:
   return 'multiple';
 }
 
-export function translateLayoutGap(layoutMode: FigmaLayoutMode, itemSpacing: number, auto: boolean = false): LayoutGap {
-  if (auto) {
-    return {
-      rowGap: 0,
-      columnGap: 0,
-    };
-  }
+/**
+ * The gap along the layout direction is `itemSpacing` (none when the items are spread), and the gap between the lines of a
+ * wrapping layout is `counterAxisSpacing` (none when the lines are spread, Figma ignores it then)
+ */
+export function translateLayoutGap(
+  layoutMode: FigmaLayoutMode,
+  itemSpacing: number,
+  auto: boolean = false,
+  counterAxisSpacing: number = 0
+): LayoutGap {
+  const mainGap = auto ? 0 : itemSpacing;
 
   return {
-    rowGap: layoutMode === 'VERTICAL' ? itemSpacing : 0,
-    columnGap: layoutMode === 'HORIZONTAL' ? itemSpacing : 0,
+    rowGap: layoutMode === 'VERTICAL' ? mainGap : counterAxisSpacing,
+    columnGap: layoutMode === 'HORIZONTAL' ? mainGap : counterAxisSpacing,
   };
+}
+
+// `counterAxisSpacing` only applies to a wrapping layout whose lines are not spread
+export function hasCounterAxisSpacing(node: Pick<HasFramePropertiesTrait, 'layoutWrap' | 'counterAxisAlignContent'>): boolean {
+  return node.layoutWrap === 'WRAP' && node.counterAxisAlignContent !== 'SPACE_BETWEEN';
 }
 
 export function translateLayoutWrapType(wrap: FigmaWrap): LayoutWrapType {

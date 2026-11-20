@@ -1,4 +1,4 @@
-import { translateGridTracks } from '@figpot/src/features/translators/translateLayout';
+import { translateGridTracks, translateLayoutGap } from '@figpot/src/features/translators/translateLayout';
 
 describe('translateGridTracks()', () => {
   it('makes hugging tracks auto', () => {
@@ -31,5 +31,16 @@ describe('translateGridTracks()', () => {
     expect(translateGridTracks(undefined, 2)).toEqual(equal);
     expect(translateGridTracks('repeat(3,fit-content(100%))', 2)).toEqual(equal);
     expect(translateGridTracks('10px calc(100% - 10px)', 2)).toEqual(equal);
+  });
+});
+
+describe('translateLayoutGap()', () => {
+  it('puts the spacing along the layout direction and the spacing between wrapped lines on the other axis', () => {
+    expect(translateLayoutGap('HORIZONTAL', 8, false, 16)).toEqual({ rowGap: 16, columnGap: 8 });
+    expect(translateLayoutGap('VERTICAL', 8, false, 16)).toEqual({ rowGap: 8, columnGap: 16 });
+  });
+
+  it('keeps the spacing between wrapped lines when the items are spread', () => {
+    expect(translateLayoutGap('HORIZONTAL', 8, true, 16)).toEqual({ rowGap: 16, columnGap: 0 });
   });
 });

@@ -118,6 +118,16 @@ describe('transformAppliedTokens() bindings', () => {
     expect(transformAppliedTokens(registry, grid)).toEqual({ appliedTokens: { rowGap: 'space.row', columnGap: 'space.gap' } });
   });
 
+  it('binds the spacing between the lines of a wrapping layout to the other gap', () => {
+    const registry = makeRegistry({ 'V:gap/spacing': 'space.gap', 'V:line/spacing': 'space.line' });
+    const boundVariables = { itemSpacing: alias('V:gap'), counterAxisSpacing: alias('V:line') };
+    const wrapping = { layoutMode: 'HORIZONTAL', layoutWrap: 'WRAP', boundVariables: boundVariables } as unknown as SubcanvasNodeWithSlot;
+    const notWrapping = { layoutMode: 'HORIZONTAL', layoutWrap: 'NO_WRAP', boundVariables: boundVariables } as unknown as SubcanvasNodeWithSlot;
+
+    expect(transformAppliedTokens(registry, wrapping)).toEqual({ appliedTokens: { rowGap: 'space.line', columnGap: 'space.gap' } });
+    expect(transformAppliedTokens(registry, notWrapping)).toEqual({ appliedTokens: { columnGap: 'space.gap' } });
+  });
+
   it('falls back to another number token the variable gives, never to a color', () => {
     // A variable scoped to sizes only gives a `sizing` token, bound here to a radius
     const registry = makeRegistry({ 'V:size/sizing': 'size.4', 'V:c/color': 'color.brand' });

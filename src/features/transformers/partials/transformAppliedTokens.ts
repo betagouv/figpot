@@ -1,4 +1,5 @@
 import { Paint, VariableAlias } from '@figpot/src/clients/figma';
+import { hasCounterAxisSpacing } from '@figpot/src/features/translators/translateLayout';
 import { SubcanvasNodeWithSlot } from '@figpot/src/models/entities/figma/slot';
 import { TokenType } from '@figpot/src/models/entities/penpot/traits/token';
 import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
@@ -95,12 +96,21 @@ export function transformAppliedTokens(registry: BoundVariableRegistry, node: Su
     record('p3', 'spacing', boundVariables.paddingBottom);
     record('p4', 'spacing', boundVariables.paddingLeft);
 
-    // Like the gap values (see `translateLayoutGap()`), the spacing of a flex layout is the gap along its direction, and grid
-    // layouts have their own gaps (missing from the API types)
+    // Like the gap values (see `translateLayoutGap()`), the spacing of a flex layout is the gap along its direction and the
+    // spacing between its lines the other one when it wraps, and grid layouts have their own gaps (missing from the API types)
     const gridGaps = boundVariables as { gridRowGap?: VariableAlias; gridColumnGap?: VariableAlias };
     const layoutMode = 'layoutMode' in node ? node.layoutMode : undefined;
-    record('rowGap', 'spacing', layoutMode === 'VERTICAL' ? boundVariables.itemSpacing : gridGaps.gridRowGap);
-    record('columnGap', 'spacing', layoutMode === 'HORIZONTAL' ? boundVariables.itemSpacing : gridGaps.gridColumnGap);
+    const counterAxisSpacing = 'layoutWrap' in node && hasCounterAxisSpacing(node) ? boundVariables.counterAxisSpacing : undefined;
+    record(
+      'rowGap',
+      'spacing',
+      layoutMode === 'VERTICAL' ? boundVariables.itemSpacing : layoutMode === 'HORIZONTAL' ? counterAxisSpacing : gridGaps.gridRowGap
+    );
+    record(
+      'columnGap',
+      'spacing',
+      layoutMode === 'HORIZONTAL' ? boundVariables.itemSpacing : layoutMode === 'VERTICAL' ? counterAxisSpacing : gridGaps.gridColumnGap
+    );
 
     record('opacity', 'opacity', boundVariables.opacity);
     record('width', 'sizing', boundVariables.size?.x);

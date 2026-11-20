@@ -8,6 +8,7 @@ import {
 } from '@figpot/src/clients/figma';
 import { translateId } from '@figpot/src/features/translators/translateId';
 import {
+  hasCounterAxisSpacing,
   translateGridChildAlign,
   translateLayoutAlignContent,
   translateLayoutAlignItems,
@@ -34,7 +35,12 @@ export function transformAutoLayout(node: HasFramePropertiesTrait & HasLayoutTra
       layoutGapType: node.itemSpacing !== undefined ? translateLayoutGapType(node.layoutMode, node.itemSpacing, false) : undefined,
       layoutGap:
         node.itemSpacing !== undefined
-          ? translateLayoutGap(node.layoutMode, node.itemSpacing, node.primaryAxisAlignItems === 'SPACE_BETWEEN')
+          ? translateLayoutGap(
+              node.layoutMode,
+              node.itemSpacing,
+              node.primaryAxisAlignItems === 'SPACE_BETWEEN',
+              hasCounterAxisSpacing(node) ? node.counterAxisSpacing ?? 0 : 0
+            )
           : undefined,
       layoutPadding: translateLayoutPadding(node),
       layoutPaddingType: translateLayoutPaddingType(node),

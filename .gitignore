@@ -23,9 +23,5 @@ yarn-error.log*
 # data
 /data/
 
-# generated clients (our settings are applied at runtime from `src/clients/workaround.ts`)
-/src/clients/figma/
-/src/clients/penpot/
-
 # local env files
 *.local

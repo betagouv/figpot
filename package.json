@@ -24,7 +24,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "postinstall": "patch-package",
-    "setup": "npm run client:generate && npm run cli deps",
+    "setup": "npm run cli deps",
     "build": "tsup",
     "dev": "tsup --watch",
     "cli": "dotenv-run-script .env.test -- cli:unsecure",
@@ -38,6 +38,8 @@
     "test:unit": "npm run jest --- --ci --passWithNoTests",
     "test:unit:watch": "npm run jest --- --watch",
     "client:generate": "openapi-ts -f openapi-ts.config.ts",
+    "client:update": "tsx scripts/update-api-specs.ts && npm run client:generate",
+    "client:check": "tsx scripts/update-api-specs.ts --check",
     "clean": "rm -rf dist && rm -rf node_modules",
     "cm": "cz",
     "patchright": "patchright",

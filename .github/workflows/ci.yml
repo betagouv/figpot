@@ -49,8 +49,18 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Setup API clients
-        run: npm run client:generate
+      - name: Check the API clients match their committed specifications
+        run: |
+          npm run client:generate
+          if [ -n "$(git status --porcelain -- src/clients)" ]; then
+            git status --short -- src/clients
+            echo "::error::the committed API clients differ from what their specifications generate, run \"npm run client:generate\" and commit the result (they must not be modified by hand)"
+            exit 1
+          fi
+
+      - name: Check the API specifications are up to date
+        continue-on-error: true # Only informative, so an unreachable API does not block
+        run: npm run client:check
 
       - name: Lint
         run: npm run lint

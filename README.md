@@ -302,9 +302,11 @@ Make sure to use a Node.js version aligned with one specified into `.nvmrc`. The
 
 ```shell
 npm install
-npm run setup # the API clients are generated from `openapi-ts.config.ts`, our own settings are applied at runtime from `src/clients/workaround.ts`. Note also we do not use fixed schema version since their SaaS API evolve all the time. We rely on types check to detect any breaking change so we can adjust our logic
+npm run setup
 cp .env.model .env.local
 ```
+
+The Figma and Penpot API clients (`src/clients/figma` and `src/clients/penpot`) are generated from their OpenAPI specifications committed into `src/clients/specs` (see `openapi-ts.config.ts`), they must not be modified by hand: our own settings are applied at runtime from `src/clients/workaround.ts`. Since their SaaS APIs evolve all the time, the CI warns when the committed specifications are outdated, then run `npm run client:update` to download them and regenerate the clients, the types check will tell if our logic has to be adjusted.
 
 Open `.env.local` and fill it with information as for a normal library usage. Then you are able to run:
 

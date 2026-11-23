@@ -29,16 +29,16 @@ function neutralizeEmptyObjectSchemas(spec: any) {
   }
 }
 
-// Note: we do not use fixed schema versions since their SaaS API evolve all the time, we rely on types check to detect breaking changes
+// Generated from the committed specifications (updated with `npm run client:update`) so the generated clients can be checked against them
 export default defineConfig([
   {
-    input: 'https://raw.githubusercontent.com/figma/rest-api-spec/main/openapi/openapi.yaml',
+    input: 'src/clients/specs/figma.yaml',
     output: 'src/clients/figma',
     parser: { patch: { input: neutralizeEmptyObjectSchemas } },
     plugins: [...plugins],
   },
   {
-    input: 'https://design.penpot.app/api/main/doc/openapi.json',
+    input: 'src/clients/specs/penpot.json',
     output: 'src/clients/penpot',
     parser: { patch: { input: neutralizeEmptyObjectSchemas } },
     plugins: [...plugins],

@@ -1,6 +1,7 @@
 import { Command, InvalidArgumentError, Option } from '@commander-js/extra-typings';
 import { $ } from 'execa';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 import {
   CompareOptions,
@@ -24,10 +25,14 @@ import { ExportOptions, exportDocuments } from '@figpot/src/features/export';
 import { FigmaFileMetaCache, processDocumentsParametersFromInput, retrieveDocumentsFromInput } from '@figpot/src/features/figma';
 import { ensureAccessTokens, ensureCredentials } from '@figpot/src/utils/environment';
 import { getMemoryAdvice, getMemoryContext } from '@figpot/src/utils/memory';
+import { findPackageVersion, formatVersion } from '@figpot/src/utils/version';
 
 export const program = new Command();
 
-program.name('@betagouv/figpot').description('CLI to perform actions between Figma and Penpot').version('0.0.0');
+program
+  .name('@betagouv/figpot')
+  .description('CLI to perform actions between Figma and Penpot')
+  .version(formatVersion(findPackageVersion(path.dirname(fileURLToPath(import.meta.url)))));
 
 // A crash due to the memory cannot be reported since the process is killed, so warning ahead about a risky configuration
 program.hook('preAction', () => {

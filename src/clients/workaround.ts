@@ -1,13 +1,8 @@
 import { Readable } from 'stream';
-import streamChain from 'stream-chain';
-import Asm from 'stream-json/Assembler.js';
-import streamJsonParser from 'stream-json/Parser.js';
 import { ReadableStream } from 'stream/web';
 
 import { PostUpdateFileData } from '@figpot/src/clients/penpot';
-
-const { chain } = streamChain;
-const { parser } = streamJsonParser;
+import { readBigJsonStream } from '@figpot/src/utils/file';
 
 export async function getJsonResponseBody(response: Response): Promise<any> {
   // [WORKAROUND] When the content is over 500MB it cannot fit into a string to be parsed (e.g. error `ERR_STRING_TOO_LONG`)
@@ -34,19 +29,7 @@ export async function getJsonResponseBody(response: Response): Promise<any> {
     // Ref: https://github.com/DefinitelyTyped/DefinitelyTyped/discussions/65542
     const stream = Readable.fromWeb(response.body as ReadableStream<any>);
 
-    return await new Promise((resolve, reject) => {
-      const pipeline = chain([stream, parser()]);
-
-      pipeline.once('error', (error) => {
-        reject(error);
-      });
-
-      const asm = Asm.connectTo(pipeline);
-
-      asm.once('done', (asm) => {
-        resolve(asm.current);
-      });
-    });
+    return await readBigJsonStream(stream, `the response of ${response.url}`);
   } else {
     return await response.json();
   }

@@ -11,7 +11,6 @@ import ora from 'ora';
 import { Request, chromium } from 'patchright';
 import path from 'path';
 import setCookieParser from 'set-cookie-parser';
-import { parser } from 'stream-json';
 import { Digraph, toDot } from 'ts-graphviz';
 import { toFile } from 'ts-graphviz/adapter';
 import { validate as uuidValidate } from 'uuid';

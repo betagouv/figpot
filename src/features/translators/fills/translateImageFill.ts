@@ -1,6 +1,7 @@
+import fs from 'fs';
 import { globSync } from 'glob';
 import { mimeData } from 'human-filetypes';
-import sizeOf from 'image-size';
+import { imageSize } from 'image-size';
 import path from 'path';
 
 import { ImagePaint } from '@figpot/src/clients/figma';
@@ -25,7 +26,8 @@ export function translateImageFill(registry: BoundVariableRegistry, fill: ImageP
 
   assert(filesWithExtensionPaths.length === 1);
 
-  const dimensions = sizeOf(filesWithExtensionPaths[0]);
+  // `image-size` only reads files asynchronously, whereas this has to stay synchronous, so reading the file ourselves
+  const dimensions = imageSize(fs.readFileSync(filesWithExtensionPaths[0]));
 
   assert(dimensions.width);
   assert(dimensions.height);

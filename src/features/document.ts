@@ -14,7 +14,7 @@ import setCookieParser from 'set-cookie-parser';
 import { parser } from 'stream-json';
 import { Digraph, toDot } from 'ts-graphviz';
 import { toFile } from 'ts-graphviz/adapter';
-import { validate as uuidValidate, v7 as uuidv7 } from 'uuid';
+import { validate as uuidValidate } from 'uuid';
 import { z } from 'zod';
 
 import {
@@ -2778,13 +2778,16 @@ export async function resolveNewPenpotFiles(dataDir: string, documents: Document
       choices: activeProjects.map((project) => ({ name: project.name, value: project.id })),
     });
 
-    // The Penpot client types does not yet bring `create-file` response, so for simplicity we force a random UUID to avoid retrieving it
-    const penpotFileId = uuidv7();
-
     // Using temporarily a fallback name, the right one will be set at the synchronization step
     const placeholderName = `figpot: pending first synchronization (${doc.figmaDocument})`;
 
-    await postCreateFile({ requestBody: { name: placeholderName, projectId, id: penpotFileId } });
+    // Penpot generates the identifier (since v2.19 it rejects a provided one), and the client types do not bring the response
+    const createdFile = (await postCreateFile({ requestBody: { name: placeholderName, projectId } })) as unknown as { id?: string } | undefined;
+    if (!createdFile?.id) {
+      throw new Error('Penpot did not return the identifier of the created file');
+    }
+
+    const penpotFileId = createdFile.id;
 
     // Touch an empty mapping for this freshly created file so the subsequent `restoreMapping`
     // doesn't trigger the "Are you sure to continue by overriding the target document?" prompt:

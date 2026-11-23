@@ -16,17 +16,8 @@ import { toFile } from 'ts-graphviz/adapter';
 import { validate as uuidValidate } from 'uuid';
 import { z } from 'zod';
 
+import { Component, GetFileNodesResponse, GetFileResponse, GetLocalVariablesResponse, Style, getImageFills } from '@figpot/src/clients/figma';
 import {
-  Component,
-  ApiError as FigmaApiError,
-  GetFileNodesResponse,
-  GetFileResponse,
-  GetLocalVariablesResponse,
-  Style,
-  getImageFills,
-} from '@figpot/src/clients/figma';
-import {
-  OpenAPI as PenpotClientSettings,
   postCreateFile,
   postGetFontVariants,
   postGetProjectFiles,
@@ -35,8 +26,14 @@ import {
   postLinkFileToLibrary,
   postSetFileShared,
 } from '@figpot/src/clients/penpot';
-import { ApiError as PenpotApiError, PostGetFileResponse, postGetFile, postRenameFile, postUpdateFile } from '@figpot/src/clients/penpot';
-import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/workaround';
+import { PostGetFileResponse, postGetFile, postRenameFile, postUpdateFile } from '@figpot/src/clients/penpot';
+import {
+  ApiError,
+  appCommonFilesChanges$changeWithoutUnknown,
+  ignoreResponse,
+  readBigJsonResponse,
+  streamedResponse,
+} from '@figpot/src/clients/workaround';
 import { chunkOperations, splitOperationsInHalves, stripGroupMarkers } from '@figpot/src/features/chunks';
 import {
   FigmaDefinedColor,
@@ -87,7 +84,7 @@ import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { Token, TokenSet, TokenTheme } from '@figpot/src/models/entities/penpot/traits/token';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot/src/utils/comparaison';
-import { config, figmaRateLimitContext, penpotApiBaseUrl } from '@figpot/src/utils/environment';
+import { config, figmaRateLimitContext, getPenpotAuthorization, penpotApiBaseUrl } from '@figpot/src/utils/environment';
 import { downloadFile, openAsBlob, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
 import { getMemoryAdvice, getMemoryContext } from '@figpot/src/utils/memory';
 import { sleep } from '@figpot/src/utils/sleep';
@@ -581,9 +578,11 @@ export async function retrieve(options: RetrieveOptionsType, figmaMetaCache: Fig
     // Penpot library colors come only from Figma color styles whereas Figma color variables are exported as Penpot design tokens
     const figmaColors: FigmaDefinedColor[] = useCache ? await readFigmaColorsFile(options.dataDir, document.figmaDocument) : [];
 
-    const customPenpotFontsVariants = (await postGetFontVariants({
-      requestBody: options.penpotProjectId ? { projectId: options.penpotProjectId } : { fileId: document.penpotDocument },
-    })) as unknown as any[];
+    const customPenpotFontsVariants = (
+      await postGetFontVariants({
+        body: options.penpotProjectId ? { projectId: options.penpotProjectId } : { fileId: document.penpotDocument },
+      })
+    ).data as unknown as any[];
 
     if (options.syncMappingWithGit) {
       await restoreMappingFromRepository(options.dataDir, document.figmaDocument, document.penpotDocument);
@@ -619,7 +618,7 @@ export async function retrieve(options: RetrieveOptionsType, figmaMetaCache: Fig
         // 2. The caller's role on the file is "viewer" (must be "editor" or "owner" to call `getFile`)
         // Pop a cheap `getFileMeta` to distinguish and surface the actionable reason
         const errBody = (error as unknown as { body?: { err?: string } }).body;
-        if (error instanceof FigmaApiError && error.status === 403 && errBody?.err === 'File not exportable') {
+        if (error instanceof ApiError && error.status === 403 && errBody?.err === 'File not exportable') {
           const access = await retrieveFigmaFileAccessInfo(figmaMetaCache, document.figmaDocument);
           const label = access?.name ? `"${access.name}" (${document.figmaDocument})` : `"${document.figmaDocument}"`;
 
@@ -638,7 +637,7 @@ export async function retrieve(options: RetrieveOptionsType, figmaMetaCache: Fig
           );
         }
 
-        if (error instanceof FigmaApiError && error.status === 429) {
+        if (error instanceof ApiError && error.status === 429) {
           const retryAfterHeader = figmaRateLimitContext.retryAfter;
           const rateLimitTypeHeader = figmaRateLimitContext.rateLimitType;
           const retryAfterSeconds = retryAfterHeader && /^\d+$/.test(retryAfterHeader) ? parseInt(retryAfterHeader, 10) : null;
@@ -718,8 +717,8 @@ export async function retrieve(options: RetrieveOptionsType, figmaMetaCache: Fig
     }
 
     // Save images
-    const imagesList = await getImageFills({
-      fileKey: document.figmaDocument,
+    const { data: imagesList } = await getImageFills({
+      path: { file_key: document.figmaDocument },
     });
 
     await fs.mkdir(getMediasFolderPath(options.dataDir), { recursive: true });
@@ -2146,16 +2145,19 @@ export async function compare(options: CompareOptionsType) {
 
     const meta = await restoreMeta(options.dataDir, document.figmaDocument, document.penpotDocument);
 
-    let hostedDocument: Awaited<ReturnType<typeof postGetFile>>;
+    let hostedDocument: PostGetFileResponse;
 
     const penpotFetchSpinner = ora(`Fetching current state of Penpot file "${document.penpotDocument}"…`).start();
 
     try {
-      hostedDocument = await postGetFile({
-        requestBody: {
+      const { data } = await postGetFile({
+        body: {
           id: document.penpotDocument,
         },
+        ...streamedResponse, // A file can be too big to be parsed as a string
       });
+
+      hostedDocument = await readBigJsonResponse<PostGetFileResponse>(data, `the Penpot file "${document.penpotDocument}"`);
 
       penpotFetchSpinner.succeed(`Fetched current state of Penpot file "${document.penpotDocument}"`);
     } catch (error) {
@@ -2192,7 +2194,7 @@ export async function compare(options: CompareOptionsType) {
 
 // Errors from an intermediary (gateway, proxy) or a cut connection, meaning the request may still have been processed
 function isGatewayFailure(error: unknown): boolean {
-  if (error instanceof PenpotApiError) {
+  if (error instanceof ApiError) {
     return [502, 503, 504, 520, 522, 524].includes(error.status);
   }
 
@@ -2209,7 +2211,7 @@ export type PenpotFileVersion = {
 // and gets slower until the gateway times out
 export async function getPenpotFileVersion(penpotProjectId: string, penpotDocumentId: string): Promise<PenpotFileVersion | null> {
   // `get-project-files` is used since it does not load the file content contrary to `get-file`
-  const files = (await postGetProjectFiles({ requestBody: { projectId: penpotProjectId } })) as unknown as Array<{
+  const files = (await postGetProjectFiles({ body: { projectId: penpotProjectId } })).data as unknown as Array<{
     id: string;
     revn: number;
     vern: number;
@@ -2249,8 +2251,8 @@ export async function processOperationsChunk(
   serverValidation: boolean = true,
   version: PenpotFileVersion = { revn: 0, vern: 0 }
 ) {
-  await postUpdateFile({
-    requestBody: {
+  const { data } = await postUpdateFile({
+    body: {
       id: penpotDocumentId,
       revn: version.revn,
       vern: version.vern,
@@ -2258,7 +2260,10 @@ export async function processOperationsChunk(
       changes: currentChunk,
       skipValidate: !serverValidation,
     },
+    ...streamedResponse, // Not using the answer, see `ignoreResponse()`
   });
+
+  await ignoreResponse(data);
 }
 
 // Deeply replace string values (not keys) matching one of the replacements, used to swap identifiers inside operations
@@ -2286,7 +2291,7 @@ export async function processDifferences(
   // Note: seeing the name change in the UI requires a browser page refresh
   if (differences.newDocumentName) {
     await postRenameFile({
-      requestBody: {
+      body: {
         id: penpotDocumentId,
         name: differences.newDocumentName,
       },
@@ -2379,7 +2384,7 @@ export async function processDifferences(
           body: formData,
           headers: {
             Accept: 'application/json',
-            Authorization: (PenpotClientSettings.HEADERS as any)?.Authorization,
+            Authorization: getPenpotAuthorization(),
           },
         });
 
@@ -2465,7 +2470,7 @@ export async function processDifferences(
         // apply them twice
         // Note: without the current revision it cannot be confirmed, so the push stops
         const gatewayFailure = isGatewayFailure(error);
-        const serverFailure = error instanceof PenpotApiError && error.status === 500;
+        const serverFailure = error instanceof ApiError && error.status === 500;
 
         if (!(gatewayFailure || serverFailure) || !version) {
           throw error;
@@ -2495,7 +2500,7 @@ export async function processDifferences(
       try {
         await pushOperations(operations);
       } catch (error) {
-        if (!(error instanceof PenpotApiError && error.status === 500)) {
+        if (!(error instanceof ApiError && error.status === 500)) {
           throw error;
         }
 
@@ -2744,7 +2749,7 @@ export async function resolveNewPenpotFiles(dataDir: string, documents: Document
     );
   }
 
-  const teams = (await postGetTeams({ requestBody: {} })) as unknown as Array<{
+  const teams = (await postGetTeams({ body: {} })).data as unknown as Array<{
     id: string;
     name: string;
     permissions: { isOwner: boolean; isAdmin: boolean; canEdit: boolean };
@@ -2770,7 +2775,7 @@ export async function resolveNewPenpotFiles(dataDir: string, documents: Document
     });
 
     // Do not consider projects that have been soft-deleted
-    const projects = (await postGetProjects({ requestBody: { teamId } })) as unknown as Array<{ id: string; name: string; deletedAt?: string }>;
+    const projects = (await postGetProjects({ body: { teamId } })).data as unknown as Array<{ id: string; name: string; deletedAt?: string }>;
     const activeProjects = projects.filter((project) => !project.deletedAt);
 
     const projectId = await select({
@@ -2782,7 +2787,7 @@ export async function resolveNewPenpotFiles(dataDir: string, documents: Document
     const placeholderName = `figpot: pending first synchronization (${doc.figmaDocument})`;
 
     // Penpot generates the identifier (since v2.19 it rejects a provided one), and the client types do not bring the response
-    const createdFile = (await postCreateFile({ requestBody: { name: placeholderName, projectId } })) as unknown as { id?: string } | undefined;
+    const createdFile = (await postCreateFile({ body: { name: placeholderName, projectId } })).data as unknown as { id?: string } | undefined;
     if (!createdFile?.id) {
       throw new Error('Penpot did not return the identifier of the created file');
     }
@@ -2818,7 +2823,7 @@ export async function resolveNewPenpotFiles(dataDir: string, documents: Document
 
 // Walks on Penpot teams → projects → files for the authenticated Penpot user and returns pickable file
 async function fetchAllPenpotFileChoices(): Promise<Array<{ name: string; value: string; disabled: false | string }>> {
-  const teams = (await postGetTeams({ requestBody: {} })) as unknown as Array<{
+  const teams = (await postGetTeams({ body: {} })).data as unknown as Array<{
     id: string;
     name: string;
     permissions: { isOwner: boolean; isAdmin: boolean; canEdit: boolean };
@@ -2828,7 +2833,7 @@ async function fetchAllPenpotFileChoices(): Promise<Array<{ name: string; value:
 
   for (const team of teams) {
     // Do not consider projects that have been soft-deleted
-    const projects = (await postGetProjects({ requestBody: { teamId: team.id } })) as unknown as Array<{
+    const projects = (await postGetProjects({ body: { teamId: team.id } })).data as unknown as Array<{
       id: string;
       name: string;
       deletedAt?: string;
@@ -2839,7 +2844,7 @@ async function fetchAllPenpotFileChoices(): Promise<Array<{ name: string; value:
         continue;
       }
 
-      const files = (await postGetProjectFiles({ requestBody: { projectId: project.id } })) as unknown as Array<{
+      const files = (await postGetProjectFiles({ body: { projectId: project.id } })).data as unknown as Array<{
         id: string;
         name: string;
         deletedAt?: string;
@@ -3215,7 +3220,7 @@ export async function synchronize(options: SynchronizeOptionsType, figmaMetaCach
         // considers shared files as libraries, so a library file is shared once before being linked
         if (!sharedLibraries.has(penpotLibraryId)) {
           try {
-            await postSetFileShared({ requestBody: { id: penpotLibraryId, isShared: true } });
+            await postSetFileShared({ body: { id: penpotLibraryId, isShared: true } });
 
             sharedLibraries.add(penpotLibraryId);
           } catch (error) {
@@ -3227,7 +3232,7 @@ export async function synchronize(options: SynchronizeOptionsType, figmaMetaCach
 
         try {
           await postLinkFileToLibrary({
-            requestBody: {
+            body: {
               fileId: consumer.penpotDocument,
               libraryId: penpotLibraryId,
             },

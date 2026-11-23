@@ -1,7 +1,7 @@
-import { textAlignHorizontal } from '@figpot/src/clients/figma';
+import { BaseTypeStyle } from '@figpot/src/clients/figma';
 import { TextHorizontalAlign } from '@figpot/src/models/entities/penpot/shapes/text';
 
-export function translateHorizontalAlign(align: textAlignHorizontal | undefined): TextHorizontalAlign {
+export function translateHorizontalAlign(align: BaseTypeStyle['textAlignHorizontal']): TextHorizontalAlign {
   switch (align) {
     case 'RIGHT':
       return 'right';

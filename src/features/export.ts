@@ -5,7 +5,6 @@ import os from 'os';
 import path from 'path';
 import { z } from 'zod';
 
-import { OpenAPI as PenpotClientSettings } from '@figpot/src/clients/penpot';
 import {
   DocumentOptions,
   DocumentOptionsType,
@@ -25,7 +24,7 @@ import {
 import { FigmaFileMetaCache, retrieveFigmaFileName } from '@figpot/src/features/figma';
 import { PenpotArchiveExternalLibrary, PenpotArchiveFile, writePenpotArchive } from '@figpot/src/features/penpotArchive';
 import { translateMediaPlaceholderId } from '@figpot/src/features/translators/translateId';
-import { penpotApiBaseUrl } from '@figpot/src/utils/environment';
+import { getPenpotAuthorization, penpotApiBaseUrl } from '@figpot/src/utils/environment';
 import { deterministicUuid } from '@figpot/src/utils/uuid';
 
 export const ExportOptions = z.object({
@@ -65,7 +64,7 @@ async function penpotRequest(method: string, body: FormData | object, accept: st
     headers: {
       Accept: accept,
       ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-      Authorization: (PenpotClientSettings.HEADERS as any)?.Authorization,
+      Authorization: getPenpotAuthorization(),
     },
   });
 

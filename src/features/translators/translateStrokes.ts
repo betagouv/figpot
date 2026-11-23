@@ -1,4 +1,4 @@
-import { HasGeometryTrait, IndividualStrokesTrait, Paint, strokeAlign as StrokeAlign } from '@figpot/src/clients/figma';
+import { HasGeometryTrait, IndividualStrokesTrait, MinimalStrokesTrait, Paint } from '@figpot/src/clients/figma';
 import { translateFill } from '@figpot/src/features/translators/fills/translateFills';
 import { Stroke, StrokeAlignment, StrokeCaps } from '@figpot/src/models/entities/penpot/traits/stroke';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
@@ -132,7 +132,7 @@ function isIndividualStrokes(node: HasGeometryTrait | IndividualStrokesTrait): n
   return 'individualStrokeWeights' in node;
 }
 
-function translateStrokeAlignment(strokeAlign: StrokeAlign): StrokeAlignment {
+function translateStrokeAlignment(strokeAlign: NonNullable<MinimalStrokesTrait['strokeAlign']>): StrokeAlignment {
   switch (strokeAlign) {
     case 'CENTER':
       return 'center';

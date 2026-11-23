@@ -1,24 +1,25 @@
 import { input, password } from '@inquirer/prompts';
 
-import { OpenAPI as FigmaClientSettings } from '@figpot/src/clients/figma';
-import { OpenAPI as PenpotClientSettings } from '@figpot/src/clients/penpot';
+import { client as figmaClient } from '@figpot/src/clients/figma/client.gen';
+import { client as penpotClient } from '@figpot/src/clients/penpot/client.gen';
+// Registers our error handling on the clients
+import '@figpot/src/clients/workaround';
 import { AccessTokenConfigSchema, CredentialsConfigSchema } from '@figpot/src/models/entities/environment';
 
 export const penpotBaseUrl = process.env.PENPOT_BASE_URL ?? 'https://design.penpot.app';
 export const penpotApiBaseUrl = `${penpotBaseUrl}/api/main/methods`;
 
-// The generated client does `BASE + path` where `path` has no leading slash, so BASE must end with a trailing one
-PenpotClientSettings.BASE = `${penpotApiBaseUrl}/`;
+penpotClient.setConfig({ baseUrl: penpotApiBaseUrl });
 
 // Captured from the latest Figma response so callers can inspect rate-limit metadata after an `ApiError` is thrown.
-// The generated `ApiError` doesn't carry headers, so we stash them via a response interceptor (no patching of the generated client).
+// The `ApiError` doesn't carry headers, so we stash them via a response interceptor.
 // Reset on every response so a later non-429 call doesn't leave stale values around for a subsequent catch.
 export const figmaRateLimitContext: { retryAfter: string | null; rateLimitType: string | null } = {
   retryAfter: null,
   rateLimitType: null,
 };
 
-FigmaClientSettings.interceptors.response.use((response) => {
+figmaClient.interceptors.response.use((response) => {
   if (response.status === 429) {
     figmaRateLimitContext.retryAfter = response.headers.get('retry-after');
     figmaRateLimitContext.rateLimitType = response.headers.get('x-figma-rate-limit-type');
@@ -57,18 +58,28 @@ export async function ensureAccessTokens(prompting: boolean = true) {
     config.penpotAccessToken = result.data.PENPOT_ACCESS_TOKEN;
   }
 
-  FigmaClientSettings.HEADERS = {
-    'X-Figma-Token': config.figmaAccessToken,
-  };
+  figmaClient.setConfig({
+    headers: {
+      'X-Figma-Token': config.figmaAccessToken,
+    },
+  });
 
-  PenpotClientSettings.HEADERS = {
-    Authorization: getPenpotAuthorizationHeader(config.penpotAccessToken),
-  };
+  // Penpot answers with Transit by default, whereas the generated client expects JSON
+  penpotClient.setConfig({
+    headers: {
+      Accept: 'application/json',
+      Authorization: getPenpotAuthorizationHeader(config.penpotAccessToken),
+    },
+  });
 }
 
 // An access token is sent as `Token <value>`. When the instance does not enable the `access-tokens` flag (no section in the profile
 // to create one, and the backend ignores them), the session token of a logged-in browser (value of the `auth-token` cookie) can be
 // used instead by prefixing it with `Bearer ` (supported since Penpot 2.12). An explicit `Token ` prefix is also accepted
+export function getPenpotAuthorization(): string {
+  return getPenpotAuthorizationHeader(config.penpotAccessToken);
+}
+
 export function getPenpotAuthorizationHeader(value: string): string {
   const trimmedValue = value.trim();
 

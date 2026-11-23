@@ -8,7 +8,7 @@ module.exports = {
     sourceType: 'module',
   },
   env: { node: true, browser: true, jest: true },
-  ignorePatterns: ['data', 'dist'],
+  ignorePatterns: ['data', 'dist', 'src/clients/figma', 'src/clients/penpot'], // The API clients are generated
   rules: {
     'interface-name': 'off',
     'no-console': 'off',
@@ -23,13 +23,6 @@ module.exports = {
     // 'import/no-unused-modules': [1, { unusedExports: true }],
   },
   overrides: [
-    {
-      files: ['src/clients/figma/core/*.ts', 'src/clients/penpot/core/*.ts'],
-      rules: {
-        'no-prototype-builtins': 'off',
-        'no-undef': 'off',
-      },
-    },
     {
       files: ['figma-plugins/**/*.js'],
       globals: {

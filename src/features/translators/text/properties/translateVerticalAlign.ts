@@ -1,7 +1,7 @@
-import { textAlignVertical } from '@figpot/src/clients/figma';
+import { BaseTypeStyle } from '@figpot/src/clients/figma';
 import { TextVerticalAlign } from '@figpot/src/models/entities/penpot/shapes/text';
 
-export function translateVerticalAlign(align: textAlignVertical | undefined): TextVerticalAlign {
+export function translateVerticalAlign(align: BaseTypeStyle['textAlignVertical']): TextVerticalAlign {
   switch (align) {
     case 'BOTTOM':
       return 'bottom';

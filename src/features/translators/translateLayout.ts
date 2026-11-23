@@ -1,10 +1,4 @@
-import {
-  gridChildHorizontalAlign as FigmaGridChildAlign,
-  HasChildrenTrait,
-  HasFramePropertiesTrait,
-  HasLayoutTrait,
-  SubcanvasNode,
-} from '@figpot/src/clients/figma';
+import { HasChildrenTrait, HasFramePropertiesTrait, HasLayoutTrait, SubcanvasNode } from '@figpot/src/clients/figma';
 import {
   GridTrack,
   JustifyAlignContent,
@@ -19,6 +13,8 @@ import {
   LayoutSizing,
   LayoutWrapType,
 } from '@figpot/src/models/entities/penpot/layout';
+
+type FigmaGridChildAlign = NonNullable<HasLayoutTrait['gridChildHorizontalAlign']>;
 
 type FigmaLayoutMode = 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID';
 

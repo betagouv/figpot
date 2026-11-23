@@ -1,11 +1,6 @@
 import { NIL as NIL_UUID, v5 as uuidv5 } from 'uuid';
 
-import {
-  gridChildHorizontalAlign as FigmaGridChildAlign,
-  HasChildrenTrait,
-  HasFramePropertiesTrait,
-  HasLayoutTrait,
-} from '@figpot/src/clients/figma';
+import { HasChildrenTrait, HasFramePropertiesTrait, HasLayoutTrait } from '@figpot/src/clients/figma';
 import { translateId } from '@figpot/src/features/translators/translateId';
 import {
   hasCounterAxisSpacing,
@@ -28,6 +23,8 @@ import {
 } from '@figpot/src/features/translators/translateLayout';
 import { GridCell, LayoutAttributes, LayoutChildAttributes } from '@figpot/src/models/entities/penpot/layout';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
+
+type FigmaGridChildAlign = NonNullable<HasLayoutTrait['gridChildHorizontalAlign']>;
 
 export function transformAutoLayout(node: HasFramePropertiesTrait & HasLayoutTrait): LayoutAttributes {
   if (node.layoutMode !== undefined) {

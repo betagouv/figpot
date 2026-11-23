@@ -302,7 +302,7 @@ Make sure to use a Node.js version aligned with one specified into `.nvmrc`. The
 
 ```shell
 npm install
-npm run setup # our workarounds of the generated `*/request.ts` files are applied from `src/clients/patches/` (if the generator changes these files the patches fail to apply, so they have to be updated). Note also we do not use fixed schema version since their SaaS API evolve all the time. We rely on types check to detect any breaking change so we can adjust our logic
+npm run setup # the API clients are generated from `openapi-ts.config.ts`, our own settings are applied at runtime from `src/clients/workaround.ts`. Note also we do not use fixed schema version since their SaaS API evolve all the time. We rely on types check to detect any breaking change so we can adjust our logic
 cp .env.model .env.local
 ```
 

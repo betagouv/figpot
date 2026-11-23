@@ -37,9 +37,7 @@
     "lint:ts": "tsc --noEmit --incremental false",
     "test:unit": "npm run jest --- --ci --passWithNoTests",
     "test:unit:watch": "npm run jest --- --watch",
-    "client:generate": "npm run client:figma:generate && npm run client:penpot:generate",
-    "client:figma:generate": "openapi-ts -i https://raw.githubusercontent.com/figma/rest-api-spec/main/openapi/openapi.yaml -o src/clients/figma && git apply src/clients/patches/figma-request.patch",
-    "client:penpot:generate": "openapi-ts -i https://design.penpot.app/api/main/doc/openapi.json -o src/clients/penpot && git apply src/clients/patches/penpot-request.patch",
+    "client:generate": "openapi-ts -f openapi-ts.config.ts",
     "clean": "rm -rf dist && rm -rf node_modules",
     "cm": "cz",
     "patchright": "patchright",
@@ -81,7 +79,7 @@
   },
   "devDependencies": {
     "@figma/rest-api-spec": "^0.15.0",
-    "@hey-api/openapi-ts": "^0.46.3",
+    "@hey-api/openapi-ts": "^0.99.0",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/archiver": "^5.3.4",
     "@types/chalk": "^2.2.0",
@@ -109,7 +107,7 @@
     "ts-node": "^10.9.1",
     "tsup": "^8.1.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.2.2"
+    "typescript": "^5.9.3"
   },
   "packageManager": "npm@11.7.0",
   "engines": {
@@ -124,8 +122,5 @@
     "branches": [
       "main"
     ]
-  },
-  "overrides": {
-    "handlebars": "4.7.10"
   }
 }

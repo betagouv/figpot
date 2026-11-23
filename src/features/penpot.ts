@@ -1,6 +1,6 @@
 import svgPathParser from 'svg-path-parser';
 
-import { OpenAPI as PenpotClientSettings, PostGetFileResponse } from '@figpot/src/clients/penpot';
+import { PostGetFileResponse } from '@figpot/src/clients/penpot';
 import {
   formatPageRootFrameId,
   rootFrameId,
@@ -11,7 +11,7 @@ import {
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { Token, TokenSet, TokenTheme, TokenType } from '@figpot/src/models/entities/penpot/traits/token';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
-import { penpotApiBaseUrl, penpotBaseUrl } from '@figpot/src/utils/environment';
+import { getPenpotAuthorization, penpotApiBaseUrl, penpotBaseUrl } from '@figpot/src/utils/environment';
 
 import { translateNonRotatedCommands } from './translators/vectors/translateNonRotatedCommands';
 
@@ -354,7 +354,7 @@ export async function measureBrowserFileResponseSize(fileId: string): Promise<nu
     }
 
     return fetch(`${penpotApiBaseUrl}/get-file?${searchParams.toString()}`, {
-      headers: { ...(PenpotClientSettings.HEADERS as Record<string, string>), Accept: 'application/transit+json' },
+      headers: { Authorization: getPenpotAuthorization(), Accept: 'application/transit+json' },
     });
   };
 

@@ -28,6 +28,7 @@ import {
   getStyle,
   getTeamProjects,
 } from '@figpot/src/clients/figma';
+import { readBigJsonResponse, streamedResponse } from '@figpot/src/clients/workaround';
 import { DocumentOptionsType, ExcludePatternsType, ReplaceFontPatternType } from '@figpot/src/features/document';
 import { MainCopies, buildMainCopies } from '@figpot/src/features/mainCopies';
 import { translateScope } from '@figpot/src/features/translators/tokens/translateScope';
@@ -111,10 +112,12 @@ export async function retrieveStylesNodes(documentId: string, stylesIds: string[
   const chunks = chunkIdsForUrlLength(stylesIds, `https://api.figma.com/v1/files/${documentId}/nodes?depth=1&ids=`);
 
   for (const stylesIds of chunks) {
-    const response = await getFileNodes({
-      fileKey: documentId,
-      ids: stylesIds.join(','),
-      depth: 1, // Should only return styles but just in case...
+    const { data: response } = await getFileNodes({
+      path: { file_key: documentId },
+      query: {
+        ids: stylesIds.join(','),
+        depth: 1, // Should only return styles but just in case...
+      },
     });
 
     // Merge nodes objects
@@ -139,12 +142,14 @@ export async function retrieveTextPathImages(documentId: string, textPathNodeIds
   );
 
   for (const nodeIds of chunks) {
-    const response = await getImages({
-      fileKey: documentId,
-      ids: nodeIds.join(','),
-      format: 'svg',
-      svgOutlineText: true,
-      useAbsoluteBounds: true,
+    const { data: response } = await getImages({
+      path: { file_key: documentId },
+      query: {
+        ids: nodeIds.join(','),
+        format: 'svg',
+        svg_outline_text: true,
+        use_absolute_bounds: true,
+      },
     });
 
     // Merge image maps
@@ -156,7 +161,7 @@ export async function retrieveTextPathImages(documentId: string, textPathNodeIds
 
 export async function retrieveVariables(documentId: string): Promise<GetLocalVariablesResponse['meta']> {
   try {
-    const localVariablesResult = await getLocalVariables({ fileKey: documentId });
+    const { data: localVariablesResult } = await getLocalVariables({ path: { file_key: documentId } });
 
     return localVariablesResult.meta;
   } catch (error) {
@@ -219,7 +224,7 @@ export async function retrieveRemoteComponents(
   let scopeWarningEmitted = false;
   for (const componentKey of keysToFetch) {
     try {
-      const result = await getComponent({ key: componentKey });
+      const { data: result } = await getComponent({ path: { key: componentKey } });
 
       remoteComponentSourceFiles[componentKey] = result.meta.file_key;
     } catch (error) {
@@ -256,7 +261,7 @@ export async function retrieveLibraryMainCopies(remoteComponentSourceFiles: Reco
 
   for (const [figmaFile, componentKeys] of componentKeysByFile) {
     try {
-      const publishedComponents = await getFileComponents({ fileKey: figmaFile });
+      const { data: publishedComponents } = await getFileComponents({ path: { file_key: figmaFile } });
       const mainIds = publishedComponents.meta.components
         .filter((component) => componentKeys.has(component.key))
         .map((component) => component.node_id);
@@ -264,7 +269,10 @@ export async function retrieveLibraryMainCopies(remoteComponentSourceFiles: Reco
 
       for (const urlChunk of chunkIdsForUrlLength(mainIds, `https://api.figma.com/v1/files/${figmaFile}/nodes?ids=`)) {
         for (let i = 0; i < urlChunk.length; i += mainsPerRequest) {
-          const response = await getFileNodes({ fileKey: figmaFile, ids: urlChunk.slice(i, i + mainsPerRequest).join(',') });
+          const { data: response } = await getFileNodes({
+            path: { file_key: figmaFile },
+            query: { ids: urlChunk.slice(i, i + mainsPerRequest).join(',') },
+          });
 
           for (const node of Object.values(response.nodes)) {
             if (node) {
@@ -290,7 +298,7 @@ export async function retrieveLibraryMainCopies(remoteComponentSourceFiles: Reco
 // returns all (key, file_key) pairs for that library, replacing many `GET /v1/components/:key` fallbacks
 export async function retrieveLibraryPublishedComponents(figmaLibraryFileKey: string): Promise<Array<{ key: string; file_key: string }>> {
   try {
-    const result = await getFileComponents({ fileKey: figmaLibraryFileKey });
+    const { data: result } = await getFileComponents({ path: { file_key: figmaLibraryFileKey } });
 
     return result.meta.components.map((c) => ({ key: c.key, file_key: c.file_key }));
   } catch (error) {
@@ -344,7 +352,7 @@ export async function retrieveRemoteStyles(
   let scopeWarningEmitted = false;
   for (const styleKey of keysToFetch) {
     try {
-      const result = await getStyle({ key: styleKey });
+      const { data: result } = await getStyle({ path: { key: styleKey } });
 
       remoteStyleSourceFiles[styleKey] = result.meta.file_key;
     } catch (error) {
@@ -370,7 +378,7 @@ export async function retrieveRemoteStyles(
 // fallbacks downstream only fire for unknown libraries
 export async function retrieveLibraryPublishedStyles(figmaLibraryFileKey: string): Promise<Array<{ key: string; file_key: string }>> {
   try {
-    const result = await getFileStyles({ fileKey: figmaLibraryFileKey });
+    const { data: result } = await getFileStyles({ path: { file_key: figmaLibraryFileKey } });
     return result.meta.styles.map((s) => ({ key: s.key, file_key: s.file_key }));
   } catch (error) {
     const body = (error as unknown as { body?: ErrorResponsePayloadWithErrorBoolean }).body;
@@ -402,9 +410,8 @@ export class FigmaFileMetaCache {
     const existing = this.promises.get(fileKey);
     if (existing) return existing;
     const p = (async () => {
-      // The OpenAPI-generated type is flattened wrongly, so we cast and read the real path
-      const result = (await getFileMeta({ fileKey })) as unknown as { file?: { name?: string; role?: string; editorType?: string } };
-      return { name: result.file?.name, role: result.file?.role, editorType: result.file?.editorType };
+      const { data: result } = await getFileMeta({ path: { file_key: fileKey } });
+      return { name: result.file.name, role: result.file.role, editorType: result.file.editorType };
     })();
     this.promises.set(fileKey, p);
     // Do not remember failures, a transient error (rate limit...) would otherwise hide the metadata for the rest of the run
@@ -792,14 +799,17 @@ function isInterruptedDownloadError(error: unknown): boolean {
 export async function retrieveDocument(documentId: string) {
   for (let attempt = 1; ; attempt++) {
     try {
-      const documentTree = await getFile({
-        fileKey: documentId,
-        geometry: 'paths', // Needed to have all properties into nodes
+      const { data } = await getFile({
+        path: { file_key: documentId },
+        query: {
+          geometry: 'paths', // Needed to have all properties into nodes
+        },
+        ...streamedResponse, // A file can be too big to be parsed as a string
       });
 
       // TODO: return the metadata
 
-      return documentTree;
+      return await readBigJsonResponse<GetFileResponse>(data, `the Figma document "${documentId}"`);
     } catch (error) {
       if (attempt >= retrieveDocumentAttempts || !isInterruptedDownloadError(error)) {
         throw error;
@@ -815,7 +825,7 @@ export async function retrieveDocument(documentId: string) {
 export async function retrieveDocumentsFromInput(): Promise<string[]> {
   // Teams cannot be gotten so expecting the user to precise it
   const teamId = await input({ message: 'What is the team ID to list the documents from? (you can see it inside the URL once on Figma)' });
-  const teamAndProjects = await getTeamProjects({ teamId: teamId });
+  const { data: teamAndProjects } = await getTeamProjects({ path: { team_id: teamId } });
 
   const projectId = await select({
     message: `Inside the team "${teamAndProjects.name}", select the project to list documents from`,
@@ -831,7 +841,7 @@ export async function retrieveDocumentsFromInput(): Promise<string[]> {
   const project = teamAndProjects.projects.find((p) => p.id === projectId);
   assert(project);
 
-  const projectAndFiles = await getProjectFiles({ projectId: projectId });
+  const { data: projectAndFiles } = await getProjectFiles({ path: { project_id: projectId } });
 
   const documentsKeys = await checkbox({
     message: `Inside the project "${project.name}", select the documents to synchronize into Penpot`,

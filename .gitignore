@@ -23,7 +23,7 @@ yarn-error.log*
 # data
 /data/
 
-# generated clients (our workarounds are applied after the generation from `src/clients/patches/`)
+# generated clients (our settings are applied at runtime from `src/clients/workaround.ts`)
 /src/clients/figma/
 /src/clients/penpot/
 

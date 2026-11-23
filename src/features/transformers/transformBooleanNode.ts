@@ -15,6 +15,7 @@ import { transformStrokes } from '@figpot/src/features/transformers/partials/tra
 import { BooleanOperand } from '@figpot/src/features/transformers/partials/transformVectorPaths';
 import { translateBoolType } from '@figpot/src/features/translators/translateBoolType';
 import { translateId } from '@figpot/src/features/translators/translateId';
+import { computeBoolContent } from '@figpot/src/features/translators/vectors/computeBoolContent';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
 import { BoolContent, BoolShape } from '@figpot/src/models/entities/penpot/shapes/bool';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
@@ -54,13 +55,36 @@ export function transformBooleanNode(
   markBooleanOperands(node);
 
   const childrenShapes = transformChildren(registry, node, closestFigmaFrameId, figmaNodeTransform);
+  const boolType = translateBoolType(node.booleanOperation);
+
+  // Without the geometry from Figma, Penpot would render the boolean empty (and hide everything as a mask): its content is
+  // computed from its operands, already transformed, as Penpot does
+  let content = translatePathNode(node, figmaNodeTransform);
+  if (content.length === 0 && childrenShapes.length > 0) {
+    let computedContent: BoolContent[] | undefined;
+    let reason = 'one of its layers is not a shape the boolean can combine';
+
+    try {
+      computedContent = computeBoolContent(boolType, childrenShapes, (nodeId) => registry.getNode(nodeId));
+    } catch (error) {
+      reason = `the Penpot library rejected its layers (${error instanceof Error ? error.message : String(error)})`;
+    }
+
+    if (computedContent !== undefined) {
+      content = computedContent;
+    } else {
+      console.warn(
+        `the boolean "${node.name}" (id "${node.id}") has no geometry from Figma and its content cannot be computed because ${reason}, it will look empty in Penpot until one of its layers is edited`
+      );
+    }
+  }
 
   return {
     type: 'bool',
     name: node.name,
     shapes: childrenShapes,
-    content: translatePathNode(node, figmaNodeTransform),
-    boolType: translateBoolType(node.booleanOperation),
+    content: content,
+    boolType: boolType,
     ...transformFills(registry, node),
     ...transformEffects(registry, node),
     ...transformStrokes(registry, node),

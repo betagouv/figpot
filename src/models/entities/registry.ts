@@ -39,6 +39,7 @@ export interface BoundVariableRegistry {
 
 export interface AbstractRegistry extends BoundVariableRegistry {
   addNode(node: PenpotNode): void;
+  getNode(nodeId: string): PenpotNode | undefined;
   newComponentScope(): ComponentRegistry;
   newComponentInstanceScope(overrides: Overrides[]): ComponentInstanceRegistry;
   getOverrides(nodeId: string): Overrides['overriddenFields'] | null;
@@ -72,7 +73,11 @@ export class ComponentInstanceRegistry implements AbstractRegistry {
   }
 
   public getNodes() {
-    this.pageRegistry.getNodes();
+    return this.pageRegistry.getNodes();
+  }
+
+  public getNode(nodeId: string) {
+    return this.pageRegistry.getNode(nodeId);
   }
 
   public getMapping() {
@@ -135,7 +140,11 @@ export class ComponentRegistry implements AbstractRegistry {
   }
 
   public getNodes() {
-    this.pageRegistry.getNodes();
+    return this.pageRegistry.getNodes();
+  }
+
+  public getNode(nodeId: string) {
+    return this.pageRegistry.getNode(nodeId);
   }
 
   public getMapping() {
@@ -199,6 +208,10 @@ export class PageRegistry implements AbstractRegistry {
 
   public getNodes() {
     return this.nodes;
+  }
+
+  public getNode(nodeId: string) {
+    return this.nodes.get(nodeId);
   }
 
   public getMapping() {

@@ -22,7 +22,8 @@ export type TranslatedTokens = {
   aliasesToUntokenizedNames: string[]; // variables skipped since aliasing a variable giving no token
 };
 
-type FigmaVariableValue = boolean | number | string | RGBA | VariableAlias;
+// Derived from the generated client since the Figma API keeps adding value kinds (like composed colors)
+type FigmaVariableValue = LocalVariable['valuesByMode'][string];
 
 function isVariableAlias(value: FigmaVariableValue): value is VariableAlias {
   return typeof value === 'object' && value !== null && (value as VariableAlias).type === 'VARIABLE_ALIAS';

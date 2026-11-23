@@ -2111,7 +2111,8 @@ export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocum
         setIds: sets.filter((set) => activeSetNames.has(set.name)).map((set) => set.id),
       } as unknown as (typeof operations)[number]);
     } else {
-      operations.push({ type: 'set-active-token-themes', themePaths: newActiveThemes });
+      // Older Penpot instances only know this operation, which the official instance API no longer describes
+      operations.push({ type: 'set-active-token-themes', themePaths: newActiveThemes } as unknown as (typeof operations)[number]);
     }
   }
 

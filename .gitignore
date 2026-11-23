@@ -23,17 +23,9 @@ yarn-error.log*
 # data
 /data/
 
-# generated clients
-# exclude workaround for the generated clients (cannot be into patch-package due to minified module)
-/src/clients/figma/*
-!/src/clients/figma/core
-/src/clients/figma/core/*
-!/src/clients/figma/core/request.ts
-
-/src/clients/penpot/*
-!/src/clients/penpot/core
-/src/clients/penpot/core/*
-!/src/clients/penpot/core/request.ts
+# generated clients (our workarounds are applied after the generation from `src/clients/patches/`)
+/src/clients/figma/
+/src/clients/penpot/
 
 # local env files
 *.local

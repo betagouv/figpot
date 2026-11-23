@@ -1,13 +1,9 @@
 import { NIL as NIL_UUID, v5 as uuidv5 } from 'uuid';
 
-import {
-  gridChildHorizontalAlign as FigmaGridChildAlign,
-  HasChildrenTrait,
-  HasFramePropertiesTrait,
-  HasLayoutTrait,
-} from '@figpot/src/clients/figma';
+import { HasChildrenTrait, HasFramePropertiesTrait, HasLayoutTrait } from '@figpot/src/clients/figma';
 import { translateId } from '@figpot/src/features/translators/translateId';
 import {
+  hasCounterAxisSpacing,
   translateGridChildAlign,
   translateLayoutAlignContent,
   translateLayoutAlignItems,
@@ -28,13 +24,20 @@ import {
 import { GridCell, LayoutAttributes, LayoutChildAttributes } from '@figpot/src/models/entities/penpot/layout';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
 
+type FigmaGridChildAlign = NonNullable<HasLayoutTrait['gridChildHorizontalAlign']>;
+
 export function transformAutoLayout(node: HasFramePropertiesTrait & HasLayoutTrait): LayoutAttributes {
   if (node.layoutMode !== undefined) {
     const layout = {
       layoutGapType: node.itemSpacing !== undefined ? translateLayoutGapType(node.layoutMode, node.itemSpacing, false) : undefined,
       layoutGap:
         node.itemSpacing !== undefined
-          ? translateLayoutGap(node.layoutMode, node.itemSpacing, node.primaryAxisAlignItems === 'SPACE_BETWEEN')
+          ? translateLayoutGap(
+              node.layoutMode,
+              node.itemSpacing,
+              node.primaryAxisAlignItems === 'SPACE_BETWEEN',
+              hasCounterAxisSpacing(node) ? node.counterAxisSpacing ?? 0 : 0
+            )
           : undefined,
       layoutPadding: translateLayoutPadding(node),
       layoutPaddingType: translateLayoutPaddingType(node),
@@ -72,6 +75,137 @@ export function transformAutoLayout(node: HasFramePropertiesTrait & HasLayoutTra
   }
 
   return {};
+}
+
+type FillingChild = {
+  type: string;
+  layoutMode?: string;
+  layoutPositioning?: string;
+  layoutSizingHorizontal?: string;
+  layoutSizingVertical?: string;
+  visible?: boolean;
+  absoluteBoundingBox?: { height: number } | null;
+  style?: { textAutoResize?: string; lineHeightPx?: number };
+};
+
+function isSingleLineText(node: FillingChild): boolean {
+  const height = node.absoluteBoundingBox?.height;
+  const lineHeight = node.style?.lineHeightPx;
+
+  return height !== undefined && lineHeight !== undefined && height < lineHeight * 1.5;
+}
+
+/**
+ * Gives the sizing that keeps the current size of a child no longer filling its parent on an axis
+ */
+function translateFilledSizing(child: FillingChild, axis: 'horizontal' | 'vertical'): 'HUG' | 'FIXED' {
+  if (child.layoutMode === 'HORIZONTAL' || child.layoutMode === 'VERTICAL') {
+    // Figma sizes it from its content, as when it hugs
+    return 'HUG';
+  } else if (child.type === 'TEXT' && child.style) {
+    if (axis === 'vertical') {
+      return child.style.textAutoResize === 'HEIGHT' || child.style.textAutoResize === 'WIDTH_AND_HEIGHT' ? 'HUG' : 'FIXED';
+    } else if (child.style.textAutoResize === 'WIDTH_AND_HEIGHT') {
+      return 'HUG';
+    } else if (child.style.textAutoResize === 'HEIGHT' && isSingleLineText(child)) {
+      // A single line text hugs its width without going on another line
+      child.style.textAutoResize = 'WIDTH_AND_HEIGHT';
+
+      return 'HUG';
+    }
+  }
+
+  // A wrapping text would go on a single line, and other shapes cannot hug anything
+  return 'FIXED';
+}
+
+/**
+ * In Figma a child filling an axis of an auto layout frame hugging its content on that axis, when it is the only child laid
+ * out in it (absolute and hidden ones aside), just keeps its own size and the frame hugs it. Penpot does not allow a child
+ * filling a hugging parent (`translateLayoutSizing()` then fixes the size of the frame), so the child keeps its size instead:
+ * it renders the same and the frame still follows the size of its child (a text whose font size comes from tokens).
+ *
+ * It must run on a frame before translating its own sizing and its children (it adjusts the Figma children in place)
+ */
+export function adaptFillingOnlyChild(node: {
+  layoutMode?: string;
+  layoutSizingHorizontal?: string;
+  layoutSizingVertical?: string;
+  children?: object[];
+}): void {
+  if (node.layoutMode !== 'HORIZONTAL' && node.layoutMode !== 'VERTICAL') {
+    return;
+  }
+
+  // Only the properties read here matter, whatever the type of the Figma children
+  const laidOutChildren = ((node.children ?? []) as FillingChild[]).filter(
+    (child) => child.layoutPositioning !== 'ABSOLUTE' && child.visible !== false
+  );
+  if (laidOutChildren.length !== 1) {
+    return;
+  }
+
+  const [child] = laidOutChildren;
+
+  if (node.layoutSizingHorizontal === 'HUG' && child.layoutSizingHorizontal === 'FILL') {
+    child.layoutSizingHorizontal = translateFilledSizing(child, 'horizontal');
+  }
+
+  if (node.layoutSizingVertical === 'HUG' && child.layoutSizingVertical === 'FILL') {
+    child.layoutSizingVertical = translateFilledSizing(child, 'vertical');
+  }
+}
+
+/**
+ * An auto layout frame hugging its content takes the size of the children laid out in it. When there are none (they are all
+ * positioned absolutely, hidden, or removed by the exclusions), Figma keeps the frame size whereas Penpot collapses it at the
+ * next layout computation, with its absolute children (an icon placed absolutely in a frame disappears after a variant switch).
+ * Its Figma size is kept as a fixed one on the hugging axes instead.
+ *
+ * It must run on a frame before translating its own sizing (it adjusts the Figma node in place)
+ */
+export function freezeHuggingFrameWithoutLaidOutChildren(
+  node: Partial<
+    Pick<
+      HasFramePropertiesTrait & HasLayoutTrait,
+      'layoutMode' | 'layoutSizingHorizontal' | 'layoutSizingVertical' | 'primaryAxisSizingMode' | 'counterAxisSizingMode'
+    >
+  > & {
+    children?: object[];
+  }
+): void {
+  if (!node.children || !node.layoutMode || node.layoutMode === 'NONE') {
+    return;
+  }
+
+  // Only the properties read here matter, whatever the type of the Figma children
+  const hasLaidOutChildren = (node.children as FillingChild[]).some((child) => child.layoutPositioning !== 'ABSOLUTE' && child.visible !== false);
+  if (hasLaidOutChildren) {
+    return;
+  }
+
+  const isHorizontalLayout = node.layoutMode === 'HORIZONTAL';
+
+  if (node.layoutSizingHorizontal === 'HUG') {
+    node.layoutSizingHorizontal = 'FIXED';
+
+    // Legacy properties expressing the same along the layout axes
+    if (isHorizontalLayout) {
+      node.primaryAxisSizingMode = 'FIXED';
+    } else {
+      node.counterAxisSizingMode = 'FIXED';
+    }
+  }
+
+  if (node.layoutSizingVertical === 'HUG') {
+    node.layoutSizingVertical = 'FIXED';
+
+    if (isHorizontalLayout) {
+      node.counterAxisSizingMode = 'FIXED';
+    } else {
+      node.primaryAxisSizingMode = 'FIXED';
+    }
+  }
 }
 
 export function transformLayoutAttributes(

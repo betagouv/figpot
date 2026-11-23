@@ -7,6 +7,16 @@ import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { rgbToHex } from '@figpot/src/utils/color';
 import { neutralTransform } from '@figpot/src/utils/matrix';
 
+/**
+ * Figma shows an empty page named only with dashes (hyphens, en or em dashes) as a divider, whereas Penpot only does for an
+ * empty page named "---" (spaces aside). A page with content keeps its name since Penpot would not show it as a divider anyway
+ */
+export function translatePageName(page: Pick<CanvasNode, 'name' | 'children'>): string {
+  const isDivider = page.children.length === 0 && /^\s*[-\u2010-\u2015\u2212\u2500][\s\-\u2010-\u2015\u2212\u2500]*$/.test(page.name);
+
+  return isDivider ? '---' : page.name;
+}
+
 export function transformPageNode(registry: PageRegistry, figmaNode: CanvasNode): PenpotPage {
   const penpotPageId = translateId(figmaNode.id, registry.getMapping());
 
@@ -23,7 +33,7 @@ export function transformPageNode(registry: PageRegistry, figmaNode: CanvasNode)
 
   const page: PenpotPage = {
     id: penpotPageId,
-    name: figmaNode.name,
+    name: translatePageName(figmaNode),
     background: rgbToHex(figmaNode.backgroundColor),
     objects: {
       [penpotRootFrameId]: {

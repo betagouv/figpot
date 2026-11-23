@@ -1,4 +1,5 @@
-import { confirm } from '@inquirer/prompts';
+import { Separator, confirm, select } from '@inquirer/prompts';
+import chalk from 'chalk';
 import fsSync from 'fs';
 import fs from 'fs/promises';
 import { glob } from 'glob';
@@ -6,53 +7,110 @@ import graphlib, { Graph } from 'graphlib';
 import { mimeData } from 'human-filetypes';
 import { parse, toSeconds } from 'iso8601-duration';
 import arrayDiff from 'microdiff';
+import ora from 'ora';
 import { Request, chromium } from 'patchright';
 import path from 'path';
 import setCookieParser from 'set-cookie-parser';
-import { parser } from 'stream-json';
 import { Digraph, toDot } from 'ts-graphviz';
 import { toFile } from 'ts-graphviz/adapter';
+import { validate as uuidValidate } from 'uuid';
 import { z } from 'zod';
 
-import { ApiError as FigmaApiError, GetFileResponse, getImageFills } from '@figpot/src/clients/figma';
-import { OpenAPI as PenpotClientSettings, postGetFileObjectThumbnails, postGetFontVariants } from '@figpot/src/clients/penpot';
+import { Component, GetFileNodesResponse, GetFileResponse, GetLocalVariablesResponse, Style, getImageFills } from '@figpot/src/clients/figma';
+import {
+  postCreateFile,
+  postGetFontVariants,
+  postGetProjectFiles,
+  postGetProjects,
+  postGetTeams,
+  postLinkFileToLibrary,
+  postSetFileShared,
+} from '@figpot/src/clients/penpot';
 import { PostGetFileResponse, postGetFile, postRenameFile, postUpdateFile } from '@figpot/src/clients/penpot';
-import { appCommonFilesChanges$changeWithoutUnknown } from '@figpot/src/clients/workaround';
+import {
+  ApiError,
+  appCommonFilesChanges$changeWithoutUnknown,
+  ignoreResponse,
+  readBigJsonResponse,
+  streamedResponse,
+} from '@figpot/src/clients/workaround';
+import { chunkOperations, splitOperationsInHalves, stripGroupMarkers } from '@figpot/src/features/chunks';
 import {
   FigmaDefinedColor,
+  FigmaDefinedEffectStyle,
   FigmaDefinedTypography,
-  collectTextPathNodeIds,
+  FigmaFileMetaCache,
+  collectTextPathRefs,
   countTotalElements,
+  extractStylesEffects,
   extractStylesTypographies,
+  mergeExtraVariables,
   mergeStylesColors,
   patchDocument,
-  retrieveColors,
+  patchVariables,
   retrieveDocument,
+  retrieveFigmaFileAccessInfo,
+  retrieveFigmaFileName,
+  retrieveLibraryMainCopies,
+  retrieveLibraryPublishedComponents,
+  retrieveLibraryPublishedStyles,
+  retrieveRemoteComponents,
+  retrieveRemoteStyles,
   retrieveStylesNodes,
   retrieveTextPathImages,
+  retrieveVariables,
 } from '@figpot/src/features/figma';
 import { restoreMappingFromRepository, saveMappingToRepository } from '@figpot/src/features/git';
-import { cleanHostedDocument } from '@figpot/src/features/penpot';
+import { findLibraryUsages, formatLibraryUsages } from '@figpot/src/features/libraryUsages';
+import { MainCopies } from '@figpot/src/features/mainCopies';
+import { checkFileLoadableByBrowser, cleanHostedDocument, penpotSupportsTokensStatus } from '@figpot/src/features/penpot';
 import { transformDocumentNode } from '@figpot/src/features/transformers/transformDocumentNode';
-import { isPageRootFrame, isPageRootFrameFromId, registerFontId, rootFrameId } from '@figpot/src/features/translators/translateId';
+import { FigmaVariablesData, emptyFigmaVariablesData } from '@figpot/src/features/translators/tokens/translateTokens';
+import {
+  isPageRootFrame,
+  isPageRootFrameFromId,
+  pruneUnusedNodeEntries,
+  registerFontId,
+  rootFrameId,
+  trackUsedNodeEntries,
+  translateMediaPlaceholderId,
+} from '@figpot/src/features/translators/translateId';
 import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
 import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
+import { Token, TokenSet, TokenTheme } from '@figpot/src/models/entities/penpot/traits/token';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 import { formatDiffResultLog, getDiff, removeUndefinedProperties } from '@figpot/src/utils/comparaison';
-import { config, figmaRateLimitContext, penpotApiBaseUrl } from '@figpot/src/utils/environment';
+import { config, figmaRateLimitContext, getPenpotAuthorization, penpotApiBaseUrl } from '@figpot/src/utils/environment';
 import { downloadFile, openAsBlob, readBigJsonFile, writeBigJsonFile } from '@figpot/src/utils/file';
-import { gracefulExit } from '@figpot/src/utils/system';
+import { getMemoryAdvice, getMemoryContext } from '@figpot/src/utils/memory';
+import { sleep } from '@figpot/src/utils/sleep';
+import { UserCancellationExit } from '@figpot/src/utils/system';
 
-const __root_dirname = process.cwd();
+export const DEFAULT_DATA_DIR_NAME = 'data';
 
-export const documentsFolderPath = path.resolve(__root_dirname, './data/documents/');
-export const fontsFolderPath = path.resolve(__root_dirname, './data/fonts/');
-export const mediasFolderPath = path.resolve(__root_dirname, './data/medias/');
-export const textPathsFolderPath = path.resolve(__root_dirname, './data/textpaths/');
+export function resolveDefaultDataDir(): string {
+  return process.env.FIGPOT_DATA_DIR ? path.resolve(process.env.FIGPOT_DATA_DIR) : path.resolve(process.cwd(), DEFAULT_DATA_DIR_NAME);
+}
+
+export function getDocumentsFolderPath(dataDir: string) {
+  return path.resolve(dataDir, 'documents');
+}
+
+export function getFontsFolderPath(dataDir: string) {
+  return path.resolve(dataDir, 'fonts');
+}
+
+export function getMediasFolderPath(dataDir: string) {
+  return path.resolve(dataDir, 'medias');
+}
+
+export function getTextPathsFolderPath(dataDir: string) {
+  return path.resolve(dataDir, 'textpaths');
+}
 
 function formatSecondsHuman(totalSeconds: number): string {
   const days = Math.floor(totalSeconds / 86400);
@@ -85,7 +143,17 @@ export type LiteTypography = LibraryTypography & {
 export type LiteComponent = LibraryComponent & {
   _apiType: 'component';
 };
-export type NodeLabel = LitePageNode | LiteNode | LiteColor | LiteTypography | LiteComponent;
+export type LiteTokenSet = Pick<TokenSet, 'id' | 'name' | 'description'> & {
+  _apiType: 'token-set';
+};
+export type LiteToken = Token & {
+  _apiType: 'token';
+  _setId: string; // The owning set id, needed by `set-token` operations
+};
+export type LiteTokenTheme = TokenTheme & {
+  _apiType: 'token-theme';
+};
+export type NodeLabel = LitePageNode | LiteNode | LiteColor | LiteTypography | LiteComponent | LiteTokenSet | LiteToken | LiteTokenTheme;
 
 export const Mapping = z.object({
   lastExport: z.date().nullable(),
@@ -96,6 +164,9 @@ export const Mapping = z.object({
   colors: FigmaToPenpotMapping,
   typographies: FigmaToPenpotMapping,
   components: FigmaToPenpotMapping,
+  tokenSets: FigmaToPenpotMapping,
+  tokens: FigmaToPenpotMapping,
+  tokenThemes: FigmaToPenpotMapping,
 });
 export type MappingType = z.infer<typeof Mapping>;
 
@@ -104,6 +175,20 @@ export type PromptingType = z.infer<typeof Prompting>;
 
 export const ServerValidation = z.boolean().optional();
 export type ServerValidationType = z.infer<typeof ServerValidation>;
+
+// [IMPORTANT] Penpot rejects requests over `PENPOT_HTTP_SERVER_MAX_BODY_SIZE` (31457280, 30MB, by default) so operations are chunked
+// (`PENPOT_HTTP_SERVER_MAX_MULTIPART_BODY_SIZE` only concerns multipart requests like medias uploads)
+// For huge design systems the limit is easily reached since in adddition we use raw JSON and not the Penpot transit protocol that could help a bit (but would complexify the implementation since no JS Penpot mapper for now)
+// Note: the chunk size only counts operations, so it should stay a bit under the limit to leave room for the rest of the request
+
+// Instances are usually behind a proxy cutting requests after about 60 seconds (Penpot still applying the chunk behind), and
+// the time Penpot takes to apply a chunk mostly depends on the file size (with a file of 500k nodes, a 10MB chunk takes about
+// 40 to 60 seconds, a 30MB one about 50 to 65 seconds), so chunks stay big to limit the number of requests, and a proxy timeout
+// is confirmed by watching the file revision (see `waitForPenpotFileRevision()`)
+export const defaultPushChunkSize = 25; // In megabytes
+
+export const PushChunkSize = z.number().positive().optional();
+export type PushChunkSizeType = z.infer<typeof PushChunkSize>;
 
 export const Metadata = z.object({
   figmaDocumentId: z.string(),
@@ -123,10 +208,15 @@ export const DocumentOptions = z.object({
 export type DocumentOptionsType = z.infer<typeof DocumentOptions>;
 
 export const RetrieveOptions = z.object({
+  dataDir: z.string(),
   documents: z.array(DocumentOptions),
   prompting: Prompting,
   syncMappingWithGit: z.boolean(),
   useCachedFigmaData: z.boolean(),
+  libraries: z.array(DocumentOptions).default([]),
+  skipLibraries: z.boolean().default(false),
+  skipInferringLibraries: z.boolean().default(false),
+  penpotProjectId: z.string().optional(),
 });
 export type RetrieveOptionsType = z.infer<typeof RetrieveOptions>;
 
@@ -137,56 +227,76 @@ export type ChunkGroupMetadata = {
 
 export type OperationWithChunkGroupMetadata = appCommonFilesChanges$changeWithoutUnknown & ChunkGroupMetadata;
 
-export function getFigmaDocumentPath(documentId: string) {
-  return path.resolve(documentsFolderPath, `figma_${documentId}`);
+export function getFigmaDocumentPath(dataDir: string, documentId: string) {
+  return path.resolve(getDocumentsFolderPath(dataDir), `figma_${documentId}`);
 }
 
-export function getFigmaDocumentTreePath(documentId: string) {
-  return path.resolve(getFigmaDocumentPath(documentId), 'tree.json');
+export function getFigmaDocumentTreePath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'tree.json');
 }
 
-export function getFigmaDocumentColorsPath(documentId: string) {
-  return path.resolve(getFigmaDocumentPath(documentId), 'colors.json');
+export function getFigmaDocumentColorsPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'colors.json');
 }
 
-export function getFigmaDocumentTypographiesPath(documentId: string) {
-  return path.resolve(getFigmaDocumentPath(documentId), 'typographies.json');
+export function getFigmaDocumentTypographiesPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'typographies.json');
 }
 
-export function getPenpotDocumentPath(figmaDocumentId: string, penpotDocumentId: string) {
-  return path.resolve(getFigmaDocumentPath(figmaDocumentId), 'export', `penpot_${penpotDocumentId}`);
+export function getFigmaDocumentVariablesPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'variables.json');
 }
 
-export function getPenpotHostedDocumentTreePath(figmaDocumentId: string, penpotDocumentId: string) {
-  return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'hosted-tree.json');
+export function getFigmaDocumentEffectsPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'effects.json');
 }
 
-export function getFigmaToPenpotMetaPath(figmaDocumentId: string, penpotDocumentId: string) {
-  return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'meta.json');
+export function getFigmaDocumentRemoteComponentsPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'remote-components.json');
 }
 
-export function getFigmaToPenpotMappingPath(figmaDocumentId: string, penpotDocumentId: string) {
-  return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'mapping.json');
+export function getFigmaDocumentLibraryMainCopiesPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'library-main-copies.json');
 }
 
-export function getFigmaToPenpotDiffPath(figmaDocumentId: string, penpotDocumentId: string) {
-  return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'diff.json');
+export function getFigmaDocumentRemoteStylesPath(dataDir: string, documentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, documentId), 'remote-styles.json');
 }
 
-export function getTransformedFigmaTreePath(figmaDocumentId: string, penpotDocumentId: string) {
-  return path.resolve(getPenpotDocumentPath(figmaDocumentId, penpotDocumentId), 'transformed-tree.json');
+export function getPenpotDocumentPath(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getFigmaDocumentPath(dataDir, figmaDocumentId), 'export', `penpot_${penpotDocumentId}`);
 }
 
-export function getFigmaMediaPath(mediaId: string) {
-  return path.resolve(mediasFolderPath, mediaId);
+export function getPenpotHostedDocumentTreePath(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), 'hosted-tree.json');
 }
 
-export function getFigmaTextPathSvgPath(nodeId: string) {
-  return path.resolve(textPathsFolderPath, `${nodeId.replace(/[:;]/g, '_')}.svg`);
+export function getFigmaToPenpotMetaPath(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), 'meta.json');
 }
 
-export async function readFigmaTreeFile(documentId: string): Promise<GetFileResponse> {
-  const figmaTreePath = getFigmaDocumentTreePath(documentId);
+export function getFigmaToPenpotMappingPath(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), 'mapping.json');
+}
+
+export function getFigmaToPenpotDiffPath(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), 'diff.json');
+}
+
+export function getTransformedFigmaTreePath(dataDir: string, figmaDocumentId: string, penpotDocumentId: string) {
+  return path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), 'transformed-tree.json');
+}
+
+export function getFigmaMediaPath(dataDir: string, mediaId: string) {
+  return path.resolve(getMediasFolderPath(dataDir), mediaId);
+}
+
+export function getFigmaTextPathSvgPath(dataDir: string, nodeId: string, hash: string) {
+  return path.resolve(getTextPathsFolderPath(dataDir), `${nodeId.replace(/[:;]/g, '_')}_${hash}.svg`);
+}
+
+export async function readFigmaTreeFile(dataDir: string, documentId: string): Promise<GetFileResponse> {
+  const figmaTreePath = getFigmaDocumentTreePath(dataDir, documentId);
 
   if (!fsSync.existsSync(figmaTreePath)) {
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
@@ -195,8 +305,8 @@ export async function readFigmaTreeFile(documentId: string): Promise<GetFileResp
   return (await readBigJsonFile(figmaTreePath)) as GetFileResponse; // We did not implement a zod schema, hoping they keep the structure stable enough
 }
 
-export async function readFigmaColorsFile(documentId: string): Promise<FigmaDefinedColor[]> {
-  const figmaColorsPath = getFigmaDocumentColorsPath(documentId);
+export async function readFigmaColorsFile(dataDir: string, documentId: string): Promise<FigmaDefinedColor[]> {
+  const figmaColorsPath = getFigmaDocumentColorsPath(dataDir, documentId);
 
   if (!fsSync.existsSync(figmaColorsPath)) {
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
@@ -207,8 +317,8 @@ export async function readFigmaColorsFile(documentId: string): Promise<FigmaDefi
   return JSON.parse(figmaColorsString) as FigmaDefinedColor[];
 }
 
-export async function readFigmaTypographiesFile(documentId: string): Promise<FigmaDefinedTypography[]> {
-  const figmaTypographiesPath = getFigmaDocumentTypographiesPath(documentId);
+export async function readFigmaTypographiesFile(dataDir: string, documentId: string): Promise<FigmaDefinedTypography[]> {
+  const figmaTypographiesPath = getFigmaDocumentTypographiesPath(dataDir, documentId);
 
   if (!fsSync.existsSync(figmaTypographiesPath)) {
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
@@ -219,8 +329,84 @@ export async function readFigmaTypographiesFile(documentId: string): Promise<Fig
   return JSON.parse(figmaTypographiesString) as FigmaDefinedTypography[];
 }
 
-export async function readTransformedFigmaTreeFile(figmaDocumentId: string, penpotDocumentId: string): Promise<PenpotDocument> {
-  const transformedFigmaTreePath = getTransformedFigmaTreePath(figmaDocumentId, penpotDocumentId);
+// Accepts the format of the REST response (`{ meta: { variableCollections, variables } }`) or its `meta` only
+export async function readExtraVariablesFile(filePath: string): Promise<FigmaVariablesData> {
+  if (!fsSync.existsSync(filePath)) {
+    throw new Error(`the extra variables file "${filePath}" does not exist`);
+  }
+
+  const content = JSON.parse(await fs.readFile(filePath, 'utf-8')) as { meta: FigmaVariablesData } | FigmaVariablesData;
+
+  return 'meta' in content ? content.meta : content;
+}
+
+export async function readFigmaVariablesFile(dataDir: string, documentId: string): Promise<FigmaVariablesData> {
+  const figmaVariablesPath = getFigmaDocumentVariablesPath(dataDir, documentId);
+
+  if (!fsSync.existsSync(figmaVariablesPath)) {
+    throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
+  }
+
+  const figmaVariablesString = await fs.readFile(figmaVariablesPath, 'utf-8');
+
+  return JSON.parse(figmaVariablesString) as FigmaVariablesData;
+}
+
+export async function readFigmaEffectsFile(dataDir: string, documentId: string): Promise<FigmaDefinedEffectStyle[]> {
+  const figmaEffectsPath = getFigmaDocumentEffectsPath(dataDir, documentId);
+
+  if (!fsSync.existsSync(figmaEffectsPath)) {
+    throw new Error(`make sure to run the "retrieve" command on the Figma document "${documentId}" before using any other command`);
+  }
+
+  const figmaEffectsString = await fs.readFile(figmaEffectsPath, 'utf-8');
+
+  return JSON.parse(figmaEffectsString) as FigmaDefinedEffectStyle[];
+}
+
+export async function readFigmaRemoteComponentsFile(dataDir: string, documentId: string): Promise<Record<string, string>> {
+  const remoteComponentsPath = getFigmaDocumentRemoteComponentsPath(dataDir, documentId);
+
+  // Empty when the file has no remote components, when `--skip-libraries` was used during retrieve, or when the Figma token did not grant access to component metadata
+  if (!fsSync.existsSync(remoteComponentsPath)) {
+    return {};
+  }
+
+  const remoteComponentsString = await fs.readFile(remoteComponentsPath, 'utf-8');
+
+  return JSON.parse(remoteComponentsString) as Record<string, string>;
+}
+
+// Copies inside the mains of the library components used by the document (see `retrieveLibraryMainCopies()`)
+export async function readFigmaLibraryMainCopiesFile(dataDir: string, documentId: string): Promise<Map<string, MainCopies>> {
+  const libraryMainCopiesPath = getFigmaDocumentLibraryMainCopiesPath(dataDir, documentId);
+
+  if (!fsSync.existsSync(libraryMainCopiesPath)) {
+    console.warn(
+      `the mains of the library components used by "${documentId}" have not been retrieved, swaps inside their instances will not be detected (Penpot may reject or revert them). Retrieve the document again to get them`
+    );
+
+    return new Map();
+  }
+
+  return new Map(Object.entries(JSON.parse(await fs.readFile(libraryMainCopiesPath, 'utf-8')) as Record<string, MainCopies>));
+}
+
+export async function readFigmaRemoteStylesFile(dataDir: string, documentId: string): Promise<Record<string, string>> {
+  const remoteStylesPath = getFigmaDocumentRemoteStylesPath(dataDir, documentId);
+
+  // Empty when the file has no remote styles, when `--skip-libraries` was used during retrieve, or when the Figma token did not grant access to style metadata
+  if (!fsSync.existsSync(remoteStylesPath)) {
+    return {};
+  }
+
+  const remoteStylesString = await fs.readFile(remoteStylesPath, 'utf-8');
+
+  return JSON.parse(remoteStylesString) as Record<string, string>;
+}
+
+export async function readTransformedFigmaTreeFile(dataDir: string, figmaDocumentId: string, penpotDocumentId: string): Promise<PenpotDocument> {
+  const transformedFigmaTreePath = getTransformedFigmaTreePath(dataDir, figmaDocumentId, penpotDocumentId);
 
   if (!fsSync.existsSync(transformedFigmaTreePath)) {
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${figmaDocumentId}" before using any other command`);
@@ -229,8 +415,8 @@ export async function readTransformedFigmaTreeFile(figmaDocumentId: string, penp
   return (await readBigJsonFile(transformedFigmaTreePath)) as PenpotDocument; // We did not implement a zod schema, hoping they keep the structure stable enough
 }
 
-export async function readFigmaToPenpotDiffFile(figmaDocumentId: string, penpotDocumentId: string): Promise<Differences> {
-  const diffPath = getFigmaToPenpotDiffPath(figmaDocumentId, penpotDocumentId);
+export async function readFigmaToPenpotDiffFile(dataDir: string, figmaDocumentId: string, penpotDocumentId: string): Promise<Differences> {
+  const diffPath = getFigmaToPenpotDiffPath(dataDir, figmaDocumentId, penpotDocumentId);
 
   if (!fsSync.existsSync(diffPath)) {
     throw new Error(`make sure to run the "retrieve" command on the Figma document "${figmaDocumentId}" before using any other command`);
@@ -239,8 +425,8 @@ export async function readFigmaToPenpotDiffFile(figmaDocumentId: string, penpotD
   return (await readBigJsonFile(diffPath)) as Differences; // We did not implement a zod schema, hoping they keep the structure stable enough
 }
 
-export async function restoreMeta(figmaDocumentId: string, penpotDocumentId: string): Promise<MetadataType> {
-  const metaPath = getFigmaToPenpotMetaPath(figmaDocumentId, penpotDocumentId);
+export async function restoreMeta(dataDir: string, figmaDocumentId: string, penpotDocumentId: string): Promise<MetadataType> {
+  const metaPath = getFigmaToPenpotMetaPath(dataDir, figmaDocumentId, penpotDocumentId);
   let meta: MetadataType | null = null;
 
   if (fsSync.existsSync(metaPath)) {
@@ -269,14 +455,19 @@ export async function restoreMeta(figmaDocumentId: string, penpotDocumentId: str
   return meta;
 }
 
-export async function saveMeta(figmaDocumentId: string, penpotDocumentId: string, meta: MetadataType): Promise<void> {
-  await fs.writeFile(getFigmaToPenpotMetaPath(figmaDocumentId, penpotDocumentId), JSON.stringify(meta, null, 2), {
+export async function saveMeta(dataDir: string, figmaDocumentId: string, penpotDocumentId: string, meta: MetadataType): Promise<void> {
+  await fs.writeFile(getFigmaToPenpotMetaPath(dataDir, figmaDocumentId, penpotDocumentId), JSON.stringify(meta, null, 2), {
     encoding: 'utf-8',
   });
 }
 
-export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: string, prompting: boolean = true): Promise<MappingType> {
-  const mappingPath = getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId);
+export async function restoreMapping(
+  dataDir: string,
+  figmaDocumentId: string,
+  penpotDocumentId: string,
+  prompting: boolean = true
+): Promise<MappingType> {
+  const mappingPath = getFigmaToPenpotMappingPath(dataDir, figmaDocumentId, penpotDocumentId);
   let mapping: MappingType | null = null;
 
   if (!fsSync.existsSync(mappingPath)) {
@@ -289,7 +480,7 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
       if (!answer) {
         console.warn('the transformation operation has been aborted');
 
-        return Promise.reject(gracefulExit);
+        return Promise.reject(new UserCancellationExit());
       }
     }
   } else {
@@ -298,13 +489,17 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
 
     mapping = Mapping.parse({
       ...mappingJson,
-      fonts: new Map(Object.entries(mappingJson.fonts)),
-      assets: new Map(Object.entries(mappingJson.assets)),
-      nodes: new Map(Object.entries(mappingJson.nodes)),
-      documents: new Map(Object.entries(mappingJson.documents)),
-      colors: new Map(Object.entries(mappingJson.colors)),
-      typographies: new Map(Object.entries(mappingJson.typographies)),
-      components: new Map(Object.entries(mappingJson.components)),
+      // Default each field to `{}` so older mapping files (saved before any of these were tracked) still parse
+      fonts: new Map(Object.entries(mappingJson.fonts ?? {})),
+      assets: new Map(Object.entries(mappingJson.assets ?? {})),
+      nodes: new Map(Object.entries(mappingJson.nodes ?? {})),
+      documents: new Map(Object.entries(mappingJson.documents ?? {})),
+      colors: new Map(Object.entries(mappingJson.colors ?? {})),
+      typographies: new Map(Object.entries(mappingJson.typographies ?? {})),
+      components: new Map(Object.entries(mappingJson.components ?? {})),
+      tokenSets: new Map(Object.entries(mappingJson.tokenSets ?? {})),
+      tokens: new Map(Object.entries(mappingJson.tokens ?? {})),
+      tokenThemes: new Map(Object.entries(mappingJson.tokenThemes ?? {})),
     });
   }
 
@@ -321,6 +516,9 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
       colors: new Map(),
       typographies: new Map(),
       components: new Map(),
+      tokenSets: new Map(),
+      tokens: new Map(),
+      tokenThemes: new Map(),
     };
   }
 
@@ -332,9 +530,11 @@ export async function restoreMapping(figmaDocumentId: string, penpotDocumentId: 
   return mapping;
 }
 
-export async function saveMapping(figmaDocumentId: string, penpotDocumentId: string, mapping: MappingType): Promise<void> {
+export async function saveMapping(dataDir: string, figmaDocumentId: string, penpotDocumentId: string, mapping: MappingType): Promise<void> {
+  await fs.mkdir(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), { recursive: true });
+
   await fs.writeFile(
-    getFigmaToPenpotMappingPath(figmaDocumentId, penpotDocumentId),
+    getFigmaToPenpotMappingPath(dataDir, figmaDocumentId, penpotDocumentId),
     JSON.stringify(
       {
         ...mapping,
@@ -345,6 +545,9 @@ export async function saveMapping(figmaDocumentId: string, penpotDocumentId: str
         colors: Object.fromEntries(mapping.colors),
         typographies: Object.fromEntries(mapping.typographies),
         components: Object.fromEntries(mapping.components),
+        tokenSets: Object.fromEntries(mapping.tokenSets),
+        tokens: Object.fromEntries(mapping.tokens),
+        tokenThemes: Object.fromEntries(mapping.tokenThemes),
       },
       null,
       2
@@ -355,7 +558,12 @@ export async function saveMapping(figmaDocumentId: string, penpotDocumentId: str
   );
 }
 
-export async function retrieve(options: RetrieveOptionsType) {
+export async function retrieve(options: RetrieveOptionsType, figmaMetaCache: FigmaFileMetaCache = new FigmaFileMetaCache()) {
+  // Keep specifically this lightweight metadata in memory because reading the Figma tree file in the `retrieve` step
+  // just to retrieve it later was crashing the program when the tree is huge
+  const figmaComponentsByDocument = new Map<string, Record<string, Component>>();
+  const figmaStylesByDocument = new Map<string, Record<string, Style>>();
+
   for (const document of options.documents) {
     // When `--use-cached-figma-data` is set and every cache artifact is present on disk, skip the three Figma calls
     // (`retrieveColors` / `retrieveDocument` / `retrieveStylesNodes`) and reuse the processed outputs. `colors.json` and
@@ -363,26 +571,24 @@ export async function retrieve(options: RetrieveOptionsType) {
     // `getImageFills` below is still executed because it's a cheap call and handling it from the tree alone would add surface for bugs.
     const useCache =
       options.useCachedFigmaData &&
-      fsSync.existsSync(getFigmaDocumentTreePath(document.figmaDocument)) &&
-      fsSync.existsSync(getFigmaDocumentColorsPath(document.figmaDocument)) &&
-      fsSync.existsSync(getFigmaDocumentTypographiesPath(document.figmaDocument));
+      fsSync.existsSync(getFigmaDocumentTreePath(options.dataDir, document.figmaDocument)) &&
+      fsSync.existsSync(getFigmaDocumentColorsPath(options.dataDir, document.figmaDocument)) &&
+      fsSync.existsSync(getFigmaDocumentTypographiesPath(options.dataDir, document.figmaDocument));
 
-    // Get all predefined colors from Figma
-    // We do not use `getPublishedVariables()` because it contains only a part of the local ones, and without values
-    // Note: other variable kinds are not retrieved because Penpot cannot manage them (so using their raw value)
-    const figmaColors = useCache ? await readFigmaColorsFile(document.figmaDocument) : await retrieveColors(document.figmaDocument);
+    // Penpot library colors come only from Figma color styles whereas Figma color variables are exported as Penpot design tokens
+    const figmaColors: FigmaDefinedColor[] = useCache ? await readFigmaColorsFile(options.dataDir, document.figmaDocument) : [];
 
-    const customPenpotFontsVariants = (await postGetFontVariants({
-      requestBody: {
-        fileId: document.penpotDocument,
-      },
-    })) as unknown as any[];
+    const customPenpotFontsVariants = (
+      await postGetFontVariants({
+        body: options.penpotProjectId ? { projectId: options.penpotProjectId } : { fileId: document.penpotDocument },
+      })
+    ).data as unknown as any[];
 
     if (options.syncMappingWithGit) {
-      await restoreMappingFromRepository(document.figmaDocument, document.penpotDocument);
+      await restoreMappingFromRepository(options.dataDir, document.figmaDocument, document.penpotDocument);
     }
 
-    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument, options.prompting);
+    const mapping = await restoreMapping(options.dataDir, document.figmaDocument, document.penpotDocument, options.prompting);
 
     for (const customPenpotFontVariant of customPenpotFontsVariants) {
       const simulatedFigmaFontVariantId = `${customPenpotFontVariant.fontFamily}-${customPenpotFontVariant.fontStyle}-${customPenpotFontVariant.fontWeight}`;
@@ -391,17 +597,47 @@ export async function retrieve(options: RetrieveOptionsType) {
       registerFontId(simulatedFigmaFontVariantId, penpotFontId, mapping);
     }
 
-    await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
+    await saveMapping(options.dataDir, document.figmaDocument, document.penpotDocument, mapping);
 
     // Save the document tree locally (or reuse the last saved one to skip the expensive Figma fetch during debugging)
     let documentTree: GetFileResponse;
     if (useCache) {
-      documentTree = await readFigmaTreeFile(document.figmaDocument);
+      documentTree = await readFigmaTreeFile(options.dataDir, document.figmaDocument);
     } else {
+      const treeSpinner = ora(`Retrieving Figma document tree for "${document.figmaDocument}"…`).start();
+
       try {
         documentTree = await retrieveDocument(document.figmaDocument);
+
+        treeSpinner.succeed(`Retrieved Figma document tree for "${document.figmaDocument}"`);
       } catch (error) {
-        if (error instanceof FigmaApiError && error.status === 429) {
+        treeSpinner.fail(`Failed to retrieve Figma document tree for "${document.figmaDocument}"`);
+
+        // Figma returns the same opaque 403 "File not exportable" for two very different causes:
+        // 1. The file isn't a Design file (FigJam, Slides, Buzz, Sites, Draw — REST has no support)
+        // 2. The caller's role on the file is "viewer" (must be "editor" or "owner" to call `getFile`)
+        // Pop a cheap `getFileMeta` to distinguish and surface the actionable reason
+        const errBody = (error as unknown as { body?: { err?: string } }).body;
+        if (error instanceof ApiError && error.status === 403 && errBody?.err === 'File not exportable') {
+          const access = await retrieveFigmaFileAccessInfo(figmaMetaCache, document.figmaDocument);
+          const label = access?.name ? `"${access.name}" (${document.figmaDocument})` : `"${document.figmaDocument}"`;
+
+          if (access?.role && access.role !== 'editor' && access.role !== 'owner') {
+            throw new Error(
+              `cannot synchronize Figma file ${label}: your role on this file is "${access.role}", but the Figma REST API requires at least "editor" to read file content. Ask the file's owner to grant you editor access, or run the sync from an account that already has it`
+            );
+          }
+          if (access?.editorType && access.editorType !== 'figma') {
+            throw new Error(
+              `cannot synchronize Figma file ${label}: its editor type is "${access.editorType}" (FigJam / Slides / Buzz / Sites / Draw), and figpot only supports classic Design (Figma) files`
+            );
+          }
+          throw new Error(
+            `cannot synchronize Figma file ${label}: Figma returned 403 "File not exportable" — and the metadata endpoint did not disambiguate. Common causes: a non-Design file type, a viewer-only role, or a file in a free-plan team whose owner has not granted REST API export`
+          );
+        }
+
+        if (error instanceof ApiError && error.status === 429) {
           const retryAfterHeader = figmaRateLimitContext.retryAfter;
           const rateLimitTypeHeader = figmaRateLimitContext.rateLimitType;
           const retryAfterSeconds = retryAfterHeader && /^\d+$/.test(retryAfterHeader) ? parseInt(retryAfterHeader, 10) : null;
@@ -431,10 +667,10 @@ export async function retrieve(options: RetrieveOptionsType) {
     }
 
     // Use metadata for future usage
-    const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
+    const meta = await restoreMeta(options.dataDir, document.figmaDocument, document.penpotDocument);
     meta.figmaDocumentId = documentTree.mainFileKey || document.figmaDocument;
     meta.figmaLastModified = new Date(documentTree.lastModified);
-    await saveMeta(document.figmaDocument, document.penpotDocument, meta);
+    await saveMeta(options.dataDir, document.figmaDocument, document.penpotDocument, meta);
 
     // Process attached styles (skipped when using the cached data — `typographies.json` is already the final output and is re-read later by `transform()`)
     if (!useCache) {
@@ -442,32 +678,53 @@ export async function retrieve(options: RetrieveOptionsType) {
 
       // The Figma API does not expose styles easily, so we have to use an endpoint to get simulated applied styles to extract wanted values
       // Ref: https://forum.figma.com/t/rest-api-get-color-and-text-styles/49216/4
-      const stylesNodes = await retrieveStylesNodes(document.figmaDocument, stylesIds);
+      let stylesNodes: GetFileNodesResponse['nodes'];
+      let figmaVariables: GetLocalVariablesResponse['meta'];
+
+      const stylesSpinner = ora(`Retrieving Figma styles and variables for "${document.figmaDocument}"…`).start();
+
+      try {
+        stylesNodes = await retrieveStylesNodes(document.figmaDocument, stylesIds);
+        figmaVariables = await retrieveVariables(document.figmaDocument);
+
+        stylesSpinner.succeed(`Retrieved Figma styles and variables for "${document.figmaDocument}"`);
+      } catch (error) {
+        stylesSpinner.fail(`Failed to retrieve Figma styles and variables for "${document.figmaDocument}"`);
+
+        throw error;
+      }
 
       const figmaTypographies = extractStylesTypographies(documentTree, stylesNodes);
+      const figmaEffects = extractStylesEffects(documentTree, stylesNodes);
       mergeStylesColors(figmaColors, documentTree, stylesNodes);
 
-      const documentFolderPath = getFigmaDocumentPath(document.figmaDocument);
+      const documentFolderPath = getFigmaDocumentPath(options.dataDir, document.figmaDocument);
       await fs.mkdir(documentFolderPath, { recursive: true });
 
-      await writeBigJsonFile(getFigmaDocumentTreePath(document.figmaDocument), documentTree);
-      await fs.writeFile(getFigmaDocumentColorsPath(document.figmaDocument), JSON.stringify(figmaColors, null, 2), {
+      await writeBigJsonFile(getFigmaDocumentTreePath(options.dataDir, document.figmaDocument), documentTree);
+      await fs.writeFile(getFigmaDocumentColorsPath(options.dataDir, document.figmaDocument), JSON.stringify(figmaColors, null, 2), {
         encoding: 'utf-8',
       });
-      await fs.writeFile(getFigmaDocumentTypographiesPath(document.figmaDocument), JSON.stringify(figmaTypographies, null, 2), {
+      await fs.writeFile(getFigmaDocumentTypographiesPath(options.dataDir, document.figmaDocument), JSON.stringify(figmaTypographies, null, 2), {
+        encoding: 'utf-8',
+      });
+      await fs.writeFile(getFigmaDocumentEffectsPath(options.dataDir, document.figmaDocument), JSON.stringify(figmaEffects, null, 2), {
+        encoding: 'utf-8',
+      });
+      await fs.writeFile(getFigmaDocumentVariablesPath(options.dataDir, document.figmaDocument), JSON.stringify(figmaVariables, null, 2), {
         encoding: 'utf-8',
       });
     }
 
     // Save images
-    const imagesList = await getImageFills({
-      fileKey: document.figmaDocument,
+    const { data: imagesList } = await getImageFills({
+      path: { file_key: document.figmaDocument },
     });
 
-    await fs.mkdir(mediasFolderPath, { recursive: true });
+    await fs.mkdir(getMediasFolderPath(options.dataDir), { recursive: true });
 
     for (const [figmaImageId, temporaryFileUrl] of Object.entries(imagesList.meta.images)) {
-      const filePath = getFigmaMediaPath(figmaImageId);
+      const filePath = getFigmaMediaPath(options.dataDir, figmaImageId);
 
       // It should always be the same extension so simplifying with the wildcard pattern
       // (the extension is retrieved from HTTP headers when downloading)
@@ -483,48 +740,166 @@ export async function retrieve(options: RetrieveOptionsType) {
     }
 
     // Figma "text on a path" (TEXT_PATH) has no Penpot equivalent. We fetch each one rendered by Figma as
-    // an SVG (glyphs outlined) and cache it on disk so the synchronous transform step can rebuild it as a
-    // Penpot `path`. This is the only async place for it (mirrors the image handling above).
-    const textPathNodeIdsToFetch = collectTextPathNodeIds(documentTree).filter((nodeId) => !fsSync.existsSync(getFigmaTextPathSvgPath(nodeId)));
+    // an SVG (glyphs outlined) and cache it on disk under a content-hashed filename so a later edit
+    // of the text-path triggers a re-fetch (Figma's API has no per-node `modifiedAt`, hashing is
+    // the only way to invalidate the cache). This is the only async place for it
+    const textPathRefs = collectTextPathRefs(documentTree);
+    const textPathRefsToFetch = textPathRefs.filter((ref) => !fsSync.existsSync(getFigmaTextPathSvgPath(options.dataDir, ref.nodeId, ref.hash)));
 
-    if (textPathNodeIdsToFetch.length > 0) {
-      await fs.mkdir(textPathsFolderPath, { recursive: true });
+    if (textPathRefsToFetch.length > 0) {
+      await fs.mkdir(getTextPathsFolderPath(options.dataDir), { recursive: true });
 
-      const textPathImages = await retrieveTextPathImages(document.figmaDocument, textPathNodeIdsToFetch);
+      const textPathImages = await retrieveTextPathImages(
+        document.figmaDocument,
+        textPathRefsToFetch.map((ref) => ref.nodeId)
+      );
 
-      for (const nodeId of textPathNodeIdsToFetch) {
-        const svgUrl = textPathImages[nodeId];
+      for (const ref of textPathRefsToFetch) {
+        const svgUrl = textPathImages[ref.nodeId];
         if (!svgUrl) {
-          throw new Error(`Figma did not return an SVG render for the text-path node "${nodeId}"`);
+          throw new Error(`Figma did not return an SVG render for the text-path node "${ref.nodeId}"`);
         }
 
-        console.log(`downloading the text-path SVG ${nodeId} from Figma`);
+        console.log(`downloading the text-path SVG ${ref.nodeId} from Figma`);
 
         const svgResponse = await fetch(svgUrl);
 
-        await fs.writeFile(getFigmaTextPathSvgPath(nodeId), await svgResponse.text(), { encoding: 'utf-8' });
+        await fs.writeFile(getFigmaTextPathSvgPath(options.dataDir, ref.nodeId, ref.hash), await svgResponse.text(), { encoding: 'utf-8' });
       }
     }
+
+    // Note: old `<nodeId>_<oldHash>.svg` files accumulate on disk when a text-path's content
+    // changes. We do not auto-clean because `textPathsFolderPath` is shared across documents and
+    // a per-document cleanup pass would need extra bookkeeping. Wipe the folder manually if its
+    // size becomes an issue — the next sync will re-fetch whatever is still in use
+
+    figmaComponentsByDocument.set(document.figmaDocument, documentTree.components);
+    figmaStylesByDocument.set(document.figmaDocument, documentTree.styles);
   }
-}
 
-export async function sortDocuments(documents: DocumentOptionsType[]): Promise<DocumentOptionsType[]> {
-  // TODO: for now we test we only 1 document no having dependencies
-  // but here we should take all meta.json file with dependencies of each and start by the one at the bottom with no children
-  // then remove it, and take the one at the bottom with children, etc...
-  assert(documents.length === 1);
+  // Cross-file binding resolution run after trees fetching to be sure having all libraries information needed
+  if (options.skipLibraries) {
+    for (const document of options.documents) {
+      await fs.writeFile(getFigmaDocumentRemoteComponentsPath(options.dataDir, document.figmaDocument), '{}', { encoding: 'utf-8' });
+      await fs.writeFile(getFigmaDocumentLibraryMainCopiesPath(options.dataDir, document.figmaDocument), '{}', { encoding: 'utf-8' });
+      await fs.writeFile(getFigmaDocumentRemoteStylesPath(options.dataDir, document.figmaDocument), '{}', { encoding: 'utf-8' });
+    }
+  } else {
+    const crossFileSpinner = ora('Resolving cross-file component and style bindings…').start();
 
-  return documents;
+    try {
+      // A component or style that is `remote: false` in document X means X is the publisher of that
+      // key. So walking every co-synced doc's local components+styles gives us a free
+      // `key -> publisher` index for anything published by another doc in this same sync command
+      const publishersByComponentKey = new Map<string, string>();
+      const publishersByStyleKey = new Map<string, string>();
+
+      crossFileSpinner.text = `Resolving cross-file bindings: scanning ${options.documents.length} co-synced document(s)…`;
+
+      for (const document of options.documents) {
+        const components = figmaComponentsByDocument.get(document.figmaDocument)!;
+        const styles = figmaStylesByDocument.get(document.figmaDocument)!;
+
+        for (const component of Object.values(components)) {
+          if (component.remote !== true) {
+            publishersByComponentKey.set(component.key, document.figmaDocument);
+          }
+        }
+        for (const style of Object.values(styles)) {
+          if (style.remote !== true) {
+            publishersByStyleKey.set(style.key, document.figmaDocument);
+          }
+        }
+      }
+
+      // [OPTIMIZATION] Retrieve each library's published components and styles list
+      if (options.libraries.length > 0) {
+        crossFileSpinner.text = `Resolving cross-file bindings: listing published components and styles for ${options.libraries.length} declared library(ies)…`;
+
+        for (const lib of options.libraries) {
+          const publishedComponents = await retrieveLibraryPublishedComponents(lib.figmaDocument);
+          for (const published of publishedComponents) {
+            publishersByComponentKey.set(published.key, published.file_key);
+          }
+
+          const publishedStyles = await retrieveLibraryPublishedStyles(lib.figmaDocument);
+          for (const published of publishedStyles) {
+            publishersByStyleKey.set(published.key, published.file_key);
+          }
+        }
+      }
+
+      crossFileSpinner.text = 'Resolving cross-file bindings: resolving remaining unknown publishers…';
+
+      for (const document of options.documents) {
+        const figmaComponents = figmaComponentsByDocument.get(document.figmaDocument)!;
+        const figmaStyles = figmaStylesByDocument.get(document.figmaDocument)!;
+
+        const remoteComponentSourceFiles = await retrieveRemoteComponents(figmaComponents, publishersByComponentKey, options.skipInferringLibraries);
+        await fs.writeFile(
+          getFigmaDocumentRemoteComponentsPath(options.dataDir, document.figmaDocument),
+          JSON.stringify(remoteComponentSourceFiles, null, 2),
+          {
+            encoding: 'utf-8',
+          }
+        );
+
+        // Reused from the cache since the mains of library components are only needed to detect swaps
+        const libraryMainCopiesPath = getFigmaDocumentLibraryMainCopiesPath(options.dataDir, document.figmaDocument);
+        if (!options.useCachedFigmaData || !fsSync.existsSync(libraryMainCopiesPath)) {
+          crossFileSpinner.text = `Resolving cross-file bindings: retrieving the mains of library components used by "${document.figmaDocument}"…`;
+
+          await fs.writeFile(libraryMainCopiesPath, JSON.stringify(await retrieveLibraryMainCopies(remoteComponentSourceFiles)), {
+            encoding: 'utf-8',
+          });
+        }
+
+        const remoteStyleSourceFiles = await retrieveRemoteStyles(figmaStyles, publishersByStyleKey, options.skipInferringLibraries);
+        await fs.writeFile(
+          getFigmaDocumentRemoteStylesPath(options.dataDir, document.figmaDocument),
+          JSON.stringify(remoteStyleSourceFiles, null, 2),
+          {
+            encoding: 'utf-8',
+          }
+        );
+      }
+
+      crossFileSpinner.succeed('Resolved cross-file component and style bindings');
+    } catch (error) {
+      crossFileSpinner.fail('Failed to resolve cross-file component and style bindings');
+
+      throw error;
+    }
+  }
 }
 
 export function transformDocument(
   documentTree: GetFileResponse,
   colors: FigmaDefinedColor[],
   typographies: FigmaDefinedTypography[],
-  mapping: MappingType
+  variables: FigmaVariablesData,
+  effectStyles: FigmaDefinedEffectStyle[],
+  libraryFiles: Map<string, string>,
+  remoteComponentSourceFiles: Map<string, string>,
+  remoteStyleSourceFiles: Map<string, string>,
+  mapping: MappingType,
+  dataDir: string,
+  libraryMainCopies: Map<string, MainCopies> = new Map()
 ) {
   // Go from the Figma format to the Penpot one
-  const penpotTree = transformDocumentNode(documentTree, colors, typographies, mapping);
+  const penpotTree = transformDocumentNode(
+    documentTree,
+    colors,
+    typographies,
+    variables,
+    effectStyles,
+    libraryFiles,
+    remoteComponentSourceFiles,
+    remoteStyleSourceFiles,
+    mapping,
+    dataDir,
+    libraryMainCopies
+  );
 
   // We have to patch the document since `{}` is not equal to `{ a: undefined }`,
   // and since we do comparaisons both in later stage or when doing tests we need to make sure
@@ -557,25 +932,56 @@ export const ReplaceFontPattern = z.object({
 });
 export type ReplaceFontPatternType = z.infer<typeof ReplaceFontPattern>;
 
+// Per Figma document, the path of a JSON file exported by the `figma-plugins/variables-export` plugin
+export const ExtraVariables = z.record(z.string(), z.string()).default({});
+
 export const TransformOptions = z.object({
+  dataDir: z.string(),
   documents: z.array(DocumentOptions),
   excludePatterns: ExcludePatterns,
   replaceFontPatterns: z.array(ReplaceFontPattern),
+  extraVariables: ExtraVariables,
   syncMappingWithGit: z.boolean(),
+  pruneMapping: z.boolean().default(false),
   prompting: Prompting,
+  libraries: z.array(DocumentOptions).default([]),
 });
 export type TransformOptionsType = z.infer<typeof TransformOptions>;
 
 export async function transform(options: TransformOptionsType) {
-  const orderedDocuments = sortDocuments(options.documents);
+  const libraryFiles = new Map<string, string>();
+
+  for (const lib of options.libraries) {
+    libraryFiles.set(lib.figmaDocument, lib.penpotDocument);
+  }
+
+  // Documents synchronized may also be considered as "libraries" if any link with the other documents
+  for (const doc of options.documents) {
+    libraryFiles.set(doc.figmaDocument, doc.penpotDocument);
+  }
 
   // Go from the Figma format to the Penpot one
+  // Note: order of processing the dependencies tree is irrelevant because published entities have a stable UUIDs
+  // and the associated `fileId` with them would be patched in any case
   for (const document of options.documents) {
-    const figmaTree = await readFigmaTreeFile(document.figmaDocument);
-    const figmaColors = await readFigmaColorsFile(document.figmaDocument);
-    const figmaTypographies = await readFigmaTypographiesFile(document.figmaDocument);
+    const figmaTree = await readFigmaTreeFile(options.dataDir, document.figmaDocument);
+    const figmaColors = await readFigmaColorsFile(options.dataDir, document.figmaDocument);
+    const figmaTypographies = await readFigmaTypographiesFile(options.dataDir, document.figmaDocument);
+    const extraVariablesPath = options.extraVariables[document.figmaDocument];
+    const figmaVariables = extraVariablesPath
+      ? mergeExtraVariables(await readFigmaVariablesFile(options.dataDir, document.figmaDocument), await readExtraVariablesFile(extraVariablesPath))
+      : await readFigmaVariablesFile(options.dataDir, document.figmaDocument);
+    const figmaEffectStyles = await readFigmaEffectsFile(options.dataDir, document.figmaDocument);
+    const figmaRemoteComponents = await readFigmaRemoteComponentsFile(options.dataDir, document.figmaDocument);
+    const figmaRemoteStyles = await readFigmaRemoteStylesFile(options.dataDir, document.figmaDocument);
+
+    const remoteComponentSourceFiles = new Map(Object.entries(figmaRemoteComponents));
+    const remoteStyleSourceFiles = new Map(Object.entries(figmaRemoteStyles));
 
     patchDocument(figmaTree, figmaColors, figmaTypographies, options.excludePatterns, options.replaceFontPatterns);
+    patchVariables(figmaVariables, options.replaceFontPatterns);
+
+    const libraryMainCopies = await readFigmaLibraryMainCopiesFile(options.dataDir, document.figmaDocument);
 
     const elementsCount = countTotalElements(figmaTree, figmaColors, figmaTypographies);
 
@@ -591,29 +997,59 @@ export async function transform(options: TransformOptionsType) {
         if (!answer) {
           console.warn('the transformation operation has been aborted');
 
-          return Promise.reject(gracefulExit);
+          return Promise.reject(new UserCancellationExit());
         }
       } else {
         console.warn(
           `the Figma document tree you want to synchronize is really huge. Over ${advisedElementsLimit} elements we are quick sure both the Penpot backend and the frontend won't be able to render your document until Penpot evolves. Have a look at our documentation to see how to exclude nodes that bring to you no value and that could make the document loadable`
         );
       }
+
+      const memoryAdvice = getMemoryAdvice(getMemoryContext(), true);
+      if (memoryAdvice) {
+        console.warn(memoryAdvice);
+      }
     }
 
-    const mapping = await restoreMapping(document.figmaDocument, document.penpotDocument, options.prompting);
+    const mapping = await restoreMapping(options.dataDir, document.figmaDocument, document.penpotDocument, options.prompting);
 
-    const penpotTree = transformDocument(figmaTree, figmaColors, figmaTypographies, mapping);
+    if (options.pruneMapping) {
+      trackUsedNodeEntries(mapping);
+    }
+
+    const penpotTree = transformDocument(
+      figmaTree,
+      figmaColors,
+      figmaTypographies,
+      figmaVariables,
+      figmaEffectStyles,
+      libraryFiles,
+      remoteComponentSourceFiles,
+      remoteStyleSourceFiles,
+      mapping,
+      options.dataDir,
+      libraryMainCopies
+    );
+
+    // On demand, entries of nodes no longer synchronized (removed from Figma, excluded...) are dropped to shrink the mapping
+    // Note: if such a node comes back it will get a new Penpot identifier (they are kept by default, see the documentation)
+    if (options.pruneMapping) {
+      const prunedEntries = pruneUnusedNodeEntries(mapping);
+      if (prunedEntries > 0) {
+        console.log(`${prunedEntries} mapping entries of nodes no longer synchronized have been removed`);
+      }
+    }
 
     // Save mapping for later usage
-    await saveMapping(document.figmaDocument, document.penpotDocument, mapping);
+    await saveMapping(options.dataDir, document.figmaDocument, document.penpotDocument, mapping);
 
     // Try to push to Git directly in case updating Penpot would fail, like that if elements have been partially pushed to Penpot
     // they can be kept since having the same IDs on the next retry... helpful in case the failure was due to the amount of modifications :)
     if (options.syncMappingWithGit) {
-      await saveMappingToRepository(document.figmaDocument, document.penpotDocument);
+      await saveMappingToRepository(options.dataDir, document.figmaDocument, document.penpotDocument);
     }
 
-    await writeBigJsonFile(getTransformedFigmaTreePath(document.figmaDocument, document.penpotDocument), penpotTree);
+    await writeBigJsonFile(getTransformedFigmaTreePath(options.dataDir, document.figmaDocument, document.penpotDocument), penpotTree);
   }
 }
 
@@ -621,7 +1057,6 @@ export interface Differences {
   newDocumentName?: string;
   newTreeOperations: OperationWithChunkGroupMetadata[];
   newMedias: string[];
-  oldThumbnails: string[];
 }
 
 export function pushOperationsWithOrderingLogic(
@@ -693,6 +1128,69 @@ export function pushOperationsWithOrderingLogic(
   }
 }
 
+// Properties only set after creations (children order once they all exist, component bindings once main components exist),
+// so they can be moved to a later position without consequence
+const delayedAssignmentProperties = new Set([
+  'shapes',
+  'shapeRef',
+  'componentId',
+  'componentFile',
+  'componentRoot',
+  'mainInstance',
+  'isVariantContainer',
+  'variantId',
+  'variantName',
+]);
+
+// A shape often gets several delayed updates (its children order, then its component bindings), they are merged into the
+// last one to reduce the number of operations
+export function mergeDelayedAssignments(operations: (appCommonFilesChanges$changeWithoutUnknown | null)[]) {
+  const lastAssignmentIndex = new Map<string, number>();
+  let mergedCount = 0;
+
+  for (let index = operations.length - 1; index >= 0; index--) {
+    const operation = operations[index];
+
+    if (
+      !operation ||
+      operation.type !== 'mod-obj' ||
+      operation.operations.length !== 1 ||
+      operation.operations[0].type !== 'assign' ||
+      !Object.keys(operation.operations[0].value).every((property) => delayedAssignmentProperties.has(property))
+    ) {
+      continue;
+    }
+
+    const key = `${operation.pageId}|${operation.id}`;
+    const lastIndex = lastAssignmentIndex.get(key);
+
+    if (lastIndex === undefined) {
+      lastAssignmentIndex.set(key, index);
+
+      continue;
+    }
+
+    const lastOperation = operations[lastIndex];
+    assert(lastOperation && lastOperation.type === 'mod-obj' && lastOperation.operations[0].type === 'assign');
+
+    // The last assignment wins over earlier ones for a same property
+    lastOperation.operations[0].value = { ...operation.operations[0].value, ...lastOperation.operations[0].value };
+    operations[index] = null;
+    mergedCount++;
+  }
+
+  // Remove merged operations in place (the list can be huge)
+  if (mergedCount > 0) {
+    let writeIndex = 0;
+    for (const operation of operations) {
+      if (operation) {
+        operations[writeIndex++] = operation;
+      }
+    }
+    operations.length = writeIndex;
+  }
+}
+
 export function delayBindingOperation(
   delayedOperations: appCommonFilesChanges$changeWithoutUnknown[],
   nodeId: string,
@@ -740,28 +1238,17 @@ export function delayBindingOperation(
     delayedAssignValues.shapeRef = shapeRef;
   }
 
+  // Nothing to bind (avoid sending operations doing nothing)
+  if (Object.keys(delayedAssignValues).length === 0) {
+    return;
+  }
+
   delayedOperations.push({
     type: 'mod-obj',
     id: nodeId,
     pageId: pageId,
     operations: [{ type: 'assign', value: delayedAssignValues }],
   });
-}
-
-export function formatThumbnailId(documentId: string, pageId: string, objectId: string, objectType: 'component' | 'frame') {
-  return `${documentId}/${pageId}/${objectId}/${objectType}`;
-}
-
-export function markThumbnailToBeKept(
-  thumbnailsToKeep: Set<string>,
-  documentId: string,
-  pageId: string,
-  objectId: string,
-  objectType: 'component' | 'frame'
-) {
-  const thumbnailId = formatThumbnailId(documentId, pageId, objectId, objectType);
-
-  thumbnailsToKeep.add(thumbnailId);
 }
 
 export function performBasicNodeCreation(
@@ -853,7 +1340,17 @@ export function performBasicNodeCreation(
   }
 }
 
-export function getDifferences(documentId: string, currentTree: PenpotDocument, newTree: PenpotDocument, currentThumbnails: string[]): Differences {
+export interface DifferencesOptions {
+  // Penpot v2.19+ activates token themes with `set-tokens-status` instead of `set-active-token-themes`
+  tokensStatus?: boolean;
+}
+
+// Penpot keeps the active token themes and the sets of a theme as sets, returned in any order: they are compared sorted
+function sortedItems(items: string[]): string[] {
+  return [...items].sort();
+}
+
+export function getDifferences(currentTree: PenpotDocument, newTree: PenpotDocument, options: DifferencesOptions = {}): Differences {
   const newDocumentName = currentTree.name !== newTree.name ? newTree.name : undefined;
   const newMediasToUpload: string[] = [];
 
@@ -907,6 +1404,41 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
     }
   }
 
+  if (currentTree.data.tokenSets) {
+    for (const currentSet of Object.values(currentTree.data.tokenSets)) {
+      assert(currentSet.id);
+
+      flattenCurrentGlobalTree.set(currentSet.id, {
+        _apiType: 'token-set',
+        id: currentSet.id,
+        name: currentSet.name,
+        description: currentSet.description,
+      });
+
+      for (const currentToken of Object.values(currentSet.tokens)) {
+        assert(currentToken.id);
+
+        flattenCurrentGlobalTree.set(currentToken.id, {
+          _apiType: 'token',
+          _setId: currentSet.id,
+          ...currentToken,
+        });
+      }
+    }
+  }
+
+  if (currentTree.data.tokenThemes) {
+    for (const currentTheme of Object.values(currentTree.data.tokenThemes)) {
+      assert(currentTheme.id);
+
+      flattenCurrentGlobalTree.set(currentTheme.id, {
+        _apiType: 'token-theme',
+        ...currentTheme,
+        sets: sortedItems(currentTheme.sets),
+      });
+    }
+  }
+
   if (currentTree.data.components) {
     for (const currentComponent of Object.values(currentTree.data.components)) {
       assert(currentComponent.id);
@@ -946,6 +1478,41 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
       // Trying to add the edge between 2 nodes, if not existing it will "pre-create" the node without content
       // And into the next iterations (since all must be in the list) it will add the needed node content (it avoids looping 2 times)
       newGraph.setEdge(liteNode._realPageParentId || liteNode.parentId, liteNode.id);
+    }
+  }
+
+  if (newTree.data.tokenSets) {
+    for (const newSet of Object.values(newTree.data.tokenSets)) {
+      assert(newSet.id);
+
+      flattenNewGlobalTree.set(newSet.id, {
+        _apiType: 'token-set',
+        id: newSet.id,
+        name: newSet.name,
+        description: newSet.description,
+      });
+
+      for (const newToken of Object.values(newSet.tokens)) {
+        assert(newToken.id);
+
+        flattenNewGlobalTree.set(newToken.id, {
+          _apiType: 'token',
+          _setId: newSet.id,
+          ...newToken,
+        });
+      }
+    }
+  }
+
+  if (newTree.data.tokenThemes) {
+    for (const newTheme of Object.values(newTree.data.tokenThemes)) {
+      assert(newTheme.id);
+
+      flattenNewGlobalTree.set(newTheme.id, {
+        _apiType: 'token-theme',
+        ...newTheme,
+        sets: sortedItems(newTheme.sets),
+      });
     }
   }
 
@@ -993,7 +1560,6 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
   console.log(`[nodes differences] ${formatDiffResultLog(diffResult)}`);
 
   const operations: OperationWithChunkGroupMetadata[] = [];
-  const thumbnailsToKeep: Set<string> = new Set(); // Thumbails are only done on top frame for each tree branch (page deletion does not trigger thumbnail removal)
   const delayedOperations: typeof operations = [];
 
   for (const [, item] of diffResult) {
@@ -1021,6 +1587,44 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           type: 'add-color',
           color: {
             ...propertiesObj,
+          },
+        });
+      } else if (item.after._apiType === 'token-set') {
+        operations.push({
+          type: 'set-token-set',
+          id: item.after.id,
+          attrs: { id: item.after.id, name: item.after.name, description: item.after.description ?? '' },
+        });
+      } else if (item.after._apiType === 'token') {
+        // `set-token` carries the token name as an attribute (the JSON endpoint keywordizes object keys,
+        // so emitting tokens inline in `set-token-set.attrs.tokens` would fail validation)
+        operations.push({
+          type: 'set-token',
+          setId: item.after._setId,
+          tokenId: item.after.id,
+          attrs: {
+            id: item.after.id,
+            name: item.after.name,
+            // The Penpot JSON decoder converts camelCase strings (e.g. `borderRadius`) to its
+            // kebab Clojure keyword (`:border-radius`); sending the kebab string is rejected. Our
+            // openapi-generated union types are kebab-case, so cast here to bypass the TS literal
+            // check while keeping the value the API actually accepts
+            type: item.after.type as never,
+            value: item.after.value,
+            description: item.after.description ?? '',
+          },
+        });
+      } else if (item.after._apiType === 'token-theme') {
+        operations.push({
+          type: 'set-token-theme',
+          id: item.after.id,
+          attrs: {
+            id: item.after.id,
+            name: item.after.name,
+            group: item.after.group,
+            description: item.after.description ?? '',
+            isSource: item.after.isSource ?? false,
+            sets: item.after.sets,
           },
         });
       } else if (item.after._apiType === 'typography') {
@@ -1061,6 +1665,42 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
             ...propertiesObj,
           },
         });
+      } else if (item.after._apiType === 'token-set') {
+        operations.push({
+          type: 'set-token-set',
+          id: item.after.id,
+          attrs: { id: item.after.id, name: item.after.name, description: item.after.description ?? '' },
+        });
+      } else if (item.after._apiType === 'token') {
+        operations.push({
+          type: 'set-token',
+          setId: item.after._setId,
+          tokenId: item.after.id,
+          attrs: {
+            id: item.after.id,
+            name: item.after.name,
+            // The Penpot JSON decoder converts camelCase strings (e.g. `borderRadius`) to its
+            // kebab Clojure keyword (`:border-radius`); sending the kebab string is rejected. Our
+            // openapi-generated union types are kebab-case, so cast here to bypass the TS literal
+            // check while keeping the value the API actually accepts
+            type: item.after.type as never,
+            value: item.after.value,
+            description: item.after.description ?? '',
+          },
+        });
+      } else if (item.after._apiType === 'token-theme') {
+        operations.push({
+          type: 'set-token-theme',
+          id: item.after.id,
+          attrs: {
+            id: item.after.id,
+            name: item.after.name,
+            group: item.after.group,
+            description: item.after.description ?? '',
+            isSource: item.after.isSource ?? false,
+            sets: item.after.sets,
+          },
+        });
       } else if (item.after._apiType === 'typography') {
         const { _apiType, ...propertiesObj } = item.after; // Instruction to omit some properties
 
@@ -1072,11 +1712,29 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
         });
       } else if (item.after._apiType === 'component') {
         const { _apiType, variantId, variantProperties, ...propertiesObj } = item.after; // Instruction to omit some properties
+        const before = item.before._apiType === 'component' ? item.before : null;
 
-        operations.push({
-          type: 'mod-component',
-          ...propertiesObj,
-        });
+        if (!before || before.mainInstanceId !== propertiesObj.mainInstanceId || before.mainInstancePage !== propertiesObj.mainInstancePage) {
+          // [WORKAROUND] `mod-component` applies `main-instance-id` and `main-instance-page` but its schema does not declare them,
+          // so Penpot stores them as strings instead of UUIDs and then fails to resolve the main instance (breaking all copies)
+          // `add-component` declares them properly and replaces an existing component, so it is used when they change
+          // Note: since it replaces the whole component, the current variant bindings are kept until the delayed `mod-component`
+          // below applies the new ones, otherwise the variant would be invalid in between (if chunks are validated separately)
+          operations.push({
+            type: 'add-component',
+            ...propertiesObj,
+            ...(before?.variantId ? { variantId: before.variantId } : {}),
+            ...(before?.variantProperties ? { variantProperties: before.variantProperties } : {}),
+          });
+        } else {
+          // Only pass properties declared by the schema, the others would be stored without being decoded (see above)
+          operations.push({
+            type: 'mod-component',
+            id: propertiesObj.id,
+            name: propertiesObj.name,
+            path: propertiesObj.path,
+          });
+        }
 
         // As for the `add-component` change we have to delay the bindings since variant node has to exist first
         if (variantId || variantProperties) {
@@ -1091,30 +1749,10 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
     }
   }
 
-  const browse = (
-    graphNodeId: string,
-    foundTopBranchFrame: boolean // This excludes the root frame
-  ): boolean => {
-    // Returns in case of modifications
+  const browse = (graphNodeId: string): void => {
     const item = diffResult.get(graphNodeId);
 
     assert(item);
-
-    let subTreeModified = false;
-    let topBranchFrame: LiteNode | null = null;
-    if (!foundTopBranchFrame) {
-      let node: NodeLabel | null = null;
-      if (item.state === 'unchanged') {
-        node = item.model;
-      } else if (item.state !== 'removed') {
-        node = item.after;
-      }
-
-      if (node && node._apiType === 'node' && node.type === 'frame' && !isPageRootFrameFromId(node.id)) {
-        foundTopBranchFrame = true;
-        topBranchFrame = node;
-      }
-    }
 
     const nodeOperationsAfterChildrenAreProcessed: appCommonFilesChanges$changeWithoutUnknown[] = [];
 
@@ -1228,7 +1866,7 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
               }
 
               // Detect new images by looking at the expected path that should be concerned
-              // Note: it's possible it has been already uploaded but doing it a new time will be rare with no consequence
+              // Note: it may target an already uploaded media, the upload step only considers placeholders
               if (
                 difference.path.length >= 2 &&
                 (difference.type === 'CREATE' || difference.type === 'CHANGE') &&
@@ -1281,7 +1919,10 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
             ],
           };
 
-          pushOperationsWithOrderingLogic(operations, delayedOperations, nodeOperationsAfterChildrenAreProcessed, operation);
+          // When only delayed properties changed (component bindings...) there is nothing left to update right now
+          if (uniqueProperties.length > 0) {
+            pushOperationsWithOrderingLogic(operations, delayedOperations, nodeOperationsAfterChildrenAreProcessed, operation);
+          }
 
           if (
             item.before._apiType === 'node' &&
@@ -1316,35 +1957,17 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
 
     if (children && children?.length > 0) {
       for (const childId of children) {
-        const childTreeModified = browse(childId, foundTopBranchFrame);
-
-        if (childTreeModified) {
-          subTreeModified = true;
-        }
-      }
-    }
-
-    // If the children tree has been modified in a way we require the thumbnail refresh
-    if (topBranchFrame && !subTreeModified) {
-      assert(topBranchFrame.id);
-
-      markThumbnailToBeKept(thumbnailsToKeep, documentId, topBranchFrame._pageId, topBranchFrame.id, 'frame');
-
-      // If the frame is also a component definition, it has also its thumbnail for library usage
-      if (topBranchFrame.mainInstance) {
-        markThumbnailToBeKept(thumbnailsToKeep, documentId, topBranchFrame._pageId, topBranchFrame.id, 'component');
+        browse(childId);
       }
     }
 
     // The API expects a specific order of execution
     operations.push(...nodeOperationsAfterChildrenAreProcessed);
-
-    return subTreeModified;
   };
 
   const sourcesIds = newGraph.sources();
   for (const sourceId of sourcesIds) {
-    browse(sourceId, false);
+    browse(sourceId);
   }
 
   // The API expects some bindings to have all nodes created, so running them at the end
@@ -1397,6 +2020,8 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
     }
   }
 
+  mergeDelayedAssignments(operations);
+
   // Those grouped operations must be marked so the chunk logic knows when it's allowed to start a new chunk
   for (const [variantId, currentVariantOperations] of variantOperations) {
     for (const [operationIndex, operation] of currentVariantOperations.entries()) {
@@ -1432,6 +2057,15 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
           type: 'del-typography',
           id: item.before.id,
         });
+      } else if (item.before._apiType === 'token-set') {
+        // Penpot's DTCG export strips the real internal set id, so the deterministic uuidv5 we
+        // re-derive in `cleanHostedDocument` doesn't match any set that has been created from the UI.
+        // The user has to remove them manually (we cannot warn him since the server fails silently)
+        operations.push({ type: 'set-token-set', id: item.before.id, attrs: null });
+      } else if (item.before._apiType === 'token') {
+        operations.push({ type: 'set-token', setId: item.before._setId, tokenId: item.before.id, attrs: null });
+      } else if (item.before._apiType === 'token-theme') {
+        operations.push({ type: 'set-token-theme', id: item.before.id, attrs: null });
       }
     }
   }
@@ -1452,12 +2086,31 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
     }
   }
 
-  // Make the difference between hosted thumbnails and those we think should be kept
-  // TODO: we do not manage thumbnail of type `component` for now since impossible to reproduce in the UI
-  const thumbnailsToDelete: string[] = [];
-  for (const currentThumbnail of currentThumbnails) {
-    if (!thumbnailsToKeep.has(currentThumbnail)) {
-      thumbnailsToDelete.push(currentThumbnail);
+  // Also adjust the active token themes
+  const currentActiveThemes = currentTree.data.activeTokenThemes ?? [];
+  const newActiveThemes = newTree.data.activeTokenThemes ?? [];
+  const sortedCurrentActiveThemes = sortedItems(currentActiveThemes);
+  const sortedNewActiveThemes = sortedItems(newActiveThemes);
+  const activeThemesChanged =
+    sortedCurrentActiveThemes.length !== sortedNewActiveThemes.length ||
+    sortedCurrentActiveThemes.some((themePath, index) => themePath !== sortedNewActiveThemes[index]);
+  if (activeThemesChanged) {
+    if (options.tokensStatus) {
+      // Themes are referenced by path (`group/name`) and their sets by name, whereas this operation needs identifiers
+      const themes = Object.values(newTree.data.tokenThemes ?? {});
+      const sets = Object.values(newTree.data.tokenSets ?? {});
+      const activeThemes = themes.filter((theme) => newActiveThemes.includes(theme.group ? `${theme.group}/${theme.name}` : theme.name));
+      const activeSetNames = new Set(activeThemes.flatMap((theme) => theme.sets));
+
+      // The generated client is based on the API of the official instance, which may not know this operation yet
+      operations.push({
+        type: 'set-tokens-status',
+        themeIds: activeThemes.map((theme) => theme.id),
+        setIds: sets.filter((set) => activeSetNames.has(set.name)).map((set) => set.id),
+      } as unknown as (typeof operations)[number]);
+    } else {
+      // Older Penpot instances only know this operation, which the official instance API no longer describes
+      operations.push({ type: 'set-active-token-themes', themePaths: newActiveThemes } as unknown as (typeof operations)[number]);
     }
   }
 
@@ -1465,11 +2118,11 @@ export function getDifferences(documentId: string, currentTree: PenpotDocument, 
     newDocumentName: newDocumentName,
     newTreeOperations: operations,
     newMedias: [...new Set(newMediasToUpload)], // Remove duplicates
-    oldThumbnails: thumbnailsToDelete,
   };
 }
 
 export const CompareOptions = z.object({
+  dataDir: z.string(),
   documents: z.array(DocumentOptions),
 });
 export type CompareOptionsType = z.infer<typeof CompareOptions>;
@@ -1479,7 +2132,7 @@ export async function compare(options: CompareOptionsType) {
   // Get documents from Penpot if already synchronized in the past
   // Calculate operations needed on the current hosted tree to match the Figma documents state
   for (const document of options.documents) {
-    const figmaDocumentFolderPath = getFigmaDocumentPath(document.figmaDocument);
+    const figmaDocumentFolderPath = getFigmaDocumentPath(options.dataDir, document.figmaDocument);
     let figmaDocumentFolderExists = fsSync.existsSync(figmaDocumentFolderPath);
 
     if (!figmaDocumentFolderExists) {
@@ -1490,31 +2143,42 @@ export async function compare(options: CompareOptionsType) {
       );
     }
 
-    const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
+    const meta = await restoreMeta(options.dataDir, document.figmaDocument, document.penpotDocument);
 
-    const currentThumbnails = await postGetFileObjectThumbnails({
-      requestBody: {
-        fileId: document.penpotDocument,
-      },
-    });
+    let hostedDocument: PostGetFileResponse;
 
-    let hostedDocument = await postGetFile({
-      requestBody: {
-        id: document.penpotDocument,
-      },
-    });
+    const penpotFetchSpinner = ora(`Fetching current state of Penpot file "${document.penpotDocument}"…`).start();
 
-    const penpotDocumentFolderPath = getPenpotDocumentPath(document.figmaDocument, document.penpotDocument);
+    try {
+      const { data } = await postGetFile({
+        body: {
+          id: document.penpotDocument,
+        },
+        ...streamedResponse, // A file can be too big to be parsed as a string
+      });
+
+      hostedDocument = await readBigJsonResponse<PostGetFileResponse>(data, `the Penpot file "${document.penpotDocument}"`);
+
+      penpotFetchSpinner.succeed(`Fetched current state of Penpot file "${document.penpotDocument}"`);
+    } catch (error) {
+      penpotFetchSpinner.fail(`Failed to fetch current state of Penpot file "${document.penpotDocument}"`);
+
+      throw error;
+    }
+
+    const penpotDocumentFolderPath = getPenpotDocumentPath(options.dataDir, document.figmaDocument, document.penpotDocument);
     await fs.mkdir(penpotDocumentFolderPath, { recursive: true });
 
-    await writeBigJsonFile(getPenpotHostedDocumentTreePath(document.figmaDocument, document.penpotDocument), hostedDocument);
+    await writeBigJsonFile(getPenpotHostedDocumentTreePath(options.dataDir, document.figmaDocument, document.penpotDocument), hostedDocument);
 
-    const transformedDocument = await readTransformedFigmaTreeFile(document.figmaDocument, document.penpotDocument);
+    const transformedDocument = await readTransformedFigmaTreeFile(options.dataDir, document.figmaDocument, document.penpotDocument);
 
     const hostedCoreDocument = cleanHostedDocument(hostedDocument);
-    const diff = getDifferences(document.penpotDocument, hostedCoreDocument, transformedDocument, Object.keys(currentThumbnails));
+    const diff = getDifferences(hostedCoreDocument, transformedDocument, {
+      tokensStatus: await penpotSupportsTokensStatus(),
+    });
 
-    await writeBigJsonFile(getFigmaToPenpotDiffPath(document.figmaDocument, document.penpotDocument), diff);
+    await writeBigJsonFile(getFigmaToPenpotDiffPath(options.dataDir, document.figmaDocument, document.penpotDocument), diff);
 
     // Use metadata for future usage
     // Note: `lastModified` and `pages` may have not much value since they are retrieved because the modifications are pushed
@@ -1524,68 +2188,110 @@ export async function compare(options: CompareOptionsType) {
     meta.penpotDocumentId = hostedDocument.id;
     meta.penpotLastModified = new Date(hostedDocument.modifiedAt);
     meta.penpotPages = transformedDocument.data.pages;
-    await saveMeta(document.figmaDocument, document.penpotDocument, meta);
+    await saveMeta(options.dataDir, document.figmaDocument, document.penpotDocument, meta);
   }
+}
+
+// Errors from an intermediary (gateway, proxy) or a cut connection, meaning the request may still have been processed
+function isGatewayFailure(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return [502, 503, 504, 520, 522, 524].includes(error.status);
+  }
+
+  return error instanceof TypeError && (error.message === 'terminated' || error.message === 'fetch failed');
+}
+
+export type PenpotFileVersion = {
+  revn: number; // Incremented by each update
+  vern: number; // Incremented when restoring a previous version of the file
+};
+
+// Penpot answers each update with all changes stored after the given revision (the "lagged" changes, purged by a daily
+// cleanup), so the real revision must be provided, otherwise each response sends back all chunks pushed lately to the file
+// and gets slower until the gateway times out
+export async function getPenpotFileVersion(penpotProjectId: string, penpotDocumentId: string): Promise<PenpotFileVersion | null> {
+  // `get-project-files` is used since it does not load the file content contrary to `get-file`
+  const files = (await postGetProjectFiles({ body: { projectId: penpotProjectId } })).data as unknown as Array<{
+    id: string;
+    revn: number;
+    vern: number;
+  }>;
+
+  const file = files.find((item) => item.id === penpotDocumentId);
+
+  return file ? { revn: file.revn, vern: file.vern ?? 0 } : null;
+}
+
+// Watches the file revision to know if a chunk has been applied even if the proxy in front of Penpot gave up waiting
+export async function waitForPenpotFileRevision(
+  penpotProjectId: string,
+  penpotDocumentId: string,
+  expectedRevn: number,
+  timeoutMs: number = 5 * 60_000,
+  intervalMs: number = 10_000
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const version = await getPenpotFileVersion(penpotProjectId, penpotDocumentId).catch(() => null); // The instance may still be busy
+
+    if (version && version.revn >= expectedRevn) {
+      return true;
+    }
+
+    await sleep(intervalMs);
+  }
+
+  return false;
 }
 
 export async function processOperationsChunk(
-  figmaDocumentId: string,
   penpotDocumentId: string,
-  differences: Differences,
   currentChunk: appCommonFilesChanges$changeWithoutUnknown[],
-  chunkNumber: number,
-  succeededOperations: number,
-  serverValidation: boolean = true
+  serverValidation: boolean = true,
+  version: PenpotFileVersion = { revn: 0, vern: 0 }
 ) {
-  try {
-    console.info(
-      `processing the modifications chunk [${chunkNumber}] containing ${currentChunk.length} operations (previously ${succeededOperations} done over a total of ${differences.newTreeOperations.length})`
-    );
+  const { data } = await postUpdateFile({
+    body: {
+      id: penpotDocumentId,
+      revn: version.revn,
+      vern: version.vern,
+      sessionId: '00000000-0000-0000-0000-000000000000', // It has to be UUID format, no matter the value for us
+      changes: currentChunk,
+      skipValidate: !serverValidation,
+    },
+    ...streamedResponse, // Not using the answer, see `ignoreResponse()`
+  });
 
-    await postUpdateFile({
-      requestBody: {
-        id: penpotDocumentId,
-        revn: 0, // Required but does no block to use a default one
-        vern: 0, // Don't know what is it yet but it's required
-        sessionId: '00000000-0000-0000-0000-000000000000', // It has to be UUID format, no matter the value for us
-        changes: currentChunk,
-        skipValidate: !serverValidation,
-      },
-    });
-  } catch (error) {
-    console.error(`it has failed while being processing the chunk [${chunkNumber}]`);
+  await ignoreResponse(data);
+}
 
-    if (succeededOperations > 0) {
-      console.warn(`Wait a bit since we are removing processed chunks for your next retry, it will reduce the input and speed up`);
-
-      try {
-        differences.newTreeOperations.splice(0, succeededOperations - 1);
-
-        await writeBigJsonFile(getFigmaToPenpotDiffPath(figmaDocumentId, penpotDocumentId), differences);
-      } catch (error) {
-        console.error(
-          `it has failed removing processed chunks, please rerun the synchronization from the start to be sure the comparaison is done with the updated Penpot document`
-        );
-
-        throw error;
-      }
-    }
-
-    throw error;
+// Deeply replace string values (not keys) matching one of the replacements, used to swap identifiers inside operations
+function replaceStringValues<T>(value: T, replacements: Map<string, string>): T {
+  if (typeof value === 'string') {
+    return (replacements.get(value) ?? value) as T;
+  } else if (Array.isArray(value)) {
+    return value.map((item) => replaceStringValues(item, replacements)) as T;
+  } else if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaceStringValues(item, replacements)])) as T;
   }
+
+  return value;
 }
 
 export async function processDifferences(
+  dataDir: string,
   figmaDocumentId: string,
   penpotDocumentId: string,
   differences: Differences,
   serverValidation: boolean = true,
-  prompting: boolean = true
+  prompting: boolean = true,
+  pushChunkSize: PushChunkSizeType = defaultPushChunkSize
 ) {
   // Note: seeing the name change in the UI requires a browser page refresh
   if (differences.newDocumentName) {
     await postRenameFile({
-      requestBody: {
+      body: {
         id: penpotDocumentId,
         name: differences.newDocumentName,
       },
@@ -1598,80 +2304,113 @@ export async function processDifferences(
   // We first upload files because they are used by nodes
   if (differences.newMedias.length > 0) {
     // Retrieve the original Figma IDs to upload files
-    const mapping = await restoreMapping(figmaDocumentId, penpotDocumentId, prompting);
+    const mapping = await restoreMapping(dataDir, figmaDocumentId, penpotDocumentId, prompting);
 
-    for (const penpotMediaId of differences.newMedias) {
-      // We check all files we need to use have been retrieved locally before
-      let figmaMediaId: string | null = null;
+    // The media identifier is generated by the server, so the placeholders set during the transformation have to be
+    // replaced by the uploaded ones before pushing operations (see `translateMediaId()`)
+    const resolvedMediaIds = new Map<string, string>();
+    let uploadedCount = 0;
+    const alreadyUploadedMediaIds = new Set(mapping.assets.values());
 
-      for (const [itemFigmaMediaId, itemPenpotMediaId] of mapping.assets.entries()) {
-        if (itemPenpotMediaId === penpotMediaId) {
-          figmaMediaId = itemFigmaMediaId;
+    // Placeholders are derived from the Figma media identifier, which is the local filename (without extension)
+    const placeholderToFigmaMediaId = new Map<string, string>();
+    for (const filename of await fs.readdir(getMediasFolderPath(dataDir))) {
+      const itemFigmaMediaId = filename.split('.')[0];
 
-          break;
+      placeholderToFigmaMediaId.set(translateMediaPlaceholderId(itemFigmaMediaId), itemFigmaMediaId);
+    }
+
+    try {
+      for (const penpotMediaId of differences.newMedias) {
+        // A media referenced with a server identifier is already uploaded to this file (just used by new nodes)
+        if (alreadyUploadedMediaIds.has(penpotMediaId)) {
+          continue;
         }
-      }
 
-      if (!figmaMediaId) {
-        throw new Error(`the Penpot file ${penpotMediaId} must have been mapped previously to be uploaded`);
-      }
+        // We check all files we need to use have been retrieved locally before
+        const figmaMediaId = placeholderToFigmaMediaId.get(penpotMediaId);
 
-      const filePath = getFigmaMediaPath(figmaMediaId);
-      // `windowsPathsNoEscape` so backslashes from `path.resolve()` on Windows are treated as separators, not as the escape character
-      const potentielExistingFilesPaths = await glob(`${filePath}.*`, { windowsPathsNoEscape: true });
-
-      if (!potentielExistingFilesPaths.length) {
-        throw new Error(`the Figma file ${figmaMediaId} cannot be uploaded to Penpot since missing locally`);
-      }
-
-      const fileToUploadPath = potentielExistingFilesPaths[0];
-      const filename = path.basename(fileToUploadPath);
-      const fileExtension = `.${filename.split('.')[1] ?? ''}`;
-
-      let fileMimeType: string | null = null;
-      for (const [mimeType, mimeTypeMetadata] of Object.entries(mimeData)) {
-        if (mimeTypeMetadata.extensions && mimeTypeMetadata.extensions.findIndex((ext) => ext === fileExtension) !== -1) {
-          fileMimeType = mimeType;
-
-          break;
+        if (!figmaMediaId) {
+          throw new Error(`the media ${penpotMediaId} to upload does not match any Figma media retrieved locally`);
         }
+
+        // The transformation may have been done before a previous upload (e.g. comparing again after a push failure)
+        const mappedPenpotMediaId = mapping.assets.get(figmaMediaId);
+        if (mappedPenpotMediaId) {
+          resolvedMediaIds.set(penpotMediaId, mappedPenpotMediaId);
+
+          continue;
+        }
+
+        const filePath = getFigmaMediaPath(dataDir, figmaMediaId);
+        // `windowsPathsNoEscape` so backslashes from `path.resolve()` on Windows are treated as separators, not as the escape character
+        const potentielExistingFilesPaths = await glob(`${filePath}.*`, { windowsPathsNoEscape: true });
+
+        if (!potentielExistingFilesPaths.length) {
+          throw new Error(`the Figma file ${figmaMediaId} cannot be uploaded to Penpot since missing locally`);
+        }
+
+        const fileToUploadPath = potentielExistingFilesPaths[0];
+        const filename = path.basename(fileToUploadPath);
+        const fileExtension = `.${filename.split('.')[1] ?? ''}`;
+
+        let fileMimeType: string | null = null;
+        for (const [mimeType, mimeTypeMetadata] of Object.entries(mimeData)) {
+          if (mimeTypeMetadata.extensions && mimeTypeMetadata.extensions.findIndex((ext) => ext === fileExtension) !== -1) {
+            fileMimeType = mimeType;
+
+            break;
+          }
+        }
+
+        assert(fileMimeType);
+
+        const blob = await openAsBlob(fileToUploadPath, {
+          // For whatever reason it returns an empty MIME type, so patching it manually
+          // Ref: https://github.com/nodejs/node/issues/49843
+          type: fileMimeType,
+        });
+
+        const formData = new FormData();
+        formData.append('file-id', penpotDocumentId);
+        formData.append('name', 'unknown'); // We cannot retrieve the original filename from Figma so forcing a random one
+        formData.append('is-local', 'false');
+        formData.append('content', blob);
+
+        console.log(`uploading the media ${figmaMediaId} to Penpot`);
+
+        const response = await fetch(`${penpotApiBaseUrl}/upload-file-media-object`, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            Accept: 'application/json',
+            Authorization: getPenpotAuthorization(),
+          },
+        });
+
+        if (response.status !== 200) {
+          throw new Error(`the media ${figmaMediaId} seems to not be uploaded correctly (status ${response.status}): ${await response.text()}`);
+        }
+
+        const data = (await response.json()) as any;
+
+        if (!data.createdAt || typeof data.id !== 'string') {
+          throw new Error(`the media ${figmaMediaId} seems to not be uploaded correctly`);
+        }
+
+        resolvedMediaIds.set(penpotMediaId, data.id);
+        mapping.assets.set(figmaMediaId, data.id);
+        uploadedCount++;
       }
-
-      assert(fileMimeType);
-
-      const blob = await openAsBlob(fileToUploadPath, {
-        // For whatever reason it returns an empty MIME type, so patching it manually
-        // Ref: https://github.com/nodejs/node/issues/49843
-        type: fileMimeType,
-      });
-
-      const formData = new FormData();
-      formData.append('id', penpotMediaId);
-      formData.append('file-id', penpotDocumentId);
-      formData.append('name', 'unknown'); // We cannot retrieve the original filename from Figma so forcing a random one
-      formData.append('is-local', 'false');
-      formData.append('content', blob);
-
-      console.log(`uploading the media ${penpotMediaId} to Penpot`);
-
-      const response = await fetch(`${penpotApiBaseUrl}/upload-file-media-object`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          Accept: 'application/json',
-          Authorization: (PenpotClientSettings.HEADERS as any)?.Authorization,
-        },
-      });
-
-      if (response.status !== 200) {
-        throw new Error(`the media ${penpotMediaId} seems to not be uploaded correctly`);
+    } finally {
+      // Keep the uploaded identifiers (even if another upload failed) so next synchronizations do not upload them again
+      if (uploadedCount > 0) {
+        await saveMapping(dataDir, figmaDocumentId, penpotDocumentId, mapping);
       }
+    }
 
-      const data = (await response.json()) as any;
-
-      if (!data.createdAt) {
-        throw new Error(`the media ${penpotMediaId} seems to not be uploaded correctly`);
-      }
+    if (resolvedMediaIds.size > 0) {
+      differences.newTreeOperations = replaceStringValues(differences.newTreeOperations, resolvedMediaIds);
     }
 
     // Consider medias as already uploaded in case of chunk failure
@@ -1681,115 +2420,197 @@ export async function processDifferences(
   if (differences.newTreeOperations.length > 0) {
     if (!serverValidation) {
       console.warn(
-        'the Penpot server-side validation of updates has been disabled. It may lead to a corrupted Penpot file in case the library does not handle all cases properly, so use it with caution'
+        'the Penpot server-side validation of updates has been disabled. It may lead to a corrupted Penpot file in case the library does not handle all cases properly, so use it with caution. Once done, rerun the synchronization without "--no-server-validation" (adding "--use-cached-figma-data" to avoid fetching Figma again) to check there is no difference left, and see the documentation to make Penpot validate the whole file (a synchronization without difference sends nothing to validate)'
       );
     }
 
-    // [IMPORTANT] The Penpot scripts defines a default maximum body to 314572800 (300MB) (see `PENPOT_HTTP_SERVER_MAX_MULTIPART_BODY_SIZE`)
-    // but this seems not used in their code. The limit reached at runtime is 31457280 (30MB)
-    // For huge design systems the limit is easily reached since in adddition we use raw JSON and not the Penpot transit protocol that could help a bit (but would complexify the implementation since no JS Penpot mapper for now)
-    // We need to chunk operations if needed
-    const bodyLimitBytes = 31_457_280;
+    // We need to chunk operations if needed (see `defaultPushChunkSize` for details)
+    const chunkBytes = Math.floor((pushChunkSize ?? defaultPushChunkSize) * 1024 * 1024);
 
-    // Removing a hardcoded amount simulating the `Differences` structure
-    // It's not perfect but it would add complexity to have it exact
-    const remainingBodyBytes = bodyLimitBytes - 1_000_000;
+    // Since a revision lower than the stored one is accepted, falling back to the first one is safe (just slower)
+    const meta = await restoreMeta(dataDir, figmaDocumentId, penpotDocumentId);
+    const version = await getPenpotFileVersion(meta.penpotProjectId, penpotDocumentId).catch(() => null);
 
-    let chunkNumber = 1;
-    let currentChunkCount = 0;
-    let currentChunk: appCommonFilesChanges$changeWithoutUnknown[] = [];
-    let currentGroupId: string | null = null;
-    let currentGroupCount: number = 0;
+    if (!version) {
+      console.warn(
+        `the current revision of the Penpot file "${penpotDocumentId}" cannot be retrieved, Penpot will send back all recent changes of the file after each chunk, which slows down pushes`
+      );
+    }
+
+    const fileVersion = version ?? { revn: 0, vern: 0 };
+    const totalOperations = differences.newTreeOperations.length;
+    let chunkNumber = 0;
     let succeededOperations = 0;
-    for (const { _groupId, _lastOfTheGroup, ...operation } of differences.newTreeOperations) {
-      const encodedOperationLength = JSON.stringify(operation).length;
 
-      // Needed to avoid splitting operations that must be processed at the same time by the Penpot backend
-      currentGroupId = _groupId && _lastOfTheGroup !== undefined ? _groupId : null;
+    // Operations of a same group are kept in the same chunk since the Penpot backend needs them at the same time
+    // Note: chunks are computed upfront to give the progress
+    const chunks = [...chunkOperations(differences.newTreeOperations, chunkBytes)];
 
-      // Take into account the `,` delimiter
-      if (currentChunkCount + Math.max(currentChunk.length - 1, 0) + encodedOperationLength > remainingBodyBytes) {
-        let forwardedOperationsOnNextChunk: typeof currentChunk = [];
+    if (chunks.length > 1) {
+      console.warn(
+        `With huge files the Penpot instance may take longer than its proxy allows to apply a chunk, in this case figpot watches the file revision for up to 5 minutes to confirm the chunk has been applied before continuing. CLOSE ANY TAB OPENED ON THIS FILE until the push ends, otherwise your edits could be mistaken for a pushed chunk, messing up the comparison`
+      );
+    }
 
-        // If currently into a group that cannot be separated, we remove the ongoing ones to set them on the next chunk
-        // (being on the last item of the group is fine)
-        // Note: it's unlikely a group size would be bigger than the allowed chunk size
-        if (currentGroupId && _lastOfTheGroup === false) {
-          forwardedOperationsOnNextChunk = currentChunk.splice(-currentChunkCount);
+    const pushSpinner = ora(
+      `Pushing modifications to Penpot file "${penpotDocumentId}" (${totalOperations} operation(s) in ${chunks.length} chunk(s))…`
+    ).start();
+    // Pushes operations, confirming them through the file revision if the proxy gave up waiting
+    const pushOperations = async (operations: typeof differences.newTreeOperations) => {
+      try {
+        await processOperationsChunk(
+          penpotDocumentId,
+          operations.map(stripGroupMarkers) as appCommonFilesChanges$changeWithoutUnknown[],
+          serverValidation,
+          fileVersion
+        );
+      } catch (error) {
+        // The proxy gave up waiting but Penpot may still be applying the chunk, and Penpot itself can fail after having saved
+        // the changes (e.g. while answering), so the revision tells if they have been applied. Sending them again would
+        // apply them twice
+        // Note: without the current revision it cannot be confirmed, so the push stops
+        const gatewayFailure = isGatewayFailure(error);
+        const serverFailure = error instanceof ApiError && error.status === 500;
+
+        if (!(gatewayFailure || serverFailure) || !version) {
+          throw error;
         }
 
-        // Directly process the chunk to not calculate all of them
-        await processOperationsChunk(
-          figmaDocumentId,
-          penpotDocumentId,
-          differences,
-          currentChunk,
-          chunkNumber,
-          succeededOperations,
-          serverValidation
-        );
+        pushSpinner.text = `Chunk [${chunkNumber}/${chunks.length}] got ${gatewayFailure ? 'no answer in time (gateway timeout)' : 'a server error'}, checking the file revision to know if it has been applied…`;
 
-        succeededOperations += currentChunk.length;
+        // A server error is the final answer so the revision is already up to date, contrary to a gateway timeout
+        if (!(await waitForPenpotFileRevision(meta.penpotProjectId, penpotDocumentId, fileVersion.revn + 1, gatewayFailure ? 5 * 60_000 : 20_000))) {
+          throw error;
+        }
 
-        // Starting a new chunk
-        currentChunk = [...forwardedOperationsOnNextChunk];
-        currentChunkCount = currentChunk.length;
+        if (!process.stderr.isTTY) {
+          console.log(
+            `chunk [${chunkNumber}/${chunks.length}] got ${gatewayFailure ? 'no answer in time' : 'a server error'} but the file revision confirms it has been applied`
+          );
+        }
+      }
+
+      succeededOperations += operations.length;
+      fileVersion.revn++;
+    };
+
+    // When Penpot crashes without telling the cause, operations are sent in halves (applying the ones that pass, so the push
+    // goes on) until the operation making it fail is isolated
+    const pushOperationsIsolatingFailures = async (operations: typeof differences.newTreeOperations) => {
+      try {
+        await pushOperations(operations);
+      } catch (error) {
+        if (!(error instanceof ApiError && error.status === 500)) {
+          throw error;
+        }
+
+        const parts = splitOperationsInHalves(operations);
+
+        if (parts.length === 1) {
+          const dumpPath = path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), 'push-error-operations.json');
+          await fs.writeFile(dumpPath, JSON.stringify(operations, null, 2), { encoding: 'utf-8' }).catch(() => {
+            /* best-effort dump, swallow */
+          });
+
+          console.warn(
+            `Penpot fails on its own on the following operation(s), dumped to:\n  ${dumpPath}\n${operations
+              .map((operation) => {
+                const obj = 'obj' in operation ? (operation.obj as { type?: string; name?: string }) : null;
+
+                return `  - ${operation.type}${'id' in operation ? ` "${operation.id}"` : ''}${obj ? ` (${obj.type} "${obj.name}")` : ''}`;
+              })
+              .join('\n')}`
+          );
+
+          throw error;
+        }
+
+        pushSpinner.text = `Chunk [${chunkNumber}/${chunks.length}] made Penpot fail, sending it in smaller parts to isolate the operation causing it (${operations.length} ops left to check)…`;
+        if (!process.stderr.isTTY) {
+          console.log(
+            `Penpot failed on ${operations.length} operation(s) of chunk [${chunkNumber}/${chunks.length}], sending them in halves to isolate the cause`
+          );
+        }
+
+        for (const part of parts) {
+          await pushOperationsIsolatingFailures(part);
+        }
+      }
+    };
+
+    try {
+      let chunkStartIndex = 0;
+
+      for (const chunk of chunks) {
         chunkNumber++;
+        pushSpinner.text = `Pushing chunk [${chunkNumber}/${chunks.length}] (${chunk.length} ops, ${succeededOperations}/${totalOperations} done) to Penpot file "${penpotDocumentId}"…`;
+
+        // Chunks keep the operations order, so the original operations (with group markers) are retrieved by position
+        const chunkStart = Date.now();
+        await pushOperationsIsolatingFailures(differences.newTreeOperations.slice(chunkStartIndex, chunkStartIndex + chunk.length));
+        chunkStartIndex += chunk.length;
+
+        // Without terminal (e.g. CI) the spinner text is not displayed, so progress is logged to know where a failure happened
+        if (!process.stderr.isTTY) {
+          console.log(`pushed chunk [${chunkNumber}/${chunks.length}] (${chunk.length} ops) in ${Math.round((Date.now() - chunkStart) / 1000)}s`);
+        }
       }
 
-      currentChunk.push(operation);
-      currentChunkCount += encodedOperationLength;
-      currentGroupCount = currentGroupId ? currentGroupCount + 1 : 0;
-    }
+      pushSpinner.succeed(
+        `Pushed ${succeededOperations}/${totalOperations} operation(s) across ${chunkNumber} chunk(s) to Penpot file "${penpotDocumentId}"`
+      );
+    } catch (error) {
+      // Stop the spinner first so the recovery warnings below render cleanly (no clash with the animation)
+      pushSpinner.fail(`Failed while pushing chunk [${chunkNumber}/${chunks.length}] to Penpot file "${penpotDocumentId}"`);
 
-    // The last chunk must be processed
-    if (currentChunk.length > 0) {
-      await processOperationsChunk(figmaDocumentId, penpotDocumentId, differences, currentChunk, chunkNumber, succeededOperations, serverValidation);
-    }
-  }
-
-  if (differences.oldThumbnails.length > 0) {
-    console.log(`processing the removal of ${differences.oldThumbnails.length} thumbails`);
-
-    // Note: we do not parallelize with `Promise.all()` because it could trigger rate limit
-    for (const oldThumbnail of differences.oldThumbnails) {
-      // TODO: uncomment when the OpenAPI schema exposes this endpoint
-      // await postCommandDeleteFileObjectThumbnail({
-      //   requestBody: {
-      //     fileId: penpotDocumentId,
-      //     objectId: oldThumbnail,
-      //   },
-      // });
-
-      const response = await fetch(`${penpotApiBaseUrl}/delete-file-object-thumbnail`, {
-        method: 'POST',
-        body: JSON.stringify({
-          fileId: penpotDocumentId,
-          objectId: oldThumbnail,
-        }),
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          Authorization: (PenpotClientSettings.HEADERS as any)?.Authorization,
-        },
-      });
-
-      if (!response.ok) {
-        // If not removed there is a risk of visual defect until there is a modification inside
-        // We have no easy way to retry this on the next synchronization because the tree will already be modified
-        // Use `text()` (not `json()`) because error responses from this endpoint can be empty
-        const body = await response.text();
-
-        console.error(`thumbnail delete failed: ${response.status} ${response.statusText} — ${body || '<empty body>'}`);
-        console.warn(`the thumbnail ${oldThumbnail} seems to not be deleted correctly`);
+      // Dump the full Penpot validation details so the user can investigate which shapes were
+      // rejected (Node truncates `details` to "[Object]" by default and inline JSON is too long
+      // for typical referential-integrity failures). Saved alongside the diff for offline inspection
+      const body = (error as unknown as { body?: { details?: unknown[]; code?: string } }).body;
+      if (body && Array.isArray(body.details)) {
+        const dumpPath = path.resolve(getPenpotDocumentPath(dataDir, figmaDocumentId, penpotDocumentId), `push-error-chunk-${chunkNumber}.json`);
+        try {
+          await fs.writeFile(dumpPath, JSON.stringify({ code: body.code, details: body.details }, null, 2), { encoding: 'utf-8' });
+          console.warn(`Full Penpot rejection (${body.details.length} validation error(s), code "${body.code}") dumped to:\n  ${dumpPath}`);
+          const sample = body.details.slice(0, 3);
+          console.warn(`First ${sample.length} entries (for quick read):\n${JSON.stringify(sample, null, 2)}`);
+        } catch {
+          /* best-effort dump, swallow */
+        }
       }
+
+      if (isGatewayFailure(error)) {
+        // The revision did not confirm the chunk, but the Penpot server may still process it, so resuming from the remaining
+        // operations could apply it twice: the comparison must be done again from the real state
+        console.warn(
+          `The Penpot server did not answer in time through its intermediary (gateway timeout), and the file revision did not confirm the chunk has been applied (or could not be retrieved). The server may still be processing it. Wait about 5 minutes, then rerun your command adding "--use-cached-figma-data": it compares again with the current Penpot state before pushing, without fetching Figma again. Note the comparison now also loads the Penpot file content, so it needs more memory than before. If it happens again, lower "--push-chunk-size" (currently ${pushChunkSize ?? defaultPushChunkSize}MB) so each request finishes in time`
+        );
+      } else if (succeededOperations > 0) {
+        console.warn(`Wait a bit since we are removing processed chunks for your next retry, it will reduce the input and speed up`);
+
+        try {
+          differences.newTreeOperations.splice(0, succeededOperations);
+
+          await writeBigJsonFile(getFigmaToPenpotDiffPath(dataDir, figmaDocumentId, penpotDocumentId), differences);
+        } catch (writeError) {
+          console.error(
+            `it has failed removing processed chunks, please rerun the synchronization from the start to be sure the comparaison is done with the updated Penpot document`
+          );
+
+          throw writeError;
+        }
+      }
+
+      throw error;
     }
   }
 }
 
 export const SetOptions = z.object({
+  dataDir: z.string(),
   documents: z.array(DocumentOptions),
   serverValidation: ServerValidation,
+  pushChunkSize: PushChunkSize,
   prompting: Prompting,
 });
 export type SetOptionsType = z.infer<typeof SetOptions>;
@@ -1798,9 +2619,17 @@ export async function set(options: SetOptionsType) {
   // Execute operations onto Penpot instance to match the Figma documents
   // and adjust local mapping with deleted/modified/created nodes
   for (const document of options.documents) {
-    const diff = await readFigmaToPenpotDiffFile(document.figmaDocument, document.penpotDocument);
+    const diff = await readFigmaToPenpotDiffFile(options.dataDir, document.figmaDocument, document.penpotDocument);
 
-    await processDifferences(document.figmaDocument, document.penpotDocument, diff, options.serverValidation, options.prompting);
+    await processDifferences(
+      options.dataDir,
+      document.figmaDocument,
+      document.penpotDocument,
+      diff,
+      options.serverValidation,
+      options.prompting,
+      options.pushChunkSize
+    );
   }
 }
 
@@ -1811,47 +2640,634 @@ export const Duration = z.string().transform((val) => {
 });
 export type DurationType = z.infer<typeof Duration>;
 
+// The CLI allows --document and --library to only specify the Figma part, so we need to prompt the user the Penpot destination
+export async function resolveDocumentDestinations(
+  dataDir: string,
+  documents: DocumentOptionsType[],
+  prompting: boolean,
+  figmaMetaCache: FigmaFileMetaCache = new FigmaFileMetaCache()
+): Promise<DocumentOptionsType[]> {
+  const needsPrompt = documents.filter((doc) => !doc.penpotDocument);
+  if (needsPrompt.length === 0) {
+    return documents;
+  }
+
+  if (!prompting) {
+    throw new Error(
+      `${needsPrompt.length} document(s) were passed without a Penpot target and cannot be resolved interactively under --ci. Use ":new" to auto-create or ":<penpotId>" to target an existing file. Affected: ${needsPrompt.map((d) => d.figmaDocument).join(', ')}`
+    );
+  }
+
+  // Lazily build the choice list once and reuse it across every "existing" prompt in this run
+  let cachedFileChoices: Awaited<ReturnType<typeof fetchAllPenpotFileChoices>> | null = null;
+  const resolved: DocumentOptionsType[] = [];
+
+  for (const doc of documents) {
+    if (doc.penpotDocument) {
+      resolved.push(doc);
+
+      continue;
+    }
+
+    // Fetch the Figma file's display name so the user can confirm they're answering for the
+    // right document. Lazy per prompt — the synced files are typically accessible to the token
+    // so this should almost always succeed (unlike library files in resolveBindingsInteractively)
+    const figmaFileName = await retrieveFigmaFileName(figmaMetaCache, doc.figmaDocument);
+    const figmaLabel = figmaFileName ? `${chalk.yellow(`"${figmaFileName}"`)} (${doc.figmaDocument})` : `"${doc.figmaDocument}"`;
+
+    console.log(`\nNo Penpot target was specified for Figma document ${figmaLabel}.`);
+
+    const action = await select({
+      message: 'What do you want to do?',
+      choices: [
+        {
+          name: 'Create a new Penpot file',
+          value: 'new',
+          description: 'You will pick the team and project on the next prompt; figpot will create the file for you',
+        },
+        {
+          name: 'Pick an existing Penpot file',
+          value: 'existing',
+          description: 'Lists every Penpot file you have access to',
+        },
+      ],
+    });
+
+    if (action === 'new') {
+      resolved.push({ figmaDocument: doc.figmaDocument, penpotDocument: 'new' });
+
+      continue;
+    }
+
+    if (!cachedFileChoices) {
+      cachedFileChoices = await fetchAllPenpotFileChoices();
+    }
+
+    const previouslySyncedPenpotIds = await findRecommendedPenpotIdsForLibrary(dataDir, doc.figmaDocument);
+
+    const sortedChoices = [...cachedFileChoices].sort((a, b) => {
+      const aRec = previouslySyncedPenpotIds.has(a.value) ? 0 : 1;
+      const bRec = previouslySyncedPenpotIds.has(b.value) ? 0 : 1;
+      return aRec - bRec;
+    });
+
+    const decoratedChoices = sortedChoices.map((choice) => ({
+      name: previouslySyncedPenpotIds.has(choice.value)
+        ? `${choice.name} ${chalk.green.italic('(recommended — previously synced from this Figma file)')}`
+        : choice.name,
+      value: choice.value,
+      disabled: choice.disabled,
+    }));
+
+    const penpotId = await select({
+      message: `Pick the Penpot file for Figma document ${figmaLabel}:`,
+      choices: decoratedChoices,
+    });
+
+    if (!uuidValidate(penpotId)) {
+      throw new Error(`the selected Penpot file id "${penpotId}" is not a valid UUID`);
+    }
+
+    console.log(`\nTo skip this prompt next time, use: ${chalk.cyan(`-d ${doc.figmaDocument}:${penpotId}`)}\n`);
+
+    resolved.push({ figmaDocument: doc.figmaDocument, penpotDocument: penpotId });
+  }
+
+  return resolved;
+}
+
+// For every document or library passed as `figmaId:new`, prompts the user where to locate this new file
+export async function resolveNewPenpotFiles(dataDir: string, documents: DocumentOptionsType[], prompting: boolean): Promise<DocumentOptionsType[]> {
+  const newCount = documents.filter((doc) => doc.penpotDocument === 'new' || !doc.penpotDocument).length;
+  if (newCount === 0) {
+    return documents;
+  }
+
+  if (!prompting) {
+    throw new Error(
+      `${newCount} document(s) requested as ":new" but cannot be created interactively under --ci. Pre-create the file in Penpot and pass its id`
+    );
+  }
+
+  const teams = (await postGetTeams({ body: {} })).data as unknown as Array<{
+    id: string;
+    name: string;
+    permissions: { isOwner: boolean; isAdmin: boolean; canEdit: boolean };
+  }>;
+
+  const resolved: DocumentOptionsType[] = [];
+  for (const doc of documents) {
+    if (doc.penpotDocument && doc.penpotDocument !== 'new') {
+      resolved.push(doc);
+
+      continue;
+    }
+
+    console.log(`\nCreating a new Penpot file for the Figma file "${doc.figmaDocument}"`);
+
+    const teamId = await select({
+      message: 'Pick the Penpot team where to create the file:',
+      choices: teams.map((team) => ({
+        name: team.name,
+        value: team.id,
+        disabled: team.permissions.canEdit ? false : '(viewer-only, you cannot create files in this team)',
+      })),
+    });
+
+    // Do not consider projects that have been soft-deleted
+    const projects = (await postGetProjects({ body: { teamId } })).data as unknown as Array<{ id: string; name: string; deletedAt?: string }>;
+    const activeProjects = projects.filter((project) => !project.deletedAt);
+
+    const projectId = await select({
+      message: 'Pick the Penpot project where to create the file:',
+      choices: activeProjects.map((project) => ({ name: project.name, value: project.id })),
+    });
+
+    // Using temporarily a fallback name, the right one will be set at the synchronization step
+    const placeholderName = `figpot: pending first synchronization (${doc.figmaDocument})`;
+
+    // Penpot generates the identifier (since v2.19 it rejects a provided one), and the client types do not bring the response
+    const createdFile = (await postCreateFile({ body: { name: placeholderName, projectId } })).data as unknown as { id?: string } | undefined;
+    if (!createdFile?.id) {
+      throw new Error('Penpot did not return the identifier of the created file');
+    }
+
+    const penpotFileId = createdFile.id;
+
+    // Touch an empty mapping for this freshly created file so the subsequent `restoreMapping`
+    // doesn't trigger the "Are you sure to continue by overriding the target document?" prompt:
+    // we just created the Penpot file ourselves and know it has no existing content to override
+    await saveMapping(dataDir, doc.figmaDocument, penpotFileId, {
+      lastExport: null,
+      fonts: new Map(),
+      assets: new Map(),
+      nodes: new Map(),
+      documents: new Map(),
+      colors: new Map(),
+      typographies: new Map(),
+      components: new Map(),
+      tokenSets: new Map(),
+      tokens: new Map(),
+      tokenThemes: new Map(),
+    });
+
+    console.log(`Created Penpot file with id "${penpotFileId}" (will be renamed from the Figma title at the end of the synchronization)`);
+
+    console.log(`To skip this prompt next time, use: ${chalk.cyan(`-d ${doc.figmaDocument}:${penpotFileId}`)}\n`);
+
+    resolved.push({ figmaDocument: doc.figmaDocument, penpotDocument: penpotFileId });
+  }
+
+  return resolved;
+}
+
+// Walks on Penpot teams → projects → files for the authenticated Penpot user and returns pickable file
+async function fetchAllPenpotFileChoices(): Promise<Array<{ name: string; value: string; disabled: false | string }>> {
+  const teams = (await postGetTeams({ body: {} })).data as unknown as Array<{
+    id: string;
+    name: string;
+    permissions: { isOwner: boolean; isAdmin: boolean; canEdit: boolean };
+  }>;
+
+  const fileChoices: Array<{ name: string; value: string; disabled: false | string }> = [];
+
+  for (const team of teams) {
+    // Do not consider projects that have been soft-deleted
+    const projects = (await postGetProjects({ body: { teamId: team.id } })).data as unknown as Array<{
+      id: string;
+      name: string;
+      deletedAt?: string;
+    }>;
+
+    for (const project of projects) {
+      if (project.deletedAt) {
+        continue;
+      }
+
+      const files = (await postGetProjectFiles({ body: { projectId: project.id } })).data as unknown as Array<{
+        id: string;
+        name: string;
+        deletedAt?: string;
+      }>;
+
+      for (const file of files) {
+        if (file.deletedAt) {
+          // Avoid listing soft-deleted files
+          continue;
+        }
+
+        fileChoices.push({
+          name: `${team.name} › ${project.name} › ${file.name}`,
+          value: file.id,
+          disabled: team.permissions.canEdit ? false : '(viewer-only team, you cannot sync into this file)',
+        });
+      }
+    }
+  }
+
+  return fileChoices;
+}
+
+// Returns the set of Penpot file ids this user previously synced this Figma source into
+async function findRecommendedPenpotIdsForLibrary(dataDir: string, figmaFileKey: string): Promise<Set<string>> {
+  const recommended = new Set<string>();
+  const exportPath = path.resolve(getFigmaDocumentPath(dataDir, figmaFileKey), 'export');
+
+  if (!fsSync.existsSync(exportPath)) {
+    return recommended;
+  }
+
+  const entries = await fs.readdir(exportPath);
+  for (const entry of entries) {
+    const match = entry.match(/^penpot_(.+)$/);
+    if (match) {
+      recommended.add(match[1]);
+    }
+  }
+
+  return recommended;
+}
+
+// Prompts the user to pick a Penpot file for every Figma library referenced by the synced documents
+// that is neither passed as a document or library (if libraries were not explicitly skipped). And throws under `--ci`
+//
+// Options will be to bind to an existing Penpot file, skip referencing it or stop the run to first synchronize that library separately
+// Old library references can remain on hidden layers inside instances, which the Figma libraries panel does not list, so
+// a library looking unexpected is worth investigating before detaching it (otherwise the defect would be silently hidden)
+const unexpectedLibraryHint =
+  'If a library is unexpected (e.g. an older version of a library you use), it may only be referenced by style or component overrides on hidden layers inside instances, which the Figma libraries panel does not list: fix them in Figma rather than detaching the library';
+
+// Reading the whole tree is expensive, so it is only done when some libraries have to be decided on
+async function describeLibraryUsages(dataDir: string, documents: DocumentOptionsType[], figmaFiles: Set<string>): Promise<Map<string, string>> {
+  const descriptions = new Map<string, string[]>();
+
+  for (const doc of documents) {
+    const tree = await readFigmaTreeFile(dataDir, doc.figmaDocument);
+    const remoteComponents = await readFigmaRemoteComponentsFile(dataDir, doc.figmaDocument);
+    const remoteStyles = await readFigmaRemoteStylesFile(dataDir, doc.figmaDocument);
+
+    for (const [figmaFile, usages] of findLibraryUsages(tree, remoteComponents, remoteStyles, figmaFiles)) {
+      const description = `referenced in "${doc.figmaDocument}" at:\n${formatLibraryUsages(doc.figmaDocument, usages)}`;
+      const fileDescriptions = descriptions.get(figmaFile);
+
+      if (fileDescriptions) {
+        fileDescriptions.push(description);
+      } else {
+        descriptions.set(figmaFile, [description]);
+      }
+    }
+  }
+
+  return new Map([...descriptions].map(([figmaFile, fileDescriptions]) => [figmaFile, fileDescriptions.join('\n')]));
+}
+
+export async function resolveBindingsInteractively(
+  dataDir: string,
+  documents: DocumentOptionsType[],
+  declaredLibraries: DocumentOptionsType[],
+  prompting: boolean,
+  detachedLibraries: string[] = [],
+  figmaMetaCache: FigmaFileMetaCache = new FigmaFileMetaCache()
+): Promise<DocumentOptionsType[]> {
+  const declaredFigmaFiles = new Set([...documents.map((doc) => doc.figmaDocument), ...declaredLibraries.map((lib) => lib.figmaDocument)]);
+
+  const unboundFigmaFiles = new Set<string>();
+  for (const doc of documents) {
+    const remoteComponents = await readFigmaRemoteComponentsFile(dataDir, doc.figmaDocument);
+    const remoteStyles = await readFigmaRemoteStylesFile(dataDir, doc.figmaDocument);
+
+    for (const sourceFigmaFile of [...Object.values(remoteComponents), ...Object.values(remoteStyles)]) {
+      if (!declaredFigmaFiles.has(sourceFigmaFile)) {
+        unboundFigmaFiles.add(sourceFigmaFile);
+      }
+    }
+  }
+
+  if (unboundFigmaFiles.size === 0) {
+    return [];
+  }
+
+  // Libraries explicitly detached are skipped like when choosing to skip them when prompted, their instances will not be
+  // bound to any component
+  const detachedFigmaFiles = [...unboundFigmaFiles].filter((figmaFile) => detachedLibraries.includes(figmaFile));
+  if (detachedFigmaFiles.length > 0) {
+    console.warn(
+      `${detachedFigmaFiles.length} Figma library file(s) are referenced but detached as requested, the instances of their components will be kept as plain shapes: ${detachedFigmaFiles.join(', ')}`
+    );
+
+    for (const figmaFile of detachedFigmaFiles) {
+      unboundFigmaFiles.delete(figmaFile);
+    }
+
+    if (unboundFigmaFiles.size === 0) {
+      return [];
+    }
+  }
+
+  const usagesDescriptions = await describeLibraryUsages(dataDir, documents, unboundFigmaFiles);
+
+  if (!prompting) {
+    throw new Error(
+      `${unboundFigmaFiles.size} Figma library file(s) are referenced but not bound:\n` +
+        [...unboundFigmaFiles].map((figmaFile) => `- ${figmaFile} ${usagesDescriptions.get(figmaFile) ?? ''}`).join('\n') +
+        `\n` +
+        `Pass "-l <figmaFileId>:<penpotFileId>" or "--detach-library <figmaFileId>" for each, or "--skip-libraries". ${unexpectedLibraryHint}`
+    );
+  }
+
+  // Build a "Team › Project › File" choice list once and reuse it for every unbound library prompt
+  const fileChoices = await fetchAllPenpotFileChoices();
+
+  // Sentinel values for the two non-pick choices. UUIDs cannot collide with these
+  const SKIP_VALUE = '__skip__';
+  const STOP_AND_SYNC_VALUE = '__stop_and_sync__';
+
+  // Figma has no batch "fetch metadata for these keys" endpoint, doing in in parallel to avoid blocking on each submitted prompt
+  const figmaLibraryNames = new Map<string, string | undefined>();
+
+  const namesSpinner = ora(`Fetching names of ${unboundFigmaFiles.size} referenced Figma libraries…`).start();
+  try {
+    await Promise.all(
+      [...unboundFigmaFiles].map(async (key) => {
+        const name = await retrieveFigmaFileName(figmaMetaCache, key);
+
+        figmaLibraryNames.set(key, name);
+      })
+    );
+
+    namesSpinner.succeed(`Fetched names of ${unboundFigmaFiles.size} referenced Figma libraries`);
+  } catch (error) {
+    namesSpinner.fail('Failed to fetch some Figma library names');
+
+    throw error;
+  }
+
+  const resolved: DocumentOptionsType[] = [];
+  const queuedForSeparateSync: string[] = [];
+  const skippedFigmaFiles: string[] = [];
+  const unboundFigmaFilesList = [...unboundFigmaFiles];
+
+  // Index every library's iteration position so we can know which ones haven't been prompted yet
+  // when the user chooses "stop now" those become "also referenced, consider syncing them in the
+  // same re-run" suggestions, sparing the user from re-encountering this flow library by library
+  let promptedCount = 0;
+
+  for (const figmaFileKey of unboundFigmaFilesList) {
+    promptedCount++;
+    // "Recommended" hint: if `data/documents/<figmaFileKey>/export/penpot_<id>/` exists, that
+    // Penpot file was synced from this Figma library in the past. It's a strong signal it's the right
+    // target. Picks up every past sync this user ran from the same working directory
+    const previouslySyncedPenpotIds = await findRecommendedPenpotIdsForLibrary(dataDir, figmaFileKey);
+
+    const sortedFileChoices = [...fileChoices].sort((a, b) => {
+      const aRec = previouslySyncedPenpotIds.has(a.value) ? 0 : 1;
+      const bRec = previouslySyncedPenpotIds.has(b.value) ? 0 : 1;
+      return aRec - bRec;
+    });
+
+    const decoratedChoices: Array<{ name: string; value: string; description?: string; disabled?: boolean | string } | Separator> =
+      sortedFileChoices.map((choice) => ({
+        name: previouslySyncedPenpotIds.has(choice.value)
+          ? `${choice.name} ${chalk.green.italic('(recommended since previously synced from this Figma library)')}`
+          : choice.name,
+        value: choice.value,
+        disabled: choice.disabled,
+      }));
+
+    decoratedChoices.push(new Separator());
+    decoratedChoices.push({
+      name: 'Skip referencing this library',
+      value: SKIP_VALUE,
+      description: `Useful when your Figma access token does not have access to the source library, but cross-file instances will land detached. ${unexpectedLibraryHint}`,
+    });
+    decoratedChoices.push({
+      name: 'Stop now, I want to synchronize this library first',
+      value: STOP_AND_SYNC_VALUE,
+      description: 'Exits and prints a hint to add this library as a `-d figmaId:new` document. Re-run to continue',
+    });
+
+    // Name was prefetched in parallel above; falls back to just the id if the meta call failed
+    const figmaLibraryName = figmaLibraryNames.get(figmaFileKey);
+    const figmaLibraryLabel = figmaLibraryName ? `${chalk.yellow(`"${figmaLibraryName}"`)} (${figmaFileKey})` : `"${figmaFileKey}"`;
+
+    const usagesDescription = usagesDescriptions.get(figmaFileKey);
+    if (usagesDescription) {
+      console.log(`Figma library file ${figmaLibraryLabel} is ${usagesDescription}`);
+    }
+
+    const chosenPenpotFileId = await select({
+      message: `Figma library file ${figmaLibraryLabel} is referenced, pick the corresponding Penpot file if any:`,
+      choices: decoratedChoices,
+    });
+
+    if (chosenPenpotFileId === SKIP_VALUE) {
+      skippedFigmaFiles.push(figmaFileKey);
+
+      continue;
+    }
+
+    if (chosenPenpotFileId === STOP_AND_SYNC_VALUE) {
+      queuedForSeparateSync.push(figmaFileKey);
+
+      break;
+    }
+
+    if (!uuidValidate(chosenPenpotFileId)) {
+      throw new Error(`the selected Penpot file id "${chosenPenpotFileId}" is not a valid UUID`);
+    }
+
+    resolved.push({ figmaDocument: figmaFileKey, penpotDocument: chosenPenpotFileId });
+  }
+
+  // If the user chose to stop & synchronize libraries first, print a hint with the flags to add and
+  // exit gracefully. We do NOT auto-recurse because a Figma library may itself reference other
+  // libraries, leading to deep cascades that could be not wanted by the user
+  if (queuedForSeparateSync.length > 0) {
+    const formatFlag = (figmaId: string): string => {
+      const name = figmaLibraryNames.get(figmaId);
+
+      return name ? `-d ${figmaId}:new` + chalk.gray(`  # ${name}`) : `-d ${figmaId}:new`;
+    };
+
+    const queuedFlags = queuedForSeparateSync.map(formatFlag).join('\n  ');
+    const remainingUnprompted = unboundFigmaFilesList.slice(promptedCount);
+    const otherUnbound = [...skippedFigmaFiles, ...remainingUnprompted];
+
+    let message = `\nThe following Figma library file(s) need to be synchronized first. Re-run your command with these flags added:\n  ${chalk.cyan(queuedFlags)}\n`;
+
+    if (otherUnbound.length > 0) {
+      const otherFlags = otherUnbound.map(formatFlag).join('\n  ');
+
+      message +=
+        `\nNote: ${otherUnbound.length} other Figma library(ies) are also referenced and currently unbound. ` +
+        `Since you are re-running the command anyway, you may want to synchronize them in the same run — otherwise their instances will land detached on Penpot, and you will re-encounter this prompt next time. ` +
+        `To include them as new Penpot files, add:\n  ${chalk.cyan(otherFlags)}\n`;
+    }
+
+    message += `\n(cross-file references use deterministic IDs so the order of co-synced documents does not matter)\n`;
+
+    console.log(message);
+
+    return Promise.reject(new UserCancellationExit());
+  }
+
+  if (resolved.length > 0) {
+    const additionalFlags = resolved.map((binding) => `-l ${binding.figmaDocument}:${binding.penpotDocument}`).join(' ');
+
+    console.log(`\nTo skip these prompts next time, append to your command: ${chalk.cyan(additionalFlags)}\n`);
+  }
+
+  return resolved;
+}
+
 export const SynchronizeOptions = z.object({
+  dataDir: z.string(),
   documents: z.array(DocumentOptions),
   excludePatterns: ExcludePatterns,
   replaceFontPatterns: z.array(ReplaceFontPattern),
+  extraVariables: ExtraVariables,
   hydrate: z.boolean(),
   hydrateTimeout: Duration.nullable(),
   syncMappingWithGit: z.boolean(),
+  pruneMapping: z.boolean().default(false),
   serverValidation: ServerValidation,
+  pushChunkSize: PushChunkSize,
   prompting: Prompting,
   useCachedFigmaData: z.boolean(),
+  libraries: z.array(DocumentOptions).default([]),
+  skipLibraries: z.boolean().default(false),
+  detachedLibraries: z.array(z.string()).default([]),
+  skipInferringLibraries: z.boolean().default(false),
 });
 export type SynchronizeOptionsType = z.infer<typeof SynchronizeOptions>;
 
-export async function synchronize(options: SynchronizeOptionsType) {
-  // TODO: compute the entire node tree
-  await retrieve(options);
+export async function synchronize(options: SynchronizeOptionsType, figmaMetaCache: FigmaFileMetaCache = new FigmaFileMetaCache()) {
+  // Resolve Penpot file IDs for those that need to be created
+  // Note: the CLI made sure missing penpot value got promoted to either `'new'` or a real UUID
+  const resolvedOptions: SynchronizeOptionsType = {
+    ...options,
+    documents: await resolveNewPenpotFiles(options.dataDir, options.documents, options.prompting === true),
+    libraries: await resolveNewPenpotFiles(options.dataDir, options.libraries, options.prompting === true),
+  };
 
-  // TODO: then
-  await transform(options);
-  await compare(options);
-  await set(options);
+  await retrieve(
+    {
+      dataDir: resolvedOptions.dataDir,
+      documents: resolvedOptions.documents,
+      libraries: resolvedOptions.libraries,
+      prompting: resolvedOptions.prompting,
+      syncMappingWithGit: resolvedOptions.syncMappingWithGit,
+      useCachedFigmaData: resolvedOptions.useCachedFigmaData,
+      skipLibraries: resolvedOptions.skipLibraries,
+      skipInferringLibraries: resolvedOptions.skipInferringLibraries,
+    },
+    figmaMetaCache
+  );
 
-  if (!options.hydrate) {
+  // Bind any unresolved library files interactively before transform sees them
+  const interactiveBindings = resolvedOptions.skipLibraries
+    ? []
+    : await resolveBindingsInteractively(
+        resolvedOptions.dataDir,
+        resolvedOptions.documents,
+        resolvedOptions.libraries,
+        resolvedOptions.prompting === true,
+        resolvedOptions.detachedLibraries,
+        figmaMetaCache
+      );
+
+  const allLibraries = [...resolvedOptions.libraries, ...interactiveBindings];
+
+  await transform({
+    dataDir: resolvedOptions.dataDir,
+    documents: resolvedOptions.documents,
+    excludePatterns: resolvedOptions.excludePatterns,
+    replaceFontPatterns: resolvedOptions.replaceFontPatterns,
+    extraVariables: resolvedOptions.extraVariables,
+    syncMappingWithGit: resolvedOptions.syncMappingWithGit,
+    pruneMapping: resolvedOptions.pruneMapping,
+    prompting: resolvedOptions.prompting,
+    libraries: allLibraries,
+  });
+  await compare(resolvedOptions);
+  await set(resolvedOptions);
+
+  for (const document of resolvedOptions.documents) {
+    await checkFileLoadableByBrowser(document.penpotDocument, 'synchronized');
+  }
+
+  // Dclare a link from every synced document to every library file (including sibling co-synced documents)
+  if (!resolvedOptions.skipLibraries) {
+    const libraryFiles = new Map<string, string>();
+
+    for (const doc of resolvedOptions.documents) {
+      libraryFiles.set(doc.figmaDocument, doc.penpotDocument);
+    }
+
+    for (const lib of allLibraries) {
+      libraryFiles.set(lib.figmaDocument, lib.penpotDocument);
+    }
+
+    const sharedLibraries = new Set<string>();
+
+    for (const consumer of resolvedOptions.documents) {
+      for (const [figmaLibraryId, penpotLibraryId] of libraryFiles) {
+        if (figmaLibraryId === consumer.figmaDocument) {
+          continue; // No need to link a file to itself
+        }
+
+        // The API accepts linking any file, but the Penpot interface (and the relinking when importing exported files) only
+        // considers shared files as libraries, so a library file is shared once before being linked
+        if (!sharedLibraries.has(penpotLibraryId)) {
+          try {
+            await postSetFileShared({ body: { id: penpotLibraryId, isShared: true } });
+
+            sharedLibraries.add(penpotLibraryId);
+          } catch (error) {
+            console.warn(
+              `could not share the Penpot file ${penpotLibraryId} as a library, it will not be proposed as such in the Penpot interface: ${error instanceof Error ? error.message : error}`
+            );
+          }
+        }
+
+        try {
+          await postLinkFileToLibrary({
+            body: {
+              fileId: consumer.penpotDocument,
+              libraryId: penpotLibraryId,
+            },
+          });
+        } catch (error) {
+          // Penpot returns 400 when the link already exists, which is fine
+          console.warn(`could not link Penpot file ${consumer.penpotDocument} to library ${penpotLibraryId} (it may already be linked)`);
+        }
+      }
+    }
+  }
+
+  if (!resolvedOptions.hydrate) {
     console.warn(
-      `the document has been synchronized but some graphical enhancements can only be done from a browser. If the synchronization has pushed modifications the first user seeing the updated document may encounter some loadings for a few seconds or minutes depending on the size of the document. We advise you to perform a hydratation by yourself so the first user will see the document properly directly. Either open your document into the browser, or rerun this command without "--no-hydrate", or by running the dedicated command "figpot document hydrate ..."`
+      `synchronization is complete, but some graphical enhancements can only be done from a browser. If modifications were pushed, the first user opening each updated document may encounter loadings of a few seconds or minutes depending on the size of the document(s). We advise you to perform a hydration yourself so the next viewer sees everything directly. Either open each document in the browser, or rerun this command without "--no-hydrate", or use the dedicated command "figpot document hydrate ..."`
     );
 
     return;
   }
 
   await hydrate({
-    documents: options.documents,
-    timeout: options.hydrateTimeout,
+    dataDir: resolvedOptions.dataDir,
+    documents: resolvedOptions.documents,
+    timeout: resolvedOptions.hydrateTimeout,
   });
 }
 
 export function formatPenpotPageUrl(baseUrl: string, teamId: string, documentId: string, pageId: string): string {
-  return `${baseUrl}/#/workspace?team-id=${teamId}&file-id=${documentId}&page-id=${pageId}`;
+  // The new render engine is forced whatever the user profile preference, it computes text layouts the same way users will see them,
+  // and contrary to the legacy one it does not generate thumbnails (all pushed as updates to wait for)
+  return `${baseUrl}/?screen=workspace&team-id=${teamId}&file-id=${documentId}&page-id=${pageId}&wasm=true`;
 }
 
 export const HydrateOptions = z.object({
+  dataDir: z.string(),
   documents: z.array(DocumentOptions),
   timeout: Duration.nullable(),
 });
@@ -1891,9 +3307,18 @@ export async function hydrate(options: HydrateOptionsType) {
     })
     .flat(); // Flatten because the cookie set and the library may have nested things;
 
-  // Detect updates needed by the frontend, and wait for them to finish
-  const mininumStartupTimeSeconds = 30;
-  const idleIntervalAfterChangeSeconds = 10;
+  // Detect updates needed by the frontend, and wait for them to finish: a page is done once Penpot has nothing left to save for
+  // these durations in a row (the first page also synchronizes the libraries). If the Penpot state cannot be read, it falls back to
+  // waiting for these durations without any update sent
+  const firstPageSettledSeconds = 10;
+  const pageSettledSeconds = 3;
+  const legacyStartupIdleSeconds = 30;
+  const legacyIdleSeconds = 10;
+  // Loading the shapes of a huge page can take minutes, past this delay something went wrong
+  const pageLoadTimeoutSeconds = 10 * 60;
+  // The memory of a tab grows with each page displayed, past this share of its JavaScript heap limit the next pages are hydrated
+  // into a new tab (a crash is also retried into a new tab, to tell apart a page too big to be loaded from the accumulated memory)
+  const heapRestartRatio = 0.5;
 
   const browser = await chromium.launch({
     executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
@@ -1901,6 +3326,7 @@ export async function hydrate(options: HydrateOptionsType) {
     headless: false,
     args: [
       '--window-size=1,1', // It does not work as expected, `viewport` in the browser context must also be set (note there is no working way to minimize the window)
+      '--enable-unsafe-swiftshader', // Fallback to software WebGL when there is no GPU (e.g. CI with `xvfb-run`), otherwise the new render engine cannot start and nothing is hydrated
     ],
   });
 
@@ -1935,136 +3361,334 @@ export async function hydrate(options: HydrateOptionsType) {
         `a chomium window will open to perform the hydratation, please do not close it or change url (note it has to be visible otherwise it would not pass the cloudflare protection on the penpot production)`
       );
 
-      const meta = await restoreMeta(document.figmaDocument, document.penpotDocument);
+      const meta = await restoreMeta(options.dataDir, document.figmaDocument, document.penpotDocument);
 
       // Check we have the needed information into the `meta.json`
       if (meta.penpotTeamId === 'not_known_yet') {
         throw new Error(`to run hydratation you must first run the synchronization on this document on this machine`);
       }
 
-      const page = await browserContext.newPage();
+      // Otherwise the interface would get stuck on loading the file until the page timeout
+      if (!(await checkFileLoadableByBrowser(document.penpotDocument, 'synchronized'))) {
+        throw new Error(`the penpot document ${document.penpotDocument} cannot be hydrated since a browser cannot load it`);
+      }
 
-      try {
-        const endpointsToWatch = ['/api/main/methods/update-file?', '/api/main/methods/create-file-object-thumbnail?'];
-        let stage: 'start' | 'waiting-updates' = 'start';
+      const endpointsToWatch = ['/api/main/methods/update-file?'];
 
-        const pagesToWatch = [...meta.penpotPages];
+      // Hydrate the given pages into a new tab, it returns the pages left when the tab had to be replaced (see below)
+      const hydratePagesIntoNewTab = async (pages: string[]): Promise<string[]> => {
+        const page = await browserContext.newPage();
 
-        if (pagesToWatch.length === 0) {
-          break;
-        }
+        // Penpot emits this event once the shapes of the displayed page are loaded into its render engine (at startup and at each page
+        // switch). It is counted into the DOM since it is shared with the isolated context used to evaluate scripts
+        await page.addInitScript(() => {
+          window.document.addEventListener('penpot:wasm:set-objects', () => {
+            const dataset = window.document.documentElement.dataset;
 
-        const firstPageToWatch = pagesToWatch.shift() as string;
+            dataset.figpotPageLoads = String(Number(dataset.figpotPageLoads ?? 0) + 1);
+          });
+        });
 
-        await new Promise<void>((resolve, reject) => {
-          // TODO: timeout should be global to all documents
-          const timeoutTimerId = options.timeout
-            ? setTimeout(() => {
-                if (successTimerId) {
-                  clearTimeout(successTimerId);
+        // The crash event gives no reason, so the JavaScript heap of the tab is sampled to tell the user when it was close to its limit
+        // (Chromium caps it around 4 GB whatever the machine memory, a page with too many shapes cannot be loaded)
+        type HeapSample = { used: number; limit: number };
+        const readHeap = () =>
+          page.evaluate(() => {
+            const memory = (performance as Performance & { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
+
+            return memory ? { used: memory.usedJSHeapSize, limit: memory.jsHeapSizeLimit } : null;
+          });
+        const toMegabytes = (bytes: number) => Math.round(bytes / 1024 / 1024);
+
+        let lastHeapSample: HeapSample | null = null;
+        let peakHeapUsed = 0;
+        const heapSamplingIntervalId = setInterval(() => {
+          readHeap()
+            .then((sample) => {
+              if (sample) {
+                lastHeapSample = sample;
+                peakHeapUsed = Math.max(peakHeapUsed, sample.used);
+              }
+            })
+            .catch(() => {
+              // The page may be navigating or have crashed, the crash is reported by its own event
+            });
+        }, 2000);
+
+        try {
+          // Without WebGL the new render engine cannot start, the file would be considered as hydrated whereas nothing has been computed
+          const webglAvailable = await page.evaluate(() => !!window.document.createElement('canvas').getContext('webgl2'));
+          if (!webglAvailable) {
+            throw new Error(`webgl is not available in the hydratation browser, the penpot render engine cannot compute the file`);
+          }
+
+          let stage: 'start' | 'waiting-updates' = 'start';
+
+          const [firstPageToWatch, ...otherPagesToWatch] = pages;
+          let currentPage = firstPageToWatch;
+          let hydratedPages = 0;
+
+          return await new Promise<string[]>((resolve, reject) => {
+            page.on('crash', () => {
+              const heapLimit = (lastHeapSample as HeapSample | null)?.limit ?? null;
+              const memoryDetails = heapLimit
+                ? ` (JavaScript heap peaked at ${toMegabytes(peakHeapUsed)} MB out of a ${toMegabytes(heapLimit)} MB limit)`
+                : '';
+
+              // The memory of the tab grows with each page displayed, so the page is retried into a new tab to know if it can be loaded on its own
+              if (hydratedPages > 0) {
+                console.warn(`the browser tab crashed while hydrating the page ${currentPage}${memoryDetails}, retrying it into a new tab`);
+
+                resolve(pages.slice(hydratedPages));
+
+                return;
+              }
+
+              // Samples are taken every few seconds while the heap grows fast just before the crash, so half of the limit is already a strong hint
+              const likelyOutOfMemory = heapLimit !== null && peakHeapUsed >= heapLimit / 2;
+
+              reject(
+                new Error(
+                  `the browser tab crashed while hydrating the page ${currentPage}${memoryDetails}. ` +
+                    (likelyOutOfMemory
+                      ? `It has very likely run out of memory: the page has too many shapes to be loaded in a browser tab (Chromium caps the JavaScript memory of a tab around 4 GB, adding memory to the machine does not help). Users will face the same crash when opening this page, consider excluding its non-essential elements from the synchronization (with "--exclude-node-pattern" or "--exclude-page-pattern") or splitting its content across several pages into the Figma document`
+                      : `The cause is unknown, try again and check the machine has enough free memory`)
+                )
+              );
+            });
+
+            // TODO: timeout should be global to all documents
+            const timeoutTimerId = options.timeout
+              ? setTimeout(() => {
+                  reject(new Error('hydratation has timed out before being fully complete'));
+                }, options.timeout)
+              : null;
+
+            const inFlightUpdates = new Set<Request>();
+
+            page.on('request', (request) => {
+              if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => request.url().includes(endpoint))) {
+                console.log(`a needed request has been detected`);
+
+                inFlightUpdates.add(request);
+              }
+            });
+
+            page.on('response', async (response) => {
+              const url = response.url();
+              if (stage === 'start' && url.includes('/api/main/methods/get-file?')) {
+                if (response.status() === 200) {
+                  stage = 'waiting-updates';
+                } else {
+                  reject(new Error(`document data cannot be fetched: ${await response.text()}`));
                 }
+              } else if (stage === 'waiting-updates' && url.includes('/api/main/methods/get-file?') && url.includes(document.penpotDocument)) {
+                // Switching pages must not reload the document, otherwise the whole file is fetched again (very slow on big files)
+                // Note: the libraries used by the document are also fetched at startup, they are not concerned
+                console.warn(`the document has been fetched again, the page switch has probably reloaded it`);
+              } else if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => url.includes(endpoint))) {
+                console.log(`the needed request has been performed, looking for more...`);
 
-                reject(new Error('hydratation has timed out before being fully complete'));
-              }, options.timeout)
-            : null;
+                inFlightUpdates.delete(response.request());
+              }
+            });
 
-          let successTimerId: ReturnType<typeof setTimeout>;
+            // Penpot emits an event once the shapes of the displayed page are loaded into its render engine, it is counted by the init script
+            const waitForPageLoaded = async (previousPageLoads: number) => {
+              try {
+                await page.waitForFunction(
+                  (previous) => Number(window.document.documentElement.dataset.figpotPageLoads ?? 0) > previous,
+                  previousPageLoads,
+                  { timeout: pageLoadTimeoutSeconds * 1000, polling: 500 }
+                );
+              } catch (error) {
+                throw error instanceof Error && error.name === 'TimeoutError'
+                  ? new Error(`the page ${currentPage} has not been loaded by Penpot after ${pageLoadTimeoutSeconds} seconds`)
+                  : error;
+              }
+            };
 
-          const waitForPageChange = (timeout: number) => {
-            successTimerId = setTimeout(() => {
-              if (pagesToWatch.length > 0) {
-                const pageToWatch = pagesToWatch.shift() as string;
+            // Read the persistence state of Penpot (changes waiting to be saved) through its `debug` namespace, it only exists into the
+            // main context of the page (not the isolated one used by default). It returns `null` if not available (e.g. other Penpot versions)
+            const readPenpotPersistence = () =>
+              page.evaluate(
+                () => {
+                  const debug = (window as unknown as { debug?: { get_state?: (path: string) => void } }).debug;
+                  const getState = debug?.get_state;
+
+                  if (typeof getState !== 'function') {
+                    return null;
+                  }
+
+                  // `get_state` only logs the value, so it is captured
+                  // Note: no named function must be declared here, the TypeScript runtime would wrap it with a helper that does not exist in the page
+                  const values: unknown[] = [];
+                  const originalLog = console.log;
+
+                  console.log = (...args: unknown[]) => {
+                    values.push(args[args.length - 1]);
+                  };
+
+                  try {
+                    getState(':persistence :status');
+                    getState(':persistence :queue');
+                  } finally {
+                    console.log = originalLog;
+                  }
+
+                  const [status, queue] = values;
+
+                  return {
+                    status: typeof status === 'string' ? status : null,
+                    queueLength: Array.isArray(queue) ? queue.length : 0,
+                  };
+                },
+                undefined,
+                undefined,
+                false
+              );
+
+            // A page is done once nothing is being sent and Penpot has no change waiting to be saved (a `null` or `saved` status with an empty
+            // queue, like its own `terminal-status?`), for a few seconds in a row since Penpot debounces its changes and some are computed
+            // a bit after the page load (e.g. text layouts once fonts are loaded)
+            const waitForPageSettled = (stableSeconds: number, fallbackStableSeconds: number) =>
+              new Promise<void>((resolveSettled, rejectSettled) => {
+                let settledSince: number | null = null;
+
+                const check = () => {
+                  readPenpotPersistence()
+                    .then((persistence) => {
+                      if (persistence?.status === 'error') {
+                        rejectSettled(new Error(`Penpot has failed to save the changes computed for the page ${currentPage}`));
+
+                        return;
+                      }
+
+                      const settled =
+                        inFlightUpdates.size === 0 &&
+                        (persistence === null || (persistence.queueLength === 0 && (persistence.status === null || persistence.status === 'saved')));
+                      const requiredStableSeconds = persistence === null ? fallbackStableSeconds : stableSeconds;
+
+                      if (!settled) {
+                        settledSince = null;
+                      } else if (settledSince === null) {
+                        settledSince = Date.now();
+                      } else if (Date.now() - settledSince >= requiredStableSeconds * 1000) {
+                        resolveSettled();
+
+                        return;
+                      }
+
+                      setTimeout(check, 500);
+                    })
+                    .catch((error) => {
+                      // If the tab has crashed its own event gives a better explanation, so let it reject first
+                      setTimeout(() => rejectSettled(error), 1000);
+                    });
+                };
+
+                check();
+              });
+
+            // Once a page is done, it tells if the next ones should be hydrated into a new tab: Penpot keeps in memory what it has
+            // loaded so the heap of the tab grows with each page displayed, until crashing even on a small page
+            const markPageAsHydrated = async (): Promise<boolean> => {
+              hydratedPages++;
+
+              const heap = await readHeap();
+
+              console.log(`the page ${currentPage} is hydrated${heap ? ` (JavaScript heap: ${toMegabytes(heap.used)} MB)` : ''}`);
+
+              if (heap && hydratedPages < pages.length && heap.used >= heap.limit * heapRestartRatio) {
+                console.log(`the JavaScript heap of the tab is getting large, the next pages are hydrated into a new tab to free it`);
+
+                return true;
+              }
+
+              return false;
+            };
+
+            const hydratePages = async (): Promise<string[]> => {
+              const firstPageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, firstPageToWatch);
+
+              const response = await page.goto(firstPageUrl, {
+                // timeout: xxx, // It should be working by having the command timeout that will close the browser
+                waitUntil: 'load',
+              });
+
+              if (response && response.status() !== 200) {
+                console.log(await response.text());
+
+                throw new Error(`cannot load the document page`);
+              }
+
+              console.log(`look for change needed on the page ${firstPageToWatch}`);
+
+              // The page shapes may have been loaded before reaching this point, the counter covers it
+              await waitForPageLoaded(0);
+              // At startup Penpot also synchronizes the libraries and the components, so it is given more time
+              await waitForPageSettled(firstPageSettledSeconds, legacyStartupIdleSeconds);
+
+              if (await markPageAsHydrated()) {
+                return pages.slice(hydratedPages);
+              }
+
+              for (const pageToWatch of otherPagesToWatch) {
                 const pageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, pageToWatch);
 
-                page
-                  .evaluate((newUrl) => {
-                    // We tried using `pushState` but it was not working. It seems by modifying the `href` the page is not reloaded so it fits our need
-                    window.location.href = newUrl;
-                  }, pageUrl)
-                  .then(() => {
-                    // Start again the analysis process
-                    console.log(`look for change needed on the page ${pageToWatch}`);
+                currentPage = pageToWatch;
 
-                    waitForPageChange(idleIntervalAfterChangeSeconds * 1000);
-                  })
-                  .catch(reject);
-              } else {
+                // Changing the url through `location.href` would reload the whole document (the file is fetched and loaded again for
+                // each page, very slow on big files), so the Penpot router is notified through the history API instead
+                const previousPageLoads = await page.evaluate((newUrl) => {
+                  const previous = Number(window.document.documentElement.dataset.figpotPageLoads ?? 0);
+
+                  window.history.pushState({}, '', newUrl);
+                  window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+
+                  return previous;
+                }, pageUrl);
+
+                console.log(`look for change needed on the page ${pageToWatch}`);
+
+                await waitForPageLoaded(previousPageLoads);
+                await waitForPageSettled(pageSettledSeconds, legacyIdleSeconds);
+
+                if (await markPageAsHydrated()) {
+                  return pages.slice(hydratedPages);
+                }
+              }
+
+              return [];
+            };
+
+            hydratePages()
+              .then(resolve)
+              .catch(reject)
+              .finally(() => {
                 if (timeoutTimerId) {
                   clearTimeout(timeoutTimerId);
                 }
-
-                resolve();
-              }
-            }, timeout);
-          };
-
-          const ongoingChanges: Request[] = [];
-
-          page.on('request', (request) => {
-            const url = request.url();
-            if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => url.includes(endpoint))) {
-              console.log(`a needed request has been detected`);
-
-              // Pause the timer until this same request triggers a respponse
-              clearTimeout(successTimerId);
-
-              ongoingChanges.push(request);
-            }
+              });
           });
+        } finally {
+          clearInterval(heapSamplingIntervalId);
 
-          page.on('response', async (response) => {
-            const url = response.url();
-            if (stage === 'start' && url.includes('/api/main/methods/get-file?')) {
-              if (response.status() === 200) {
-                stage = 'waiting-updates';
+          await page.close();
+        }
+      };
 
-                console.log(`look for change needed on the page ${firstPageToWatch}`);
+      let pagesLeft = [...meta.penpotPages];
 
-                waitForPageChange(mininumStartupTimeSeconds * 1000);
-              } else {
-                reject(new Error(`document data cannot be fetched: ${await response.text()}`));
-              }
-            } else if (stage === 'waiting-updates' && endpointsToWatch.some((endpoint) => url.includes(endpoint))) {
-              console.log(`the needed request has been performed, looking for more...`);
+      while (pagesLeft.length > 0) {
+        pagesLeft = await hydratePagesIntoNewTab(pagesLeft);
+      }
 
-              // Find the corresponding request and remove it
-              const requestIndex = ongoingChanges.indexOf(response.request());
-              if (requestIndex !== -1) {
-                ongoingChanges.splice(requestIndex, 1);
+      console.log('no more update needed on the document');
 
-                // If no more waiting we can enable again the timer
-                if (ongoingChanges.length === 0) {
-                  // Note: the time is different since after the first detected change it means the rest has been loaded already
-                  waitForPageChange(idleIntervalAfterChangeSeconds * 1000);
-                }
-              }
-            }
-          });
-
-          const firstPageUrl = formatPenpotPageUrl(baseUrl, meta.penpotTeamId, document.penpotDocument, firstPageToWatch);
-
-          page
-            .goto(firstPageUrl, {
-              // timeout: xxx, // It should be working by having the command timeout that will close the browser
-              waitUntil: 'load',
-            })
-            .then((response) => {
-              if (response && response.status() !== 200) {
-                response
-                  .text()
-                  .then((value) => {
-                    console.log(value);
-                  })
-                  .finally(() => {
-                    reject(new Error(`cannot load the document page`));
-                  });
-              }
-            });
-        });
-
-        console.log('no more update needed on the document');
-      } finally {
-        await page.close();
+      // The hydration makes the file grow, it may have become too big to be opened again
+      if (!(await checkFileLoadableByBrowser(document.penpotDocument, 'hydrated'))) {
+        throw new Error(`the penpot document ${document.penpotDocument} has become too big to be opened by a browser once hydrated`);
       }
     }
   } finally {

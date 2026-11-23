@@ -1,58 +1,69 @@
 import { Readable } from 'stream';
-import streamChain from 'stream-chain';
-import Asm from 'stream-json/Assembler.js';
-import streamJsonParser from 'stream-json/Parser.js';
-import { ReadableStream } from 'stream/web';
+import { ReadableStream as NodeReadableStream } from 'stream/web';
 
+import { client as figmaClient } from '@figpot/src/clients/figma/client.gen';
 import { PostUpdateFileData } from '@figpot/src/clients/penpot';
+import { client as penpotClient } from '@figpot/src/clients/penpot/client.gen';
+import { readBigJsonStream } from '@figpot/src/utils/file';
 
-const { chain } = streamChain;
-const { parser } = streamJsonParser;
+// Thrown by both generated clients when the server answers with an error status, so callers can check the status
+// (the generated clients would otherwise throw the raw error body)
+export class ApiError extends Error {
+  constructor(
+    public readonly url: string,
+    public readonly status: number,
+    public readonly statusText: string,
+    public readonly body: unknown
+  ) {
+    super(`${status} ${statusText} (${url})`);
+    this.name = 'ApiError';
+  }
+}
 
-export async function getJsonResponseBody(response: Response): Promise<any> {
-  // [WORKAROUND] When the content is over 500MB it cannot fit into a string to be parsed (e.g. error `ERR_STRING_TOO_LONG`)
-  // So we use directly the stream with the most optimized library to do that
-  const contentLength = response.headers.get('Content-Length');
+for (const client of [figmaClient, penpotClient]) {
+  client.interceptors.error.use((error, response, request) => {
+    // Other errors (network failure, interrupted response body...) are kept as they are, so they are not taken as a server answer
+    if (!response || response.ok) {
+      return error;
+    }
 
-  // [WORKAROUND] Currently the backend is sending back all changes we just did
-  // For huge documents it doubles or more the time of processing, since the answer is not used now we just ignore it
-  // Note: ideally the backend would not send at all this over the network
-  if (response.status >= 200 && response.status < 300 && response.body && response.url.endsWith('api/main/methods/update-file')) {
-    response.body.cancel();
+    return new ApiError(request?.url ?? response.url, response.status, response.statusText, error);
+  });
+}
 
-    return { message: `unusable patched object, please see "src/clients/workaround.ts"` };
+penpotClient.interceptors.error.use((error) => {
+  // Penpot validation errors give their details as a list of objects, logging them fully instead of `[ [Object], [Object], ... ]`
+  const details = error instanceof ApiError ? (error.body as { details?: unknown })?.details : undefined;
+  if (Array.isArray(details)) {
+    console.error(JSON.stringify(details));
   }
 
-  if (
-    response.body &&
-    ((contentLength && parseInt(contentLength, 10) >= 0x1fffffe8) ||
-      // [WORKAROUND] `Content-Length` header is not returned so applying the patch to appropriate URLs
-      response.url.includes('v1/files/') || // For Figma to get an entire file
-      response.url.endsWith('api/main/methods/get-file')) // For Penpot to get an entire file (stricter condition since that's the prefix of other endpoints)
-  ) {
-    // [WORKAROUND] Have to cast the stream to keep things simple (we made sure it works inside Node.js)
-    // Ref: https://github.com/DefinitelyTyped/DefinitelyTyped/discussions/65542
-    const stream = Readable.fromWeb(response.body as ReadableStream<any>);
+  return error;
+});
 
-    return await new Promise((resolve, reject) => {
-      const pipeline = chain([stream, parser()]);
+// Options to get the raw response stream instead of a parsed content
+export const streamedResponse = { parseAs: 'stream' } as const;
 
-      pipeline.once('error', (error) => {
-        reject(error);
-      });
+// A huge JSON content (like an entire Figma or Penpot file) cannot be parsed by the generated clients since they read it
+// as a string, which cannot go over ~512MB (`ERR_STRING_TOO_LONG`). For these calls we get the raw stream and parse it ourselves
+export async function readBigJsonResponse<T>(data: unknown, label: string): Promise<T> {
+  if (!(data instanceof NodeReadableStream)) {
+    throw new Error(`the response of ${label} was expected as a stream`);
+  }
 
-      const asm = Asm.connectTo(pipeline);
+  return (await readBigJsonStream(Readable.fromWeb(data), label)) as T;
+}
 
-      asm.once('done', (asm) => {
-        resolve(asm.current);
-      });
-    });
-  } else {
-    return await response.json();
+// [WORKAROUND] Penpot sends back all the changes we just pushed, for huge documents it doubles or more the time of
+// processing, and since we do not use this answer we get the raw stream to cancel it right away
+// Note: ideally the backend would not send at all this over the network
+export async function ignoreResponse(data: unknown): Promise<void> {
+  if (data instanceof NodeReadableStream) {
+    await data.cancel();
   }
 }
 
 // We have to do this to avoid the operation about comments that as not "type" and that would complicate our array of operations
 type WithTypeProperty<T> = T extends { type: any } ? T : never;
 
-export type appCommonFilesChanges$changeWithoutUnknown = WithTypeProperty<NonNullable<PostUpdateFileData['requestBody']['changes']>[0]>;
+export type appCommonFilesChanges$changeWithoutUnknown = WithTypeProperty<NonNullable<NonNullable<PostUpdateFileData['body']>['changes']>[0]>;

@@ -18,21 +18,21 @@ This library is **a Figma to Penpot converter and synchronizer supporting varian
 
 ### One-time transfer
 
-Prepare the minimal information:
+Open your [Figma](https://www.figma.com/files/) document inside the browser and copy its identifier _(for `https://www.figma.com/design/CptbnRHeDv3pzOai91abcd/` the ID is `CptbnRHeDv3pzOai91abcd`)_.
 
-1. Open your [Figma](https://www.figma.com/files/) document inside the browser and copy its identifier _(for `https://www.figma.com/design/CptbnRHeDv3pzOai91abcd/` the ID is `CptbnRHeDv3pzOai91abcd`)_
-2. Open [Penpot](https://design.penpot.app/) and create an empty file, and copy its identifier _(for `https://design.penpot.app/#/workspace?team-id=yyy&file-id=3d04e89b-bff0-8115-8004-bc14b0d50123&page-id=zzz` the ID is `3d04e89b-bff0-8115-8004-bc14b0d50123`)_
-
-Make sure to have [Node.js](https://nodejs.org/) installed and simply run:
+Then make sure to have [Node.js](https://nodejs.org/) installed and simply run:
 
 ```shell
 npx @betagouv/figpot deps # required to have a 100% complete synchronization, if not wanted use `--no-hydrate` on the following command
-npx @betagouv/figpot document synchronize -d CptbnRHeDv3pzOai91abcd:3d04e89b-bff0-8115-8004-bc14b0d50123
+npx @betagouv/figpot document synchronize -d CptbnRHeDv3pzOai91abcd
 ```
 
-The command will then ask you for tokens required to reach both Figma and Penpot. To avoid typing them each time, have a look at the `Usage > Advanced` section.
+The command will then ask you:
 
-_Note: Penpot user email and password are required to synchronize final details simulating a browser locally. If needed you can skip this with the parameter `--no-hydrate`. See the FAQ to better understand the hydratation process._
+- for access tokens required to reach both Figma and Penpot (to avoid typing them each time, have a look at the `Usage > Advanced` section)
+- where to locate the result into Penpot
+
+_Penpot user email and password are required to synchronize final details simulating a browser locally. If needed you can skip this with the parameter `--no-hydrate`. See the FAQ to better understand the hydratation process._
 
 ### Incremental transfers
 
@@ -42,12 +42,16 @@ If you intend to perform synchronizations from a new machine, or from a server t
 
 ### Avoid command prompts
 
+#### Command parameters
+
+Selecting the same Penpot file target over and over can be annoying. You can use the parameter `-d` as `-d <figmaId>:<penpotId>` to skip those prompts, and this is also true when specifying libraries with `-l <figmaId>:<penpotId>`.
+
 #### Variables
 
 It's possible to prefill some environment variables to avoid typing information each time:
 
 - `FIGMA_ACCESS_TOKEN` _(the token can be created from your account settings under `Personal access tokens` section, with **read-only** scopes like `File content, File metadata, Library assets, Library content, Projects, Team library content`)_
-- `PENPOT_ACCESS_TOKEN` _(the token can be created from your account settings under `Access tokens` tab)_
+- `PENPOT_ACCESS_TOKEN` _(the token can be created from your account settings under `Access tokens` tab. And if your instance does not enable access tokens, you can use instead the value of the `auth-token` cookie of a logged-in browser prefixed with `Bearer ` but it will expire with the session)_
 - `PENPOT_USER_EMAIL` _(email used for your account)_
 - `PENPOT_USER_PASSWORD` _(password used for your account)_
 
@@ -74,7 +78,38 @@ It's possible to:
 
 Please refer to the "Frequently Asked Questions" or to the commands documentation with `npx figpot --help`.
 
+## Design tokens
+
+Since `v2`, Figma variables are no longer materialised as Penpot library colors, they become **Penpot design tokens** instead. Since Figma's variables can apply **per frame** and Penpot's design tokens apply **per document**: the two models are not fully compatible.
+
+To keep the synchronized file faithful to what Figma rendered, `figpot` translates each Figma variable into a Penpot token, grouped per collection mode into a token set, and does not enable any token set or theme by default.
+
+Due to this, our advices would be:
+
+1. If you intend to make the Penpot file a mirror of the Figma's one, never enable any token set (not even once)
+2. If you are migrating to Penpot, feel free to enable token sets and if the new design mismatches Figma's version, just adapt directly the Penpot file
+
 ## Frequently Asked Questions
+
+### Some library variables are missing (aliases dropped, modes without values)?
+
+The Figma REST API (`GET /v1/files/:key/variables/local`) only describes the library variables a file binds directly to some nodes. It leaves out the library collections the file only sets a mode of, and the variables its aliases point to. This is not a plan limitation: the REST API only gives more if you can open the library files themselves (a `403 You don't have permission` on `GET /v1/components/:key` means you cannot). This is typical of a `.fig` imported without access to its libraries.
+
+The Figma file still keeps a copy of those variables, which the Plugin API can read. To export them:
+
+1. Get the plugin folder (the 3 files of [`figma-plugins/variables-export`](./figma-plugins/variables-export)) with `npx degit betagouv/figpot/figma-plugins/variables-export figpot-variables-export`, or from the whole repository archive (`Code > Download ZIP` on GitHub)
+2. In the Figma desktop app, open the file, then `Plugins > Development > Import plugin from manifest…` and pick `manifest.json` from that folder
+3. Run `Plugins > Development > figpot variables export`, which downloads `<file name>.variables.json` (a few MB for a big design system)
+4. Synchronize with `--extra-variables <figmaId>:/path/to/<file name>.variables.json` (repeat it for each document concerned): these variables complete the REST ones (the REST ones win on common ids)
+
+Run the export again when the libraries change.
+
+### What the difference between parameters `-d` and `-l`?
+
+- `-d` stands for a document to synchronize into Penpot
+- `-l` stands for a library used by a document to properly reference the source definition (so optional, but helpful in practice)
+
+You may ask why not passing all Figma files as documents instead of libraries... **But marking an assets file as "document" will perform a full synchronization, whereas having it as a "library" is just making sure to reference components and styles belonging to it.** It's useful in case someone in your team handles the synchronization of let's say a design system, and you just want to target this as a library because your only interest is fully synchronizing your own application file.
 
 ### Some Figma information seems lost during the transfer?
 
@@ -88,10 +123,10 @@ It's also possible either this plugin does not implement the conversion yet, or 
 
 In fact, our core library is transforming and giving all the Figma information to Penpot but the latter relies on a few operations that only happen when the document is open into a browser:
 
-- It creates thumbnails for some elements
 - It gives each paragraph part a graphical position that cannot be inferred from the Figma data
+- It recalculates the size of auto-sized texts with the browser font metrics (that may differ from Figma ones, for example a text wrapping on more lines), and so the layouts containing them
 
-So, at the end of a synchronization of "raw data", we hydrate the Penpot file by opening a hidden browser that will wait for those 2 operations to be done on all pages.
+So, at the end of a synchronization of "raw data", we hydrate the Penpot file by opening a hidden browser that will wait for those operations to be done on all pages. The new Penpot render engine is forced during this step, whatever your profile preference.
 
 There are 2 drawbacks to this:
 
@@ -146,9 +181,28 @@ If you encounter issues like `JavaScript heap out of memory`, try to:
 
 ### How to synchronize multiple Figma files while keeping their components references between each other?
 
-Currently when you convert a Figma file with `figpot`, all instances of remote components will loose their "component definition link" since the dependencies files are maybe not what you want to synchronize. To ease the user experience, we decided to keep this logic instead of assuming the library has to transfer all files (or almost all).
+`figpot` supports cross-file component, color and typography references via two mechanisms to automatically wires them:
 
-It may be implemented in the future, but it would require all expected files to be synchronized first, and the "binding operation" would appear after. This because Figma allows bidirectional dependencies ("file A" may rely on "file B" components, and "file B" may rely on "file A" components).
+1. Pass multiple Figma files in a single command using repeated `-d figmaId` flags
+2. For Figma libraries you do _not_ want to re-sync each time (e.g. a stable design system), declare them as libraries once with `-l figmaId`
+
+Example:
+
+```shell
+# Two co-synced files, where "consumer" uses components from "designSystem"
+figpot document synchronize \
+  -d <figmaDesignSystem>:<penpotDesignSystem> \
+  -d <figmaConsumer>:<penpotConsumer>
+
+# Only sync the consumer, but keep cross-file references to the existing design-system file
+figpot document synchronize \
+  -d <figmaConsumer>:<penpotConsumer> \
+  -l <figmaDesignSystem>:<penpotDesignSystem>
+```
+
+Whenever `figpot` discovers a referenced Figma library that is neither passed via `-d` nor `-l`, it prompts you with three choices: pick an existing Penpot file to bind to, skip referencing this library (useful if your Figma token has no access to the source), or stop the run so you can synchronize that library first. The "stop" option does _not_ trigger a recursive auto-sync. The latter choice is to keep you in control of how deep the cascade goes because a new document to sync may imply a large tree of nested documents. Also if you don't care about al cross-file references, pass `--skip-libraries`.
+
+_The Penpot-side IDs for components, color styles and text styles are deterministic, so cross-file bindings stay stable across re-syncs even if the local `mapping.json` is lost or even if it was done by someone else._
 
 ### How to manage Penpot error `referential-integrity`?
 
@@ -157,6 +211,31 @@ When pushing modifications to Penpot we have to chunk them in multiple requests 
 We did not find for now an ordering of operations that is passing 100% of the time for huge files with variants. So if you are also facing this, we provide the parameter `--no-server-validation` to ask the Penpot server to not check for integrity. When synchronizing on a brand new Penpot file, there is no risk using it.
 
 Note you can omit using this parameter after a first complete synchronization, because probably your next differences to push won't trigger integrity failure due to interconnected operations.
+
+After a synchronization done with `--no-server-validation`, it's worth checking everything went fine and the Penpot file is in a valid state:
+
+1. Rerun the synchronization without this parameter (adding `--use-cached-figma-data` avoids fetching Figma again). It should report no difference, which confirms the Penpot file matches the Figma one
+2. But with no difference nothing is sent, so the Penpot server validates nothing. For a quick validation of the whole file, you can send through the Penpot API an `update-file` request with `skipValidate: false` and a change having no effect on each page, for example `{"type": "mod-obj", "id": "00000000-0000-0000-0000-000000000000", "pageId": "<page ID>", "operations": [{"type": "assign", "value": {"r1": 0, "r2": 0, "r3": 0, "r4": 0}}]}` (the page root frame radius, which is always 0). The server then checks the pages concerned and lists the issues if any. For huge files, send a few pages per request so each one is processed in time
+
+### How to create a file too big to be pushed through the API?
+
+Each update through the Penpot API makes the server load and check the whole file, so the bigger the file the slower each request, until the server (or its proxy) gives up. For the first transfer of a huge file you can instead generate a Penpot file (`.penpot`) and import it, the server then builds the file in one go:
+
+```shell
+figpot document export \
+  -d <figmaId> \
+  -l <figmaLibraryId>:<penpotLibraryId> \
+  -p <penpotProjectId> \
+  -o my-file.penpot \
+  --import
+```
+
+- `-p` is the Penpot project the file is meant for: its team fonts are used, and with `--import` the file is imported into it (without `--import` you can import `-o` yourself from the Penpot interface)
+- The import creates new Penpot files (the identifier of an existing file cannot be kept), their identifiers are displayed at the end so you can synchronize them later as usual with `-d <figmaId>:<newPenpotId>`, the mapping being moved to them
+- Libraries passed with `-l` are linked at import if the destination team has exactly one shared file with the same name, and several `-d` are written into the same `.penpot` keeping the links between them (a file used by another one is shared, use `--shared` to share all of them)
+- Images are included into the `.penpot`, but Penpot gives them new identifiers at import so the next synchronization uploads them again
+
+Note that Penpot also limits imports (since v2.19, by default 500,000 elements and 500 MiB of content once decompressed). For files that big, excluding some nodes is still needed.
 
 ### How to redirect a Figma font to a different Penpot font?
 
@@ -206,12 +285,12 @@ All those "cons" are due to limitations being a Figma plugin, **for my initial u
 
 ### Why `mapping.json` keeps growing despite deleting elements?
 
-The choice has been done to keep all file mappings done in the past so:
+By default all file mappings done in the past are kept so:
 
 - in case of a deletion mistake on Figma followed by a rollback of the data, the Penpot file will continue to be stable
 - it allows testing different `figpot` exclude settings without loosing the bindings
 
-_If you feel confident that your Penpot file is not used as a dependency, you may choose to empty your file values... but it should be a rare use case._
+If the mapping has grown a lot (for example after excluding a large part of a file for good), pass `--prune-mapping` to remove the entries of the Figma nodes no longer synchronized (deleted, excluded...). If one of these nodes comes back later, it will be created again on Penpot with a new identifier, so anything referring to the previous shape will lose it.
 
 ## Contribute
 
@@ -223,14 +302,16 @@ Make sure to use a Node.js version aligned with one specified into `.nvmrc`. The
 
 ```shell
 npm install
-npm run setup # discard in Git changes produced in files `*/request.ts`, we have patch some for optimization. Note also we do not use fixed schema version since their SaaS API evolve all the time. We rely on types check to detect any breaking change so we can adjust our logic
+npm run setup
 cp .env.model .env.local
 ```
+
+The Figma and Penpot API clients (`src/clients/figma` and `src/clients/penpot`) are generated from their OpenAPI specifications committed into `src/clients/specs` (see `openapi-ts.config.ts`), they must not be modified by hand: our own settings are applied at runtime from `src/clients/workaround.ts`. Since their SaaS APIs evolve all the time, the CI warns when the committed specifications are outdated, then run `npm run client:update` to download them and regenerate the clients, the types check will tell if our logic has to be adjusted.
 
 Open `.env.local` and fill it with information as for a normal library usage. Then you are able to run:
 
 ```shell
-npm run cli document synchronize --- -d CptbnRHeDv3pzOai91abcd:3d04e89b-bff0-8115-8004-bc14b0d50123
+npm run cli document synchronize --- -d CptbnRHeDv3pzOai91abcd
 ```
 
 **Do not use the default Penpot production instance (`https://design.penpot.app/`) while developing!** It would consume their resources whereas they allow anyone to play inside their staging environment `https://design.penpot.dev/` (this can be configured through the environment variable `PENPOT_BASE_URL`). _Also it's possible to use your own local Penpot instance but I feel it's overkill if you are not facing a mysterious issue you have to debug (see https://help.penpot.app/technical-guide/getting-started/#install-with-docker)._
@@ -263,6 +344,17 @@ If needed, you can reproduce a full `npm run cli document synchronize ...` comma
 3. `npm run cli document debug compare ...`
 4. `npm run cli document debug set ...`
 5. `npm run cli document hydrate ...`
+
+### Release
+
+Releases are automatic: each push on `main` runs [semantic-release](https://github.com/semantic-release/semantic-release) from the `release` job of the CI (once the checks passed), it deduces the new version from the [conventional commits](https://www.conventionalcommits.org/) since the last release (`fix` for a patch, `feat` for a minor, a `!` or a `BREAKING CHANGE` footer for a major), then it publishes the package on npm and creates the GitHub release.
+
+The package is published through npm [trusted publishing](https://docs.npmjs.com/trusted-publishers): there is no token to store or renew, GitHub Actions authenticates to npm with OIDC and the package provenance is attested. Since anyone allowed to push into the GitHub repository could otherwise run a workflow publishing the package, the publication is restricted to the `main` branch. It requires to configure once:
+
+1. On GitHub, inside the repository settings under `Environments`, create the `npm-release` environment (before the first release, otherwise GitHub creates it without any restriction) with `Deployment branches and tags` restricted to the `main` branch. Optionally, add `Required reviewers` to approve each release manually.
+2. On npmjs.com, inside the package settings under `Trusted publisher`, choose `GitHub Actions` with `betagouv` as organization, `figpot` as repository, `ci.yml` as workflow filename and `npm-release` as environment, so npm only accepts a publication coming from a job of this environment. As allowed actions, enable publishing directly (semantic-release runs `npm publish`, it does not support `npm stage publish`) but not managing dist-tags (only used for prerelease or maintenance channels we do not have). To approve each release manually, prefer the `Required reviewers` of the GitHub environment: it holds the whole release job, so the Git tag and the GitHub release are not created before the approval either.
+3. Still inside the package settings on npmjs.com, under `Publishing access`, choose `Require two-factor authentication and disallow tokens`, so no access token can publish the package anymore (only the trusted publishing can).
+4. On GitHub, protect the `main` branch (pull request with an approval required before merging), since whatever the publishing method, anyone able to push into `main` is able to release.
 
 [build-img]: https://github.com/betagouv/figpot/actions/workflows/ci.yml/badge.svg?branch=main
 [build-url]: https://github.com/betagouv/figpot/actions/workflows/ci.yml

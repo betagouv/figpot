@@ -18,14 +18,45 @@ import { workaroundAssert as assert } from '@figpot/src/utils/assert';
 
 const { parseSVG } = svgPathParser;
 
+/**
+ * The outline of a regular polygon or a star in its own coordinates, used when Figma gives no `fillGeometry` (a shape
+ * without fill, or some layers of instances): like Figma the first point is at the top center and the points are spread
+ * on the ellipse of the node size (a star alternates with the inner ones)
+ */
+export function getPolygonPath(
+  node: Pick<StarNode | RegularPolygonNode, 'type' | 'size'> & { count?: number; starInnerScale?: number }
+): string | null {
+  const count = node.count ?? (node.type === 'STAR' ? 5 : 3);
+  if (!node.size || count < 3) {
+    return null;
+  }
+
+  const radiusX = node.size.x / 2;
+  const radiusY = node.size.y / 2;
+  const innerScale = node.type === 'STAR' ? node.starInnerScale ?? 0.382 : 1;
+  const steps = node.type === 'STAR' ? count * 2 : count;
+  const points: string[] = [];
+
+  for (let i = 0; i < steps; i++) {
+    const scale = node.type === 'STAR' && i % 2 === 1 ? innerScale : 1;
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / steps;
+
+    points.push(`${radiusX + Math.cos(angle) * radiusX * scale} ${radiusY + Math.sin(angle) * radiusY * scale}`);
+  }
+
+  return `M ${points.join(' L ')} Z`;
+}
+
 function translatePathNode(node: StarNode | RegularPolygonNode, figmaNodeTransform: Transform): Segment[] {
   assert(node.fillGeometry);
 
   if (node.fillGeometry.length > 0) {
     return translateCommands(node, figmaNodeTransform, parseSVG(node.fillGeometry[0].path));
-  } else {
-    return [];
   }
+
+  const polygonPath = getPolygonPath(node);
+
+  return polygonPath ? translateCommands(node, figmaNodeTransform, parseSVG(polygonPath)) : [];
 }
 
 export function transformPathNode(

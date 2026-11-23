@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <body style="font: 13px sans-serif; margin: 16px">
+    <p id="status">Collecting the variables…</p>
+    <a id="download" style="display: none">Download the JSON file</a>
+    <script>
+      const status = document.getElementById('status');
+      const download = document.getElementById('download');
+
+      onmessage = (event) => {
+        const message = event.data.pluginMessage;
+        if (message.type === 'progress') {
+          status.textContent = message.text;
+        } else if (message.type === 'error') {
+          status.textContent = `Error: ${message.text}`;
+        } else if (message.type === 'done') {
+          status.textContent = `Exported ${message.summary}.`;
+          download.href = URL.createObjectURL(new Blob([message.json], { type: 'application/json' }));
+          download.download = message.fileName;
+          download.style.display = 'inline';
+          download.click();
+        }
+      };
+    </script>
+  </body>
+</html>

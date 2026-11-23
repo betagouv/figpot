@@ -8,7 +8,7 @@ import { translateLetterSpacing } from '@figpot/src/features/translators/text/pr
 import { translateLineHeight } from '@figpot/src/features/translators/text/properties/translateLineHeight';
 import { translateTextDecoration } from '@figpot/src/features/translators/text/properties/translateTextDecoration';
 import { translateTextTransform } from '@figpot/src/features/translators/text/properties/translateTextTransform';
-import { translateDocumentId, translateTypographyId } from '@figpot/src/features/translators/translateId';
+import { nullId, translateDocumentId, translateTypographyId } from '@figpot/src/features/translators/translateId';
 import { TextNode as PenpotTextNode, TextStyle } from '@figpot/src/models/entities/penpot/shapes/text';
 import { BoundVariableRegistry } from '@figpot/src/models/entities/registry';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
@@ -46,28 +46,53 @@ export function dropTrailingLetterSpacing(segments: PenpotTextNode[]): PenpotTex
 export function transformTextStyle(registry: BoundVariableRegistry, node: TextNode, style: TypeStyle): TextStyle {
   const typographyStyleId = getTypographyStyleId(node);
 
+  if (!typographyStyleId) {
+    return partialTransformTextStyle(registry, style);
+  }
+
+  const binding = registry.resolveStyle(typographyStyleId);
+
+  // Binding with file ID being unknown is making the font section in the UI empty and buggy,
+  // for example clicking "edit library style" is crashing the whole... so better avoid the link (unlike for components)
+  if (binding && binding.file === undefined) {
+    return partialTransformTextStyle(registry, style);
+  }
+
+  let typographyRefId: string;
+  let typographyRefFile: string;
+
+  if (binding) {
+    typographyRefId = binding.id;
+    typographyRefFile = binding.file as string;
+  } else {
+    typographyRefId = translateTypographyId(typographyStyleId, registry.getMapping());
+    typographyRefFile = translateDocumentId('current', registry.getMapping());
+  }
+
   return {
     ...partialTransformTextStyle(registry, style),
-    ...(typographyStyleId
-      ? {
-          typographyRefId: translateTypographyId(typographyStyleId, registry.getMapping()),
-          typographyRefFile: translateDocumentId('current', registry.getMapping()),
-        }
-      : {}),
+    typographyRefId,
+    typographyRefFile,
   };
 }
 
 export function partialTransformTextStyle(registry: BoundVariableRegistry, fontName: TypeStyle): TextStyle {
+  // Figma can expose `fontFamily` as '' for empty text runs or scaled-instance edge cases whereas Penpot's text schema rejects it,
+  // so we fall back to the bundled "Source Sans Pro" (Penpot's default)
+  const effectiveFontName: TypeStyle = fontName.fontFamily
+    ? fontName
+    : { ...fontName, fontFamily: 'Source Sans Pro', fontPostScriptName: 'SourceSansPro-Regular' };
+
   return {
-    ...translateFontName(registry, fontName),
-    fontFamily: fontName.fontFamily,
-    fontSize: fontName.fontSize?.toString(),
-    fontStyle: translateFontStyle(fontName),
-    textDecoration: translateTextDecoration(fontName),
-    letterSpacing: translateLetterSpacing(fontName),
-    lineHeight: translateLineHeight(fontName),
-    textTransform: translateTextTransform(fontName),
-    textAlign: translateHorizontalAlign(fontName.textAlignHorizontal),
+    ...translateFontName(registry, effectiveFontName),
+    fontFamily: effectiveFontName.fontFamily,
+    fontSize: effectiveFontName.fontSize?.toString(),
+    fontStyle: translateFontStyle(effectiveFontName),
+    textDecoration: translateTextDecoration(effectiveFontName),
+    letterSpacing: translateLetterSpacing(effectiveFontName),
+    lineHeight: translateLineHeight(effectiveFontName),
+    textTransform: translateTextTransform(effectiveFontName),
+    textAlign: translateHorizontalAlign(effectiveFontName.textAlignHorizontal),
   };
 }
 

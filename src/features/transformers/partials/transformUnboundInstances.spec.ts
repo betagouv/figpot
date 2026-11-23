@@ -1,0 +1,69 @@
+import { transformUnboundInstances } from '@figpot/src/features/transformers/partials/transformUnboundInstances';
+import { nullId } from '@figpot/src/features/translators/translateId';
+import { PenpotPage } from '@figpot/src/models/entities/penpot/page';
+
+describe('transformUnboundInstances()', () => {
+  it('should make plain shapes of an unbound instance and all its descendants, nested instances included', () => {
+    const page = {
+      id: 'page',
+      name: 'Page',
+      objects: {
+        root: { id: 'root', type: 'frame', shapes: ['unbound'] },
+        unbound: {
+          id: 'unbound',
+          type: 'frame',
+          componentId: nullId,
+          componentFile: nullId,
+          shapeRef: nullId,
+          componentRoot: true,
+          shapes: ['child', 'nested'],
+        },
+        child: { id: 'child', type: 'path', shapeRef: 'library-shape', touched: ['geometry-group'] },
+        nested: { id: 'nested', type: 'frame', componentId: 'component', componentFile: 'file', shapeRef: 'main-shape', shapes: ['nestedChild'] },
+        nestedChild: { id: 'nestedChild', type: 'path', shapeRef: 'main-shape-child' },
+      },
+    } as unknown as PenpotPage;
+
+    transformUnboundInstances(page);
+
+    expect(page.objects['unbound']).toEqual({ id: 'unbound', type: 'frame', shapes: ['child', 'nested'] });
+    expect(page.objects['child']).toEqual({ id: 'child', type: 'path' });
+    expect(page.objects['nested']).toEqual({ id: 'nested', type: 'frame', shapes: ['nestedChild'] });
+    expect(page.objects['nestedChild']).toEqual({ id: 'nestedChild', type: 'path' });
+    expect(page.objects['root']).toEqual({ id: 'root', type: 'frame', shapes: ['unbound'] });
+  });
+
+  it('should keep the references of an unbound instance inside a bound copy, as a plain part of the copy', () => {
+    const page = {
+      id: 'page',
+      name: 'Page',
+      objects: {
+        copy: { id: 'copy', type: 'frame', componentId: 'component', componentFile: 'file', shapeRef: 'main', componentRoot: true, shapes: ['icon'] },
+        icon: { id: 'icon', type: 'frame', componentId: nullId, componentFile: nullId, shapeRef: 'main-icon', shapes: ['iconChild'] },
+        iconChild: { id: 'iconChild', type: 'path', shapeRef: 'main-icon-child' },
+      },
+    } as unknown as PenpotPage;
+
+    transformUnboundInstances(page);
+
+    expect(page.objects['icon']).toEqual({ id: 'icon', type: 'frame', shapeRef: 'main-icon', shapes: ['iconChild'] });
+    expect(page.objects['iconChild']).toEqual({ id: 'iconChild', type: 'path', shapeRef: 'main-icon-child' });
+    expect(page.objects['copy']).toMatchObject({ componentId: 'component', shapeRef: 'main' });
+  });
+
+  it('should detach an unbound instance inside an unbound one, whatever their order', () => {
+    const page = {
+      id: 'page',
+      name: 'Page',
+      objects: {
+        icon: { id: 'icon', type: 'frame', componentId: nullId, componentFile: nullId, shapeRef: 'main-icon', shapes: [] },
+        outer: { id: 'outer', type: 'frame', componentId: nullId, componentFile: nullId, shapeRef: nullId, shapes: ['icon'] },
+      },
+    } as unknown as PenpotPage;
+
+    transformUnboundInstances(page);
+
+    expect(page.objects['icon']).toEqual({ id: 'icon', type: 'frame', shapes: [] });
+    expect(page.objects['outer']).toEqual({ id: 'outer', type: 'frame', shapes: ['icon'] });
+  });
+});

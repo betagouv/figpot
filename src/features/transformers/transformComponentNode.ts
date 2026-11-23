@@ -1,6 +1,6 @@
 import { ComponentNode, Transform } from '@figpot/src/clients/figma';
 import { transformFrameNode } from '@figpot/src/features/transformers/transformFrameNode';
-import { translateComponentId, translateDocumentId } from '@figpot/src/features/translators/translateId';
+import { translateDocumentId } from '@figpot/src/features/translators/translateId';
 import { FrameShape } from '@figpot/src/models/entities/penpot/shapes/frame';
 import { AbstractRegistry, ComponentRegistry } from '@figpot/src/models/entities/registry';
 
@@ -19,8 +19,10 @@ export function transformComponentNode(registry: AbstractRegistry, node: Compone
   // Note: inside the page tree the component type is a frame, so reusing the frame logic and transform
   const componentFrame = transformFrameNode(registry, node, figmaNodeTransform);
 
-  componentFrame.componentFile = translateDocumentId('current', registry.getMapping());
-  componentFrame.componentId = translateComponentId(`${node.id}_component`, registry.getMapping()); // The component definition has a different ID than the representation in the normal tree
+  // Lookup the component to know if it needs to be referenced from another file
+  const binding = registry.resolveComponent(node.id);
+  componentFrame.componentFile = binding?.file ?? translateDocumentId('current', registry.getMapping());
+  componentFrame.componentId = binding?.id ?? translateDocumentId('current', registry.getMapping()); // fallback never hit in practice since the definition is by construction in `figmaComponents`
   componentFrame.componentRoot = componentRoot;
   componentFrame.mainInstance = true;
 

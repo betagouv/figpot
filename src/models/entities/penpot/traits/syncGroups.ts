@@ -39,4 +39,5 @@ export type SyncGroups =
   | 'layout-item-min-w'
   | 'layout-item-absolute'
   | 'layout-item-z-index'
-  | 'layout-item-align-self';
+  | 'layout-item-align-self'
+  | `swap-slot-${string}`;

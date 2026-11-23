@@ -3,6 +3,7 @@ import svgPathParser from 'svg-path-parser';
 import { BooleanOperationNode, Transform } from '@figpot/src/clients/figma';
 import { transformBlend } from '@figpot/src/features/transformers/partials/transformBlend';
 import { transformChildren } from '@figpot/src/features/transformers/partials/transformChildren';
+import { transformConstraints } from '@figpot/src/features/transformers/partials/transformConstraints';
 import { transformDimensionAndRotationAndPosition } from '@figpot/src/features/transformers/partials/transformDimensionAndRotationAndPosition';
 import { transformEffects } from '@figpot/src/features/transformers/partials/transformEffects';
 import { transformFills } from '@figpot/src/features/transformers/partials/transformFills';
@@ -11,6 +12,7 @@ import { transformLayoutAttributes } from '@figpot/src/features/transformers/par
 import { transformProportion } from '@figpot/src/features/transformers/partials/transformProportion';
 import { transformSceneNode } from '@figpot/src/features/transformers/partials/transformSceneNode';
 import { transformStrokes } from '@figpot/src/features/transformers/partials/transformStrokes';
+import { BooleanOperand } from '@figpot/src/features/transformers/partials/transformVectorPaths';
 import { translateBoolType } from '@figpot/src/features/translators/translateBoolType';
 import { translateId } from '@figpot/src/features/translators/translateId';
 import { translateCommands } from '@figpot/src/features/translators/vectors/translateCommands';
@@ -33,12 +35,24 @@ function translatePathNode(node: BooleanOperationNode, figmaNodeTransform: Trans
   }
 }
 
+// Penpot computes a boolean from the paths of its operands, ignoring their strokes, so an operand must keep the outline Figma
+// gives (see `canStrokeNatively()`)
+function markBooleanOperands(node: { children?: object[] }): void {
+  for (const child of node.children ?? []) {
+    (child as BooleanOperand).insideBooleanOperation = true;
+
+    markBooleanOperands(child);
+  }
+}
+
 export function transformBooleanNode(
   registry: AbstractRegistry,
   node: BooleanOperationNode,
   closestFigmaFrameId: string,
   figmaNodeTransform: Transform
 ): Omit<BoolShape, 'id'> {
+  markBooleanOperands(node);
+
   const childrenShapes = transformChildren(registry, node, closestFigmaFrameId, figmaNodeTransform);
 
   return {
@@ -51,6 +65,7 @@ export function transformBooleanNode(
     ...transformEffects(registry, node),
     ...transformStrokes(registry, node),
     ...transformDimensionAndRotationAndPosition(node, figmaNodeTransform),
+    ...transformConstraints(node),
     ...transformSceneNode(node),
     ...transformBlend(node),
     ...transformProportion(node),

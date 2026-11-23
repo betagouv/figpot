@@ -1,14 +1,20 @@
 import { GetFileResponse, SubcanvasNode } from '@figpot/src/clients/figma';
 import { MappingType } from '@figpot/src/features/document';
-import { FigmaDefinedColor, FigmaDefinedTypography } from '@figpot/src/features/figma';
+import { FigmaDefinedColor, FigmaDefinedEffectStyle, FigmaDefinedTypography } from '@figpot/src/features/figma';
+import { MainCopies } from '@figpot/src/features/mainCopies';
+import { initializeInstanceSwaps, releaseInstanceSwaps } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
+import { transformUnboundInstances } from '@figpot/src/features/transformers/partials/transformUnboundInstances';
 import { transformPageNode } from '@figpot/src/features/transformers/transformPageNode';
+import { translateEffectStyleTokens } from '@figpot/src/features/translators/tokens/translateEffectStyleTokens';
+import { FigmaVariablesData, translateTokens } from '@figpot/src/features/translators/tokens/translateTokens';
 import { translateColor } from '@figpot/src/features/translators/translateColor';
-import { translateComponentId, translateId } from '@figpot/src/features/translators/translateId';
+import { registerId, translateComponentId, translateComponentShapeId, translateId } from '@figpot/src/features/translators/translateId';
 import { translateTypography } from '@figpot/src/features/translators/translateTypography';
 import { LibraryComponent } from '@figpot/src/models/entities/penpot/component';
 import { PenpotDocument } from '@figpot/src/models/entities/penpot/document';
 import { Registry } from '@figpot/src/models/entities/registry';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
+import { cleanPath } from '@figpot/src/utils/path';
 
 export function detectLocalFigmaComponents(foundComponentsIds: string[], figmaNode: SubcanvasNode) {
   if (figmaNode.type === 'COMPONENT') {
@@ -19,6 +25,33 @@ export function detectLocalFigmaComponents(foundComponentsIds: string[], figmaNo
   if ('children' in figmaNode) {
     for (const childNode of figmaNode.children) {
       detectLocalFigmaComponents(foundComponentsIds, childNode);
+    }
+  }
+}
+
+// Walks the page tree once and, for every Figma node that lives inside a COMPONENT or
+// COMPONENT_SET subtree, pre-populates `mapping.nodes` with a deterministic id derived from the
+// Figma node ID. So if any other is referencing them they will directly use the right ID
+function registerComponentSubtreeIds(figmaNode: GetFileResponse, mapping: MappingType): void {
+  function walk(node: SubcanvasNode, insideComponent: boolean): void {
+    // Note: unlike `penpot-exporter-figma-plugin`, component sets keep their mapped ID since no other file refers to them,
+    // and changing it would require moving the variants into a new container, which Penpot refuses until it is marked as such
+    if (insideComponent && node.type !== 'COMPONENT' && node.type !== 'COMPONENT_SET') {
+      registerId(node.id, translateComponentShapeId(node.id), mapping);
+    }
+
+    if ('children' in node && node.children) {
+      const childInside = insideComponent || node.type === 'COMPONENT' || node.type === 'COMPONENT_SET';
+
+      for (const child of node.children) {
+        walk(child, childInside);
+      }
+    }
+  }
+
+  for (const canvas of figmaNode.document.children) {
+    for (const node of canvas.children) {
+      walk(node, false);
     }
   }
 }
@@ -64,33 +97,77 @@ export function transformDocumentNode(
   figmaNode: GetFileResponse,
   figmaDefinedColors: FigmaDefinedColor[],
   figmaDefinedTypographies: FigmaDefinedTypography[],
-  mapping: MappingType
+  figmaVariables: FigmaVariablesData,
+  figmaEffectStyles: FigmaDefinedEffectStyle[],
+  libraryFiles: Map<string, string>,
+  remoteComponentSourceFiles: Map<string, string>,
+  remoteStyleSourceFiles: Map<string, string>,
+  mapping: MappingType,
+  dataDir: string,
+  libraryMainCopies: Map<string, MainCopies> = new Map()
 ): PenpotDocument {
   // We use `GetFileResponse` type instead of the type `DocumentNode` to have the "document" title
 
   cleanFigmaDefects(figmaNode);
 
-  const registry = new Registry(mapping);
+  // Swapped instances are detected by comparing nested instances with the shapes they replace in their near main
+  initializeInstanceSwaps(figmaNode.document as unknown as SubcanvasNode, figmaNode.components, remoteComponentSourceFiles, libraryMainCopies);
 
-  let colorVariablesWithoutValueCount = 0;
-  for (const figmaDefinedColor of figmaDefinedColors) {
-    // A color variable can be an alias to a variable hosted in another Figma file: `retrieveColors` is
-    // unable to resolve it (the variable is not part of this document response) so its `value` stays undefined.
-    // We skip it instead of crashing: it simply won't exist as a Penpot library color, and any node bound to
-    // it still falls back to its hardcoded color through `translateBoundVariables`.
-    if (!figmaDefinedColor.value) {
-      colorVariablesWithoutValueCount++;
+  const registry = new Registry(mapping, dataDir);
 
-      continue;
-    }
+  // Cross-file binding is needed so instance nodes can reference their component definition, same for styles
+  registry.registerComponentBindings(figmaNode.components, libraryFiles, remoteComponentSourceFiles);
+  registry.registerStyleBindings(figmaNode.styles, libraryFiles, remoteStyleSourceFiles);
 
-    registry.addColor(translateColor(registry, figmaDefinedColor));
+  // Instance node must reference the original shape from within the component definition, so its nested nodes become deterministic (as the instance node initially)
+  registerComponentSubtreeIds(figmaNode, mapping);
+
+  // Figma variables become Penpot design tokens so nodes can directly use them
+  const {
+    tokenSets,
+    tokenThemes,
+    activeThemes,
+    variableTokenNames,
+    usedTokenNames,
+    inferredScopeNames,
+    suffixedVariableNames,
+    aliasesToUnknownNames,
+    aliasesToUntokenizedNames,
+  } = translateTokens(figmaVariables, mapping);
+
+  registry.registerVariableTokenNames(variableTokenNames);
+
+  if (inferredScopeNames.length > 0) {
+    console.warn(
+      `the following Figma variables had no explicit scope (or used "All scopes"), so figpot inferred their Penpot token type(s) — set explicit scopes in Figma to remove ambiguity: ${inferredScopeNames.join(', ')}`
+    );
+  }
+  if (suffixedVariableNames.length > 0) {
+    console.warn(
+      `the following Figma variables produced several Penpot tokens (one per inferred or declared scope) named with a "-typeName" suffix because Penpot tokens are single-type: ${suffixedVariableNames.join(', ')}`
+    );
+  }
+  if (aliasesToUnknownNames.length > 0) {
+    console.warn(
+      `the following Figma variables give no Penpot token because they alias library variables the Figma REST API does not describe, export them with the "figma-plugins/variables-export" plugin and pass the file with "--extra-variables <figmaId>:<path>" (see the README): ${aliasesToUnknownNames.join(', ')}`
+    );
+  }
+  if (aliasesToUntokenizedNames.length > 0) {
+    console.warn(
+      `the following Figma variables give no Penpot token because the variables they alias give none (library variables are not synchronized, unsupported values...): ${aliasesToUntokenizedNames.join(', ')}`
+    );
   }
 
-  if (colorVariablesWithoutValueCount > 0) {
-    console.warn(
-      `${colorVariablesWithoutValueCount} color variable(s) were skipped because their value could not be resolved (most likely aliases to variables hosted in another Figma file)`
-    );
+  // Figma effect styles (drop/inner shadows) become `shadow` tokens in a dedicated set
+  const effectStyleTokens = translateEffectStyleTokens(figmaEffectStyles, mapping, new Set(Object.keys(tokenSets)), usedTokenNames);
+  if (effectStyleTokens) {
+    tokenSets[effectStyleTokens.tokenSet.name] = effectStyleTokens.tokenSet;
+    tokenThemes[effectStyleTokens.tokenSet.name] = effectStyleTokens.tokenTheme;
+    activeThemes.push(effectStyleTokens.tokenSet.name);
+  }
+
+  for (const figmaDefinedColor of figmaDefinedColors) {
+    registry.addColor(translateColor(registry, figmaDefinedColor));
   }
 
   for (const figmaDefinedTypography of figmaDefinedTypographies) {
@@ -105,8 +182,7 @@ export function transformDocumentNode(
       continue;
     }
 
-    // We do not reuse the same Figma ID because we keep it for the "transformed" frame representing the component definition
-    const penpotComponentId = translateComponentId(`${componentId}_component`, mapping);
+    const penpotComponentId = translateComponentId(component.key);
     const penpotComponentInstanceId = translateId(componentId, mapping);
 
     // In case of a components group the component (being a variant) must have the name of the component (not the variation)
@@ -159,7 +235,10 @@ export function transformDocumentNode(
   const penpotPagesNodes = figmaNode.document.children.map((child) => {
     const pageRegistry = registry.newPage(child.id);
 
-    return transformPageNode(pageRegistry, child);
+    const penpotPageNode = transformPageNode(pageRegistry, child);
+    transformUnboundInstances(penpotPageNode);
+
+    return penpotPageNode;
   });
 
   // Patch components with information gotten while browing the entire tree
@@ -176,7 +255,8 @@ export function transformDocumentNode(
           // In Figma the components are organized by pages (e.g. a component "A" inside the "Button" page will be displayed "Button > A")
           // so for the ease of usage into Penpot we reproduce this UI effect even if it implies "hardcoding" the prefix into the `path`
           // TODO: it won't work for components not inside the tree (those with instance excluded by a CLI pattern, or remote components), maybe we should try to get this information to patch them too... (tried `/v1/components/$COMPONENT_KEY` but it returns 404)
-          component.path = component.path !== '' ? `${pageIndex.name} / ${component.path}` : pageIndex.name;
+          // Penpot requires normalized paths (a page name may end with a space for example)
+          component.path = cleanPath(component.path !== '' ? `${pageIndex.name} / ${component.path}` : pageIndex.name);
 
           // We also need to specify the variant wrapper (component set) at the component definition
           if (component.variantId) {
@@ -189,6 +269,10 @@ export function transformDocumentNode(
             // [WORKAROUND] They added a validation comparing paths and names while expecting exact match
             // So for the ease we just reuse the component metadata to directly patch tree nodes
             object.name = component.path !== '' ? `${component.path} / ${component.name}` : component.name;
+          } else {
+            // [WORKAROUND] Since Penpot v2.19 the same validation applies to main instances of regular components (variants
+            // are checked through their variant wrapper), following their `merge-path-item` logic
+            object.name = component.path !== '' ? (component.name !== '' ? `${component.path} / ${component.name}` : component.path) : component.name;
           }
 
           skipMainInstanceSearch = true;
@@ -209,9 +293,14 @@ export function transformDocumentNode(
     }
   }
 
+  releaseInstanceSwaps();
+
   return {
     name: figmaNode.name,
     data: {
+      tokenSets: tokenSets,
+      tokenThemes: tokenThemes,
+      activeTokenThemes: activeThemes,
       pages: figmaNode.document.children.map((child) => translateId(child.id, registry.getMapping())),
       pagesIndex: Object.fromEntries(penpotPagesNodes.map((penpotPageNode) => [penpotPageNode.id, penpotPageNode])),
       colors: Object.fromEntries(

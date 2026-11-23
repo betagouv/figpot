@@ -1,7 +1,8 @@
 import { HasLayoutTrait, SubcanvasNode, Transform } from '@figpot/src/clients/figma';
+import { getRelatedNodeId } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
 import { transformGroupNodeLike } from '@figpot/src/features/transformers/transformGroupNode';
 import { transformSceneNode } from '@figpot/src/features/transformers/transformSceneNode';
-import { translateId } from '@figpot/src/features/translators/translateId';
+import { registerId, translateComponentShapeId, translateId } from '@figpot/src/features/translators/translateId';
 import { PenpotNode } from '@figpot/src/models/entities/penpot/node';
 import { Uuid } from '@figpot/src/models/entities/penpot/traits/uuid';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
@@ -109,7 +110,10 @@ export function translateMaskChildren(
   // Since we cannot rely on having a parent group due to Figma mask logic, we always create one for the nodes concerned by the mask
   assert('absoluteBoundingBox' in maskChild); // Needed to check it has a layout... should be true
 
+  // Deterministic like the mask node itself when inside a component, so copies can refer to the mask group of their main
   const figmaMaskGroupId = `${maskChild.id}_maskGroup`;
+  registerId(figmaMaskGroupId, translateComponentShapeId(maskChild.id, 'M'), registry.getMapping());
+  const maskRelatedNodeId = getRelatedNodeId(maskChild.id);
   const maskShapes = translateChildren(registry, concernedByMaskChildren, figmaMaskGroupId, closestFigmaFrameId, parentCumulativeTransform);
 
   const penpotMaskGroup = {
@@ -119,6 +123,7 @@ export function translateMaskChildren(
     ...transformGroupNodeLike(registry, maskChild, parentCumulativeTransform),
     name: `${maskChild.name} - Mask group`,
     maskedGroup: true,
+    ...(maskRelatedNodeId ? { shapeRef: translateComponentShapeId(maskRelatedNodeId, 'M') } : {}),
     shapes: maskShapes,
   };
 

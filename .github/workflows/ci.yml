@@ -8,20 +8,18 @@ on:
 env:
   APP_NAME: figpot
   NODE_OPTIONS: --max_old_space_size=4096
-  NODE_VERSION: 20.20.2
+  NODE_VERSION: 24.14.0
   JEST_CACHE_FOLDER_SUFFIX: .cache/jest
 concurrency:
   # Prevent parallel builds of the same branch
   group: cicd-${{ github.ref }}
   cancel-in-progress: false
+permissions:
+  contents: read
 jobs:
   requirements:
     name: Continuous Integration
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,8 +47,18 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Setup API clients
-        run: npm run client:generate
+      - name: Check the API clients match their committed specifications
+        run: |
+          npm run client:generate
+          if [ -n "$(git status --porcelain -- src/clients)" ]; then
+            git status --short -- src/clients
+            echo "::error::the committed API clients differ from what their specifications generate, run \"npm run client:generate\" and commit the result (they must not be modified by hand)"
+            exit 1
+          fi
+
+      - name: Check the API specifications are up to date
+        continue-on-error: true # Only informative, so an unreachable API does not block
+        run: npm run client:check
 
       - name: Lint
         run: npm run lint
@@ -76,9 +84,35 @@ jobs:
       - name: Build
         run: npm run build
 
+  release:
+    name: Release
+    needs: requirements
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: npm-release # npm only accepts the trusted publishing from this environment, restricted to the `main` branch
+    permissions:
+      contents: write # To create the tag and the GitHub release
+      issues: write # To comment the released issues
+      pull-requests: write # To comment the released pull requests
+      id-token: write # To publish on npm through trusted publishing (OIDC)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
       - name: Release package
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm run semantic-release

@@ -41,6 +41,7 @@ export type ShapeBaseAttributes = {
 
 export type ShapeAttributes = {
   name?: string;
+  appliedTokens?: Record<string, string>;
   componentId?: string;
   componentFile?: string;
   componentRoot?: boolean;

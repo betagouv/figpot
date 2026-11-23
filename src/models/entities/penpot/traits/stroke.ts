@@ -16,7 +16,13 @@ export type Stroke = {
   strokeOpacity?: number;
   strokeStyle?: 'solid' | 'dotted' | 'dashed' | 'mixed' | 'none' | 'svg';
   strokeWidth?: number;
+  strokeWidthTop?: number;
+  strokeWidthRight?: number;
+  strokeWidthBottom?: number;
+  strokeWidthLeft?: number;
   strokeAlignment?: StrokeAlignment;
+  strokeDash?: number;
+  strokeGap?: number;
   strokeCapStart?: StrokeCaps;
   strokeCapEnd?: StrokeCaps;
   strokeColorGradient?: Gradient;

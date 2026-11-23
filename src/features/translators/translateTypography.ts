@@ -1,6 +1,6 @@
 import { FigmaDefinedTypography } from '@figpot/src/features/figma';
 import { partialTransformTextStyle } from '@figpot/src/features/translators/text/translateTextSegments';
-import { translateTypographyId } from '@figpot/src/features/translators/translateId';
+import { translateTypographyId, translateTypographyIdFromKey } from '@figpot/src/features/translators/translateId';
 import { LibraryTypography } from '@figpot/src/models/entities/penpot/shapes/text';
 import { PageRegistry, Registry } from '@figpot/src/models/entities/registry';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
@@ -32,8 +32,10 @@ export function translateTypography(registry: Registry | PageRegistry, typograph
       penpotTextStyle.textTransform !== undefined
   );
 
+  const id = typography.key !== '' ? translateTypographyIdFromKey(typography.key) : translateTypographyId(typography.id, registry.getMapping());
+
   return {
-    id: translateTypographyId(typography.id, registry.getMapping()),
+    id,
     path: pathLevels.length > 0 ? pathLevels.join(' / ') : '', // We add spaces as normalized by Penpot
     name: name,
     fontFamily: penpotTextStyle.fontFamily,

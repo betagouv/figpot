@@ -1,6 +1,6 @@
 import { FigmaDefinedColor } from '@figpot/src/features/figma';
 import { translateFill } from '@figpot/src/features/translators/fills/translateFills';
-import { translateColorId } from '@figpot/src/features/translators/translateId';
+import { translateColorId, translateColorIdFromKey } from '@figpot/src/features/translators/translateId';
 import { Color } from '@figpot/src/models/entities/penpot/traits/color';
 import { PageRegistry, Registry } from '@figpot/src/models/entities/registry';
 import { workaroundAssert as assert } from '@figpot/src/utils/assert';
@@ -16,8 +16,10 @@ export function translateColor(registry: Registry | PageRegistry, color: FigmaDe
 
   assert(penpotFill);
 
+  const id = color.key !== '' ? translateColorIdFromKey(color.key) : translateColorId(color.id, registry.getMapping());
+
   return {
-    id: translateColorId(color.id, registry.getMapping()),
+    id,
     path: pathLevels.length > 0 ? pathLevels.join(' / ') : '', // We add spaces as normalized by Penpot
     name: name ?? 'unknown color name',
     color: penpotFill.fillColor,

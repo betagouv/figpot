@@ -1,5 +1,5 @@
 import { HasGeometryTrait, IndividualStrokesTrait } from '@figpot/src/clients/figma';
-import { translateColorId, translateDocumentId } from '@figpot/src/features/translators/translateId';
+import { nullId, translateColorId, translateDocumentId } from '@figpot/src/features/translators/translateId';
 import { translateStrokeCap, translateStrokes } from '@figpot/src/features/translators/translateStrokes';
 import { ShapeAttributes } from '@figpot/src/models/entities/penpot/shape';
 import { Stroke } from '@figpot/src/models/entities/penpot/traits/stroke';
@@ -28,18 +28,35 @@ export function transformStrokes(
 
   const strokes = translateStrokes(registry, node, strokeCaps);
 
-  return {
-    strokes: strokeStyleId
-      ? strokes.map((stroke, i) => {
-          const uniqueColorId = strokes.length > 1 ? `${strokeStyleId}_${i}` : strokeStyleId;
+  if (!strokeStyleId) {
+    return { strokes };
+  }
 
-          return {
-            ...stroke,
-            strokeColorRefId: translateColorId(uniqueColorId, registry.getMapping()),
-            strokeColorRefFile: translateDocumentId('current', registry.getMapping()),
-          };
-        })
-      : strokes,
+  return {
+    strokes: strokes.map((stroke, i) => {
+      // Multi-paint published styles produce one Penpot color per paint
+      const paintIndex = strokes.length > 1 ? i : undefined;
+      const binding = registry.resolveStyle(strokeStyleId, paintIndex);
+
+      let strokeColorRefId: string;
+      let strokeColorRefFile: string;
+
+      if (binding) {
+        strokeColorRefId = binding.file !== undefined ? binding.id : nullId;
+        strokeColorRefFile = binding.file ?? nullId;
+      } else {
+        const localUniqueColorId = strokes.length > 1 ? `${strokeStyleId}_${i}` : strokeStyleId;
+
+        strokeColorRefId = translateColorId(localUniqueColorId, registry.getMapping());
+        strokeColorRefFile = translateDocumentId('current', registry.getMapping());
+      }
+
+      return {
+        ...stroke,
+        strokeColorRefId,
+        strokeColorRefFile,
+      };
+    }),
   };
 }
 

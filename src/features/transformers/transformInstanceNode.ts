@@ -1,6 +1,7 @@
 import { InstanceNode, Transform } from '@figpot/src/clients/figma';
+import { registerInstanceSwap } from '@figpot/src/features/transformers/partials/transformInstanceSwaps';
 import { transformFrameNode } from '@figpot/src/features/transformers/transformFrameNode';
-import { nullId, translateComponentId, translateDocumentId } from '@figpot/src/features/translators/translateId';
+import { nullId } from '@figpot/src/features/translators/translateId';
 import { syncAttributes } from '@figpot/src/features/translators/translateTouched';
 import { FrameShape } from '@figpot/src/models/entities/penpot/shapes/frame';
 import { AbstractRegistry, PageRegistry } from '@figpot/src/models/entities/registry';
@@ -12,6 +13,9 @@ export function transformInstanceNode(registry: AbstractRegistry, node: Instance
     componentRoot = true;
   }
 
+  // Must be done before transforming children since their references depend on it
+  const swapSlot = registerInstanceSwap(node);
+
   // Help the children knowing their are part of an instance to manage overrides for example
   registry = registry.newComponentInstanceScope(node.overrides);
 
@@ -19,34 +23,72 @@ export function transformInstanceNode(registry: AbstractRegistry, node: Instance
   const instanceFrame = transformFrameNode(registry, node, figmaNodeTransform);
   instanceFrame.componentRoot = componentRoot;
 
-  const potentialComponentId = translateComponentId(`${node.componentId}_component`, registry.getMapping()); // The component definition has a different ID than the representation in the normal tree
+  // Three cases on resolution:
+  //  - Local component (`isRemote === false`): bind to the same Penpot file we are syncing into
+  //  - Remote component with a known library (`isRemote === true, file !== undefined`): bind to
+  //    the user-declared Penpot library file via `componentFile` / `componentId`. Penpot resolves
+  //    the definition through `postLinkFileToLibrary` (called at the end of synchronize)
+  //  - Remote component with no library mapping, OR unknown component: leave all fields nulled so
+  //    Penpot keeps the instance shape but does not try to resolve a definition that does not
+  //    exist on its side
+  const binding = registry.resolveComponent(node.componentId);
 
-  const boundLocalComponent = registry.getComponents().get(potentialComponentId);
+  if (binding && !binding.isRemote && binding.file !== undefined) {
+    const boundLocalComponent = registry.getComponents().get(binding.id);
 
-  if (boundLocalComponent) {
-    // If no override Penpot expects by default the instance node to have the same name than the component defition
-    // so due to Figma having variants and not Penpot, we have to force the name
-    const instanceOverrides = registry.getOverrides(node.id);
-    const overrideNameField: keyof typeof syncAttributes = 'name';
-    if (instanceOverrides && !instanceOverrides.includes(overrideNameField)) {
-      instanceFrame.name = boundLocalComponent.name; // In case of a variant
+    if (boundLocalComponent) {
+      // If no override Penpot expects by default the instance node to have the same name than the component defition
+      // so due to Figma having variants and not Penpot, we have to force the name
+      const instanceOverrides = registry.getOverrides(node.id);
+      const overrideNameField: keyof typeof syncAttributes = 'name';
+      if (instanceOverrides && !instanceOverrides.includes(overrideNameField)) {
+        instanceFrame.name = boundLocalComponent.name;
+      }
+
+      instanceFrame.componentFile = binding.file;
+      instanceFrame.componentId = binding.id;
+
+      // `transformInheritance` works in all cases except for instance nodes since Figma may set
+      // them a node ID without the original shape, so as a fallback we use the main instance
+      // node ID to match Penpot's expectations. A swapped instance refers to its new component
+      if (!instanceFrame.shapeRef || swapSlot) {
+        instanceFrame.shapeRef = boundLocalComponent.mainInstanceId;
+      }
+
+      if (swapSlot) {
+        // Sorted like in `translateTouched()` since Penpot stores them as a set
+        instanceFrame.touched = ([...(instanceFrame.touched ?? []), `swap-slot-${swapSlot}`] as NonNullable<typeof instanceFrame.touched>).sort();
+      }
+
+      return instanceFrame;
+    } else {
+      // Local binding but no matching component on the registry (should not happen in practice), will fall back to no reference
+    }
+  } else if (binding && binding.isRemote && binding.file !== undefined) {
+    instanceFrame.componentFile = binding.file;
+    instanceFrame.componentId = binding.id;
+
+    // If `transformInheritance()` has considered it's the main instance, this value is already set (except for a swapped
+    // instance that refers to its new component)
+    if (!instanceFrame.shapeRef || swapSlot) {
+      instanceFrame.shapeRef = binding.mainShapeId;
     }
 
-    instanceFrame.componentFile = translateDocumentId('current', registry.getMapping());
-    instanceFrame.componentId = potentialComponentId;
-
-    // The `transformInheritance` is working in all cases except for instance node
-    // since Figma may set them a node ID without the original shape, so as fallback we use the main instance node ID
-    // to match the Penpot expectations
-    if (!instanceFrame.shapeRef) {
-      instanceFrame.shapeRef = boundLocalComponent.mainInstanceId;
+    if (swapSlot) {
+      // Sorted like in `translateTouched()` since Penpot stores them as a set
+      instanceFrame.touched = ([...(instanceFrame.touched ?? []), `swap-slot-${swapSlot}`] as NonNullable<typeof instanceFrame.touched>).sort();
     }
-  } else {
-    // An instance of a remote component should require information not available here to be bound to the remote component
-    // They are usable without the link but it may help, and would be great to reproduce the Figma logic
-    // So for now we just specify null values to distinguish them inside the backend. Having true IDs would require Penpot to implement a "swap feature" based on an identifiable thing, or us to manage this across all Figma documents linked
-    instanceFrame.componentFile = nullId;
-    instanceFrame.componentId = nullId;
+
+    return instanceFrame;
+  }
+
+  instanceFrame.componentFile = nullId;
+  instanceFrame.componentId = nullId;
+
+  // Inside a copy, an instance whose component cannot be bound (a library not synchronized) stays a plain shape of the
+  // copy: it keeps referring to its equivalent in the main (set by `transformInheritance()`), otherwise Penpot would see
+  // a shape foreign to the main and recreate it (with new IDs and without its overrides) the next time it syncs the copy
+  if (!instanceFrame.shapeRef) {
     instanceFrame.shapeRef = nullId;
   }
 

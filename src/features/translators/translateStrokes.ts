@@ -1,4 +1,4 @@
-import { HasGeometryTrait, IndividualStrokesTrait, Paint, strokeAlign as StrokeAlign } from '@figpot/src/clients/figma';
+import { HasGeometryTrait, IndividualStrokesTrait, MinimalStrokesTrait, Paint } from '@figpot/src/clients/figma';
 import { translateFill } from '@figpot/src/features/translators/fills/translateFills';
 import { Stroke, StrokeAlignment, StrokeCaps } from '@figpot/src/models/entities/penpot/traits/stroke';
 import { AbstractRegistry } from '@figpot/src/models/entities/registry';
@@ -14,12 +14,29 @@ export function translateStrokes(
 
   const sharedStrokeProperties: Stroke = {
     strokeWidth: translateStrokeWeight(node),
+    ...translateStrokeSideWeights(node),
     strokeAlignment: node.strokeAlign ? translateStrokeAlignment(node.strokeAlign) : undefined,
     strokeStyle: !!node.strokeDashes && node.strokeDashes.length > 0 ? 'dashed' : 'solid',
+    ...translateStrokeDashes(node.strokeDashes),
   };
 
   // Strokes are layered in reverse order in Penpot compared to Figma (same as fills), so we reverse them
   return node.strokes.map((paint, index) => translateStroke(registry, paint, sharedStrokeProperties, strokeCaps, index === 0)).reverse();
+}
+
+/**
+ * Penpot has a single dash and gap length: the first pair of the Figma pattern (a single value is used for both, like in SVG).
+ * Without them Penpot falls back to dashes of the stroke width plus 10, which makes thin dashed strokes look solid
+ */
+export function translateStrokeDashes(strokeDashes?: number[]): Pick<Stroke, 'strokeDash' | 'strokeGap'> {
+  if (!strokeDashes || strokeDashes.length === 0) {
+    return {};
+  }
+
+  return {
+    strokeDash: strokeDashes[0],
+    strokeGap: strokeDashes[1] ?? strokeDashes[0],
+  };
 }
 
 export function translateStroke(
@@ -88,11 +105,34 @@ function translateStrokeWeight(node: HasGeometryTrait | (HasGeometryTrait & Indi
   );
 }
 
+// Penpot draws a different width per side only if all sides are given (a missing one falls back to `strokeWidth`), and
+// only with its new renderer. `strokeWidth` is kept to the widest side (instead of the top one as Penpot does when editing)
+// so instances or renderers without per-side support show a full border as before, instead of no border at all
+function translateStrokeSideWeights(
+  node: HasGeometryTrait | (HasGeometryTrait & IndividualStrokesTrait)
+): Pick<Stroke, 'strokeWidthTop' | 'strokeWidthRight' | 'strokeWidthBottom' | 'strokeWidthLeft'> {
+  if (!isIndividualStrokes(node) || node.individualStrokeWeights === undefined) {
+    return {};
+  }
+
+  const { top, right, bottom, left } = node.individualStrokeWeights;
+  if (top === right && right === bottom && bottom === left) {
+    return {};
+  }
+
+  return {
+    strokeWidthTop: top,
+    strokeWidthRight: right,
+    strokeWidthBottom: bottom,
+    strokeWidthLeft: left,
+  };
+}
+
 function isIndividualStrokes(node: HasGeometryTrait | IndividualStrokesTrait): node is IndividualStrokesTrait {
   return 'individualStrokeWeights' in node;
 }
 
-function translateStrokeAlignment(strokeAlign: StrokeAlign): StrokeAlignment {
+function translateStrokeAlignment(strokeAlign: NonNullable<MinimalStrokesTrait['strokeAlign']>): StrokeAlignment {
   switch (strokeAlign) {
     case 'CENTER':
       return 'center';

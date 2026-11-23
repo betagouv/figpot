@@ -1,6 +1,7 @@
+import fs from 'fs';
 import { globSync } from 'glob';
 import { mimeData } from 'human-filetypes';
-import sizeOf from 'image-size';
+import { imageSize } from 'image-size';
 import path from 'path';
 
 import { ImagePaint } from '@figpot/src/clients/figma';
@@ -18,14 +19,15 @@ export function translateImageFill(registry: BoundVariableRegistry, fill: ImageP
 
   // The provided size of the image must be the file dimension (the parent node will manage the display size)
   // Note: it's synchronous to not break the whole chain of nested calls, this should remain really low at cost performance, but if needed this could be retrieved before browsing and just passed at parameters
-  const rootFilePath = getFigmaMediaPath(fill.imageRef);
+  const rootFilePath = getFigmaMediaPath(registry.getDataDir(), fill.imageRef);
   // `windowsPathsNoEscape` tells glob to treat `\` as a path separator rather than as the escape character,
   // so a Windows-native path returned by `path.resolve()` (e.g. `C:\Users\...\abc123`) matches correctly.
   const filesWithExtensionPaths = globSync(`${rootFilePath}.*`, { windowsPathsNoEscape: true });
 
   assert(filesWithExtensionPaths.length === 1);
 
-  const dimensions = sizeOf(filesWithExtensionPaths[0]);
+  // `image-size` only reads files asynchronously, whereas this has to stay synchronous, so reading the file ourselves
+  const dimensions = imageSize(fs.readFileSync(filesWithExtensionPaths[0]));
 
   assert(dimensions.width);
   assert(dimensions.height);

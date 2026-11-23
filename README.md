@@ -345,6 +345,17 @@ If needed, you can reproduce a full `npm run cli document synchronize ...` comma
 4. `npm run cli document debug set ...`
 5. `npm run cli document hydrate ...`
 
+### Release
+
+Releases are automatic: each push on `main` runs [semantic-release](https://github.com/semantic-release/semantic-release) from the `release` job of the CI (once the checks passed), it deduces the new version from the [conventional commits](https://www.conventionalcommits.org/) since the last release (`fix` for a patch, `feat` for a minor, a `!` or a `BREAKING CHANGE` footer for a major), then it publishes the package on npm and creates the GitHub release.
+
+The package is published through npm [trusted publishing](https://docs.npmjs.com/trusted-publishers): there is no token to store or renew, GitHub Actions authenticates to npm with OIDC and the package provenance is attested. Since anyone allowed to push into the GitHub repository could otherwise run a workflow publishing the package, the publication is restricted to the `main` branch. It requires to configure once:
+
+1. On GitHub, inside the repository settings under `Environments`, create the `npm-release` environment (before the first release, otherwise GitHub creates it without any restriction) with `Deployment branches and tags` restricted to the `main` branch. Optionally, add `Required reviewers` to approve each release manually.
+2. On npmjs.com, inside the package settings under `Trusted publisher`, choose `GitHub Actions` with `betagouv` as organization, `figpot` as repository, `ci.yml` as workflow filename and `npm-release` as environment, so npm only accepts a publication coming from a job of this environment. As allowed actions, enable publishing directly (semantic-release runs `npm publish`, it does not support `npm stage publish`) but not managing dist-tags (only used for prerelease or maintenance channels we do not have). To approve each release manually, prefer the `Required reviewers` of the GitHub environment: it holds the whole release job, so the Git tag and the GitHub release are not created before the approval either.
+3. Still inside the package settings on npmjs.com, under `Publishing access`, choose `Require two-factor authentication and disallow tokens`, so no access token can publish the package anymore (only the trusted publishing can).
+4. On GitHub, protect the `main` branch (pull request with an approval required before merging), since whatever the publishing method, anyone able to push into `main` is able to release.
+
 [build-img]: https://github.com/betagouv/figpot/actions/workflows/ci.yml/badge.svg?branch=main
 [build-url]: https://github.com/betagouv/figpot/actions/workflows/ci.yml
 [downloads-img]: https://img.shields.io/npm/dt/figpot

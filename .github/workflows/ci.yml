@@ -14,14 +14,12 @@ concurrency:
   # Prevent parallel builds of the same branch
   group: cicd-${{ github.ref }}
   cancel-in-progress: false
+permissions:
+  contents: read
 jobs:
   requirements:
     name: Continuous Integration
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -86,9 +84,35 @@ jobs:
       - name: Build
         run: npm run build
 
+  release:
+    name: Release
+    needs: requirements
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: npm-release # npm only accepts the trusted publishing from this environment, restricted to the `main` branch
+    permissions:
+      contents: write # To create the tag and the GitHub release
+      issues: write # To comment the released issues
+      pull-requests: write # To comment the released pull requests
+      id-token: write # To publish on npm through trusted publishing (OIDC)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
       - name: Release package
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm run semantic-release

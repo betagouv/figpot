@@ -17,6 +17,14 @@ function getRotationAngle(transform: Transform) {
   return angleInDegrees;
 }
 
+// Penpot never makes a shape smaller than this (its size inputs, resizes and new shapes), and a zero size
+// makes some of its computations divide by zero (e.g. the resize of an empty auto-width text)
+export const minimumShapeSize = 0.01;
+
+function sizeOrMinimum(size: number): number {
+  return Math.max(size, minimumShapeSize);
+}
+
 export const neutralTransforMatrix: Matrix = {
   a: 1,
   b: 0,
@@ -34,6 +42,9 @@ export function transformAxisAlignedDimensionAndPosition(
   height: number
 ): Pick<ShapeBaseAttributes, 'selrect' | 'points' | 'transform' | 'transformInverse' | 'rotation' | 'flipX' | 'flipY'> &
   Pick<ShapeGeomAttributes, 'x' | 'y' | 'width' | 'height'> {
+  width = sizeOrMinimum(width);
+  height = sizeOrMinimum(height);
+
   const selrectWithNoRotation: Selrect = {
     x: x,
     y: y,
@@ -79,8 +90,8 @@ export function transformDimensionAndRotationAndPosition(
   // [WORKAROUND] For some obscure reasons the API may return the size object with `x` and `y` as null
   // whereas it's not an allowed type according to their API. So we default to 0 to not break our whole logic
   const nodeSize: typeof node.size = {
-    x: node.size.x ?? 0,
-    y: node.size.y ?? 0,
+    x: sizeOrMinimum(node.size.x ?? 0),
+    y: sizeOrMinimum(node.size.y ?? 0),
   };
 
   // `absoluteBoundingBox` can be null in some cases, so defaulting to 0 properties
